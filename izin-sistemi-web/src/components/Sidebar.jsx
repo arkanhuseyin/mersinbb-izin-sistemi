@@ -12,17 +12,20 @@ export default function Sidebar() {
 
     const isActive = (path) => location.pathname === path ? 'bg-primary text-white shadow' : 'text-secondary hover-bg-light';
 
-    // --- YETKİ KONTROL FONKSİYONU ---
+   // --- GÜNCELLENMİŞ YETKİ KONTROLÜ (VARSAYILAN: AÇIK) ---
     const checkPermission = (modulKey) => {
-        // 1. Admin ise her yeri görsün (Güvenlik kilidi olmaması için)
+        // 1. Admin ise KESİNLİKLE her yeri görsün (Sorgusuz sualsiz)
         if (user?.rol_adi === 'admin') return true;
 
         // 2. Kullanıcının yetkilerine bak
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
 
-        // 3. 'goruntule' yetkisi true ise göster
-        return permission?.goruntule === true;
+        // 3. EĞER HİÇ KAYIT YOKSA -> GÖSTER (Varsayılan Açık)
+        if (!permission) return true;
+
+        // 4. KAYIT VARSA -> Veritabanındaki ayara bak (True ise göster, False ise gizle)
+        return permission.goruntule === true;
     };
 
     // --- MENÜ ELEMANLARI ---

@@ -35,17 +35,18 @@ export default function Yetkilendirme() {
 
     const handleUserSelect = async (user) => {
         setSelectedUser(user);
-        // Kullanıcının mevcut yetkilerini veritabanından çek
         const token = localStorage.getItem('token');
         try {
             const res = await axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/yetki/${user.personel_id}`, { headers: { Authorization: `Bearer ${token}` } });
             
-            // Gelen veriyi { "dashboard": {goruntule: true...} } formatına çevir
             const loadedPerms = {};
-            // Varsayılan olarak hepsini false yap
-            moduller.forEach(m => loadedPerms[m.key] = { goruntule: false, ekle_duzenle: false, sil: false });
             
-            // Veritabanından gelenleri işle
+            // --- DEĞİŞİKLİK BURADA: Varsayılan olarak HEPSİNİ TRUE (AÇIK) YAP ---
+            moduller.forEach(m => {
+                loadedPerms[m.key] = { goruntule: true, ekle_duzenle: true, sil: true };
+            });
+            
+            // Veritabanında özel bir ayar varsa onunla değiştir (Örn: kapatılmışsa kapat)
             res.data.forEach(p => {
                 loadedPerms[p.modul_adi] = {
                     goruntule: p.goruntule,
