@@ -34,7 +34,7 @@ export default function CreateLeave() {
             setFormData(prev => ({ ...prev, izin_adresi: user.adres || '' }));
         }
 
-        axios.get('https://mersinbb-izin-sistemi.vercel.app//api/izin/resmi-tatiller', {
+        axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/resmi-tatiller', {
             headers: { Authorization: `Bearer ${token}` }
         }).then(res => setResmiTatiller(res.data.map(t => t.tarih.split('T')[0]))).catch(console.error);
     }, []);
@@ -87,7 +87,7 @@ export default function CreateLeave() {
                 personel_imza: imza // YENİ: İmza gönderiliyor
             };
 
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/izin/olustur', gonderilecekVeri, {
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/izin/olustur', gonderilecekVeri, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             

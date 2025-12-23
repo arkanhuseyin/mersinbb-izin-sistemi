@@ -13,7 +13,7 @@ export default function DashboardHome() {
 
     useEffect(() => {
         const token = localStorage.getItem('token');
-        axios.get('https://mersinbb-izin-sistemi.vercel.app//api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
+        axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 const data = res.data;
                 

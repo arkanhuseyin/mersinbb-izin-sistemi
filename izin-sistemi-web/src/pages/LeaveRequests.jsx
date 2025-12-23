@@ -39,7 +39,7 @@ export default function LeaveRequests() {
 
     const verileriGetir = async (token) => {
         try {
-            const response = await axios.get('https://mersinbb-izin-sistemi.vercel.app//api/izin/listele', { headers: { Authorization: `Bearer ${token}` } });
+            const response = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } });
             setIzinler(response.data);
             setFilteredIzinler(response.data);
         } catch (error) { console.error(error); }
@@ -50,7 +50,7 @@ export default function LeaveRequests() {
         setTimeline([]);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get(`https://mersinbb-izin-sistemi.vercel.app//api/izin/timeline/${izin.talep_id}`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/izin/timeline/${izin.talep_id}`, { headers: { Authorization: `Bearer ${token}` } });
             setTimeline(res.data);
         } catch (e) { console.error("Timeline hatası", e); }
         setTimeout(() => { if(sigCanvas.current && sigCanvas.current.clear) sigCanvas.current.clear(); }, 100);
@@ -63,7 +63,7 @@ export default function LeaveRequests() {
         let yeniDurum = onayTuru === 'AMIR' ? 'AMIR_ONAYLADI' : onayTuru === 'YAZICI' ? 'YAZICI_ONAYLADI' : 'IK_ONAYLADI';
 
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/izin/onayla', { talep_id: secilenTalep.talep_id, imza_data: imzaResmi, yeni_durum: yeniDurum }, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/izin/onayla', { talep_id: secilenTalep.talep_id, imza_data: imzaResmi, yeni_durum: yeniDurum }, { headers: { Authorization: `Bearer ${token}` } });
             alert(`✅ İşlem Başarılı!`); setSecilenTalep(null); verileriGetir(token);
         } catch (error) { alert('Hata oluştu!'); }
     };
@@ -72,7 +72,7 @@ export default function LeaveRequests() {
         if(!window.confirm("Reddetmek istiyor musunuz?")) return;
         const token = localStorage.getItem('token');
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/izin/onayla', { talep_id: secilenTalep.talep_id, imza_data: null, yeni_durum: 'REDDEDILDI' }, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/izin/onayla', { talep_id: secilenTalep.talep_id, imza_data: null, yeni_durum: 'REDDEDILDI' }, { headers: { Authorization: `Bearer ${token}` } });
             alert(`❌ Reddedildi.`); setSecilenTalep(null); verileriGetir(token);
         } catch (error) { alert('Hata oluştu!'); }
     };
@@ -87,7 +87,7 @@ export default function LeaveRequests() {
         const token = localStorage.getItem('token');
 
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/izin/islak-imza-durumu', { 
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/izin/islak-imza-durumu', { 
                 talep_id: secilenTalep.talep_id,
                 durum: durum 
             }, { headers: { Authorization: `Bearer ${token}` } });
@@ -101,7 +101,7 @@ export default function LeaveRequests() {
         const managerTitle = printSettings.isManagerProxy ? 'Toplu Taşıma Şube Müdürü V.' : 'Toplu Taşıma Şube Müdürü';
         const headTitle = printSettings.isHeadProxy ? 'Ulaşım Dairesi Başkanı V.' : 'Ulaşım Dairesi Başkanı';
         const hrName = `${kullanici.ad} ${kullanici.soyad}`;
-        const url = `https://mersinbb-izin-sistemi.vercel.app//api/izin/pdf/form2/${secilenTalep.talep_id}?hrName=${hrName}&managerName=${printSettings.managerName}&managerTitle=${managerTitle}&headName=${printSettings.headName}&headTitle=${headTitle}`;
+        const url = `https://mersinbb-izin-sistemi.onrender.com/api/izin/pdf/form2/${secilenTalep.talep_id}?hrName=${hrName}&managerName=${printSettings.managerName}&managerTitle=${managerTitle}&headName=${printSettings.headName}&headTitle=${headTitle}`;
         window.open(url, '_blank'); setPrintModalOpen(false);
     };
 
@@ -170,7 +170,7 @@ export default function LeaveRequests() {
                     {!['IK_ONAYLADI', 'REDDEDILDI', 'TAMAMLANDI', 'IPTAL_EDILDI'].includes(secilenTalep.durum) && (<div className="mt-3"><label className="form-label fw-bold text-primary mb-2">Lütfen İmza Atınız:</label><div className="border rounded-3 bg-white mx-auto shadow-sm overflow-hidden" style={{width: '100%', height: 200}}><SignatureCanvas ref={sigCanvas} penColor='black' canvasProps={{className: 'sigCanvas w-100 h-100'}} /></div><div className="text-end mt-2"><button className="btn btn-link text-danger text-decoration-none btn-sm p-0" onClick={() => sigCanvas.current.clear()}>Temizle</button></div></div>)}
                 </div>
                 <div className="modal-footer bg-light border-top p-3"><div className="d-flex justify-content-between w-100 align-items-center"><div className="d-flex gap-2">
-                    <a href={`https://mersinbb-izin-sistemi.vercel.app//api/izin/pdf/form1/${secilenTalep.talep_id}`} target="_blank" className="btn btn-outline-dark btn-sm fw-bold"><Printer size={16} className="me-1"/> Form 1</a>
+                    <a href={`https://mersinbb-izin-sistemi.onrender.com/api/izin/pdf/form1/${secilenTalep.talep_id}`} target="_blank" className="btn btn-outline-dark btn-sm fw-bold"><Printer size={16} className="me-1"/> Form 1</a>
                     {['ik', 'admin', 'filo', 'yazici'].includes(kullanici.rol) && <button className="btn btn-outline-danger btn-sm fw-bold" onClick={() => setPrintModalOpen(true)}><Download size={16} className="me-1"/> Form 2</button>}
                 </div>
                 

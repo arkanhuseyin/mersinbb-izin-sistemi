@@ -18,7 +18,7 @@ export default function ProfilOnay() {
 
         try {
             // Sadece Admin/İK/Filo görebilir (Backend kontrolü var)
-            const response = await axios.get('https://mersinbb-izin-sistemi.vercel.app//api/personel/talepler', {
+            const response = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/talepler', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setTalepler(response.data);
@@ -42,7 +42,7 @@ export default function ProfilOnay() {
         if(!window.confirm(mesaj)) return;
 
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/personel/talep-islem', { id, islem: tur }, {
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/talep-islem', { id, islem: tur }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             alert(`İşlem Başarılı: ${tur === 'ONAYLA' ? 'Onaylandı' : 'Reddedildi'}`);

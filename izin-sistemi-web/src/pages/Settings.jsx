@@ -34,7 +34,7 @@ export default function Settings() {
     const fetchUsers = async () => {
         const token = localStorage.getItem('token');
         try {
-            const res = await axios.get('https://mersinbb-izin-sistemi.vercel.app//api/auth/users', { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/auth/users', { headers: { Authorization: `Bearer ${token}` } });
             setUsersList(res.data || []);
         } catch(e) { console.error(e); }
     };
@@ -42,7 +42,7 @@ export default function Settings() {
     const fetchBirimler = async () => {
         const token = localStorage.getItem('token');
         try {
-            const res = await axios.get('https://mersinbb-izin-sistemi.vercel.app//api/personel/birimler', { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/birimler', { headers: { Authorization: `Bearer ${token}` } });
             if (Array.isArray(res.data)) {
                 setBirimler(res.data);
                 if(res.data.length > 0 && !newUser.birim_id) {
@@ -57,7 +57,7 @@ export default function Settings() {
         const token = localStorage.getItem('token');
         try {
             if(!newUser.birim_id) { alert("Lütfen bir amirlik seçiniz!"); return; }
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/auth/register', newUser, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/auth/register', newUser, { headers: { Authorization: `Bearer ${token}` } });
             alert("✅ Personel başarıyla eklendi!");
             fetchUsers();
             setNewUser(prev => ({ ...prev, tc_no:'', ad:'', soyad:'', sifre:'' })); 
@@ -68,13 +68,13 @@ export default function Settings() {
         if(!selectedBirim) return;
         const token = localStorage.getItem('token');
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/personel/transfer', {
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/transfer', {
                 personel_id: editingUser.personel_id,
                 yeni_birim_id: selectedBirim
             }, { headers: { Authorization: `Bearer ${token}` } });
 
             if (selectedRol && selectedRol !== editingUser.rol_adi && user.rol === 'admin') {
-                await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/personel/rol-degistir', {
+                await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/rol-degistir', {
                     personel_id: editingUser.personel_id,
                     yeni_rol_adi: selectedRol
                 }, { headers: { Authorization: `Bearer ${token}` } });
@@ -87,7 +87,7 @@ export default function Settings() {
     const personelDondur = async (neden) => {
         const token = localStorage.getItem('token');
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/personel/dondur', {
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/dondur', {
                 personel_id: dondurmaModal.personel_id,
                 neden: neden
             }, { headers: { Authorization: `Bearer ${token}` } });
@@ -100,7 +100,7 @@ export default function Settings() {
         if(!window.confirm("Personeli tekrar aktif etmek istiyor musunuz?")) return;
         const token = localStorage.getItem('token');
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/personel/aktif-et', { personel_id: id }, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/aktif-et', { personel_id: id }, { headers: { Authorization: `Bearer ${token}` } });
             alert("✅ Personel aktif edildi.");
             fetchUsers();
         } catch(e) { alert("Hata: " + (e.response?.data?.mesaj || "Aktif edilemedi")); }
@@ -110,7 +110,7 @@ export default function Settings() {
         if(!window.confirm("DİKKAT: Bu personeli kalıcı olarak silmek üzeresiniz. Emin misiniz?")) return;
         const token = localStorage.getItem('token');
         try {
-            await axios.delete(`https://mersinbb-izin-sistemi.vercel.app//api/personel/sil/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.delete(`https://mersinbb-izin-sistemi.onrender.com/api/personel/sil/${id}`, { headers: { Authorization: `Bearer ${token}` } });
             alert("🗑️ Personel silindi."); 
             fetchUsers();
         } catch(e) { alert("❌ " + (e.response?.data?.mesaj || "Silme işlemi başarısız.")); }
@@ -120,7 +120,7 @@ export default function Settings() {
         e.preventDefault();
         const token = localStorage.getItem('token');
         try {
-            await axios.post('https://mersinbb-izin-sistemi.vercel.app//api/personel/guncelle', { yeni_sifre: yeniSifre }, { headers: { Authorization: `Bearer ${token}` } });
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/guncelle', { yeni_sifre: yeniSifre }, { headers: { Authorization: `Bearer ${token}` } });
             alert("✅ Şifreniz güncellendi!"); setYeniSifre('');
         } catch(e) { alert("Hata."); }
     };
