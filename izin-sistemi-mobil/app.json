@@ -2,6 +2,14 @@
   "expo": {
     "name": "izinsistemi",
     "slug": "izinsistemi",
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "extra": {
+      "eas": {
+        "projectId": "440bcb12-2adc-47bc-82fe-5af7a1be2f39"
+      }
+    },
+    "android": {
+      "package": "com.huseyin.arkan.izinsistemi"
+    }
   }
 }
