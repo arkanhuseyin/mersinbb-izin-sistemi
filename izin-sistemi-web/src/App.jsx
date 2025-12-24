@@ -8,7 +8,8 @@ import LeaveRequests from './pages/LeaveRequests'; // İzin Listesi ve Onaylar
 import ProfilOnay from './pages/ProfilOnay';       // Profil Değişiklik Onayları
 import CreateLeave from './pages/CreateLeave';     // Yeni İzin Talebi Formu
 import Settings from './pages/Settings';           // Ayarlar ve Personel Yönetimi
-import LeaveReports from './pages/LeaveReports';   // İzin Takip Raporu (Excel İndirme) <--- YENİ
+import LeaveReports from './pages/LeaveReports';   // İzin Takip Raporu (Excel İndirme)
+import Yetkilendirme from './pages/Yetkilendirme'; // <--- 1. YENİ EKLENEN IMPORT
 
 // --- LAYOUT BİLEŞENİ ---
 const DashboardLayout = () => (
@@ -48,6 +49,8 @@ function App() {
             <Route path="reports" element={<LeaveReports />} />
             {/* 6. Ayarlar ve Personel Yönetimi */}
             <Route path="settings" element={<Settings />} />
+            {/* 7. Yetkilendirme Paneli */}
+            <Route path="yetkilendirme" element={<Yetkilendirme />} /> {/* <--- 2. YENİ EKLENEN ROTA */}
         </Route>
       </Routes>
     </BrowserRouter>
