@@ -61,6 +61,12 @@ export default function Sidebar() {
             icon: <Settings size={20}/>, 
             show: checkPermission('ayarlar') || true // Ayarlar herkese açık olsun (Profil için), içini kısıtlarız
         },
+		 { 
+            title: 'Profil Onayları', 
+            path: '/dashboard/profile-requests', 
+            icon: <UserCog size={20}/>, 
+            show: (user && ['admin', 'ik', 'filo'].includes(user.rol)) 
+        },
         { 
             title: 'Yetkilendirme', 
             path: '/dashboard/yetkilendirme', 
