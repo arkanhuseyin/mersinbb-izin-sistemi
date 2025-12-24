@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs'); // <--- 1. EKLEME: Dosya sistemi modülü
 
 // 1. ADIM: Ayarları EN BAŞTA yükle
 dotenv.config(); 
@@ -13,13 +14,13 @@ const pool = require('./src/config/db');
 const authRoutes = require('./src/routes/authRoutes');
 const izinRoutes = require('./src/routes/izinRoutes');
 const personelRoutes = require('./src/routes/personelRoutes');
+const yetkiRoutes = require('./src/routes/yetkiRoutes');
 
 const app = express();
 
 // --- MIDDLEWARE (Ara Katmanlar) ---
-// DÜZELTME BURADA: Frontend'den (Vercel) gelen isteklere tam izin veriyoruz.
 app.use(cors({
-    origin: '*', // Tüm sitelere izin ver (Hata ayıklamak için en garanti yol)
+    origin: '*', 
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -27,13 +28,25 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Yüklenen dosyaların (PDF, Resim) tarayıcıdan erişilebilir olması için klasörü dışa açıyoruz
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// --- 2. EKLEME: Uploads Klasörü Kontrolü ve Dışa Açma ---
+// Klasör yolunu belirle
+const uploadsDir = path.join(__dirname, 'uploads');
+
+// Klasör yoksa oluştur (Render'da hata almamak için şart)
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    console.log('📂 Uploads klasörü oluşturuldu.');
+}
+
+// Klasörü statik olarak dışarı aç
+// Artık https://site-adi.com/uploads/resim.jpg diye erişilebilir.
+app.use('/uploads', express.static(uploadsDir));
 
 // --- ROTALAR ---
-app.use('/api/auth', authRoutes);       // Giriş işlemleri
-app.use('/api/izin', izinRoutes);       // İzin, Onay, Bildirim
-app.use('/api/personel', personelRoutes); // Profil işlemleri
+app.use('/api/auth', authRoutes);       
+app.use('/api/izin', izinRoutes);       
+app.use('/api/personel', personelRoutes); 
+app.use('/api/yetki', yetkiRoutes);  
 
 // Test Rotası
 app.get('/', (req, res) => {
