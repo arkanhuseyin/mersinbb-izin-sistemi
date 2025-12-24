@@ -1,15 +1,41 @@
 {
   "expo": {
-    "name": "izinsistemi",
-    "slug": "izinsistemi",
+    "name": "MBB İzin Sistemi",
+    "slug": "mbb-izin-sistemi",
     "version": "1.0.0",
-    "extra": {
-      "eas": {
-        "projectId": "440bcb12-2adc-47bc-82fe-5af7a1be2f39"
-      }
+    "orientation": "portrait",
+    "icon": "./assets/icon1.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mersinbb.izinsistemi"
     },
     "android": {
-      "package": "com.huseyin.arkan.izinsistemi"
+      "package": "com.mersinbb.izinsistemi",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon1.png",
+        "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "INTERNET"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "com.huseyin.arkan.izinsistemi" 
+      }
     }
   }
 }
