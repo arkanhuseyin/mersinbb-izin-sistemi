@@ -42,12 +42,13 @@ exports.login = async (req, res) => {
         const yetkiResult = await pool.query('SELECT * FROM yetkiler WHERE personel_id = $1', [user.personel_id]);
         const yetkiler = yetkiResult.rows;
 
-        // ✅ DÜZELTME 1: Token oluştururken rolü KÜÇÜK HARFE çeviriyoruz
+        // ✅ DÜZELTME 1: Token oluştururken rolü ZORLA KÜÇÜK HARFE çeviriyoruz
+        // Veritabanında "AMIR" yazsa bile buraya "amir" olarak girer.
         const token = jwt.sign(
             { 
                 id: user.personel_id, 
                 tc: user.tc_no, 
-                rol: user.rol_adi.toLowerCase() // BURASI DÜZELDİ
+                rol: user.rol_adi.toLowerCase() 
             },
             process.env.JWT_SECRET || 'gizli_anahtar',
             { expiresIn: '12h' }
@@ -59,14 +60,13 @@ exports.login = async (req, res) => {
         // 🔴 MOBİL VE WEB UYUMLULUĞU İÇİN ÖZEL OBJE
         const userObj = {
             ...user,
-            rol: user.rol_adi.toLowerCase(), // ✅ DÜZELTME 2: Frontend'e gönderirken de küçültüyoruz
+            rol: user.rol_adi.toLowerCase(), // ✅ DÜZELTME 2: Frontend'e gönderirken de küçültüyoruz.
             yetkiler: yetkiler
         };
 
         res.json({
             mesaj: 'Giriş başarılı',
             token,
-            // 👇 KRİTİK NOKTA BURASI 👇
             user: userObj,       // Yeni Web Sitesi bunu kullanır
             kullanici: userObj   // Eski Mobil Uygulama bunu kullanır
         });
@@ -77,7 +77,7 @@ exports.login = async (req, res) => {
     }
 };
 
-// 2. ŞİFRE SIFIRLAMA TALEBİ (EMAİL OLMADIĞI İÇİN BASİT LOG)
+// 2. ŞİFRE SIFIRLAMA TALEBİ
 exports.sifreUnuttum = async (req, res) => {
     res.json({ mesaj: 'Lütfen birim amirinize veya İK departmanına başvurunuz.' });
 };
@@ -104,7 +104,6 @@ exports.adminSifirla = async (req, res) => {
 
 // 4. YENİ PERSONEL EKLEME (REGISTER)
 exports.register = async (req, res) => {
-    // Yetki kontrolü
     if (req.user.rol !== 'admin' && req.user.rol !== 'ik' && req.user.rol !== 'filo') {
         return res.status(403).json({ mesaj: 'Bu işlemi yapmaya yetkiniz yok.' });
     }
@@ -115,7 +114,6 @@ exports.register = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hash = await bcrypt.hash(sifre, salt);
 
-        // Rol ID bul
         const rolRes = await pool.query('SELECT rol_id FROM roller WHERE rol_adi = $1', [rol_adi || 'personel']);
         if (rolRes.rows.length === 0) return res.status(400).json({ mesaj: 'Geçersiz rol.' });
 
@@ -137,7 +135,6 @@ exports.register = async (req, res) => {
 
 // 5. TÜM KULLANICILARI LİSTELE
 exports.getUsers = async (req, res) => {
-    // Yetki kontrolü (Burası da veritabanı yetkisine bağlanabilir ama şimdilik rol bazlı kalsın)
     if (!['admin', 'ik', 'yazici', 'filo'].includes(req.user.rol)) {
         return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
     }
