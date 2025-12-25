@@ -42,13 +42,13 @@ exports.login = async (req, res) => {
         const yetkiResult = await pool.query('SELECT * FROM yetkiler WHERE personel_id = $1', [user.personel_id]);
         const yetkiler = yetkiResult.rows;
 
-        // ✅ DÜZELTME 1: Token oluştururken rolü ZORLA KÜÇÜK HARFE çeviriyoruz
-        // Veritabanında "AMIR" yazsa bile buraya "amir" olarak girer.
+        // 🔥 İŞTE EKSİK OLAN PARÇA BURASIYDI: birim eklendi! 🔥
         const token = jwt.sign(
             { 
                 id: user.personel_id, 
                 tc: user.tc_no, 
-                rol: user.rol_adi.toLowerCase() 
+                rol: user.rol_adi.toLowerCase(), // Rolü küçük harf yap
+                birim: user.birim_id             // ✅ BU SATIR EKSİKTİ! Artık amir kendi birimini bilecek.
             },
             process.env.JWT_SECRET || 'gizli_anahtar',
             { expiresIn: '12h' }
@@ -57,10 +57,10 @@ exports.login = async (req, res) => {
         // Şifre hash'ini ve hassas bilgileri çıkartıp gönder
         delete user.sifre_hash;
 
-        // 🔴 MOBİL VE WEB UYUMLULUĞU İÇİN ÖZEL OBJE
+        // Frontend'e gidecek obje
         const userObj = {
             ...user,
-            rol: user.rol_adi.toLowerCase(), // ✅ DÜZELTME 2: Frontend'e gönderirken de küçültüyoruz.
+            rol: user.rol_adi.toLowerCase(),
             yetkiler: yetkiler
         };
 
