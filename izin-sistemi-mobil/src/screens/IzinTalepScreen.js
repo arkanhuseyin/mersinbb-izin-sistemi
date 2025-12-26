@@ -66,7 +66,7 @@ export default function IzinTalepScreen({ route, navigation }) {
     setIseBaslama(donus.toLocaleDateString('tr-TR'));
   };
 
-  // --- KAMERA ---
+// --- KAMERA ---
   const openCamera = async () => {
     try {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -75,11 +75,15 @@ export default function IzinTalepScreen({ route, navigation }) {
             return;
         }
         let result = await ImagePicker.launchCameraAsync({
-            mediaTypes: 'images', // <--- DÜZELTİLDİ (Direkt string verdik)
+            // HATALI OLAN: mediaTypes: 'images',
+            // DOĞRUSU 👇
+            mediaTypes: ImagePicker.MediaTypeOptions.Images, 
             quality: 0.5,
         });
         if (!result.canceled) setRaporDosyasi(result.assets[0]);
-    } catch (error) { Alert.alert("Hata", "Kamera açılamadı."); }
+    } catch (error) { 
+        Alert.alert("Hata Detayı", error.message || JSON.stringify(error)); 
+    }
   };
 
   // --- GALERİ ---
@@ -91,12 +95,16 @@ export default function IzinTalepScreen({ route, navigation }) {
             return;
         }
         let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: 'images', // <--- DÜZELTİLDİ (Direkt string verdik)
+            // HATALI OLAN: mediaTypes: 'images',
+            // DOĞRUSU 👇
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.5,
             allowsEditing: false,
         });
         if (!result.canceled) setRaporDosyasi(result.assets[0]);
-    } catch (error) { Alert.alert("Hata", "Galeri açılamadı."); }
+    } catch (error) { 
+        Alert.alert("Hata Detayı", error.message || JSON.stringify(error)); 
+    }
   };
 
   const pickImage = () => {

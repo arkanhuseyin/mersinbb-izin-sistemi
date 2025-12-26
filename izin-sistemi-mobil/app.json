@@ -3,14 +3,11 @@
     "name": "MersinBB Izin",
     "slug": "mbb-izin-yeni-test",
     "version": "1.0.0",
-
     "icon": "./assets/iconn.png",
-
     "android": {
       "package": "com.mbb.yeni.izin.sistemi",
       "versionCode": 1
     },
-
     "plugins": [
       [
         "expo-splash-screen",
@@ -19,9 +16,15 @@
           "resizeMode": "contain",
           "image": "./assets/iconn.png"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Uygulama, fotoğraf yükleyebilmeniz için galeriye erişmek istiyor.",
+          "cameraPermission": "Uygulama, rapor fotoğraf çekebilmeniz için kameraya erişmek istiyor."
+        }
       ]
     ],
-
     "extra": {
       "eas": {
         "projectId": "97cdb250-1c6a-426b-833a-777b6065bcc2"
