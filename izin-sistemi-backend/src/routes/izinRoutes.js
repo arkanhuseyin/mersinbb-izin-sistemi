@@ -97,23 +97,24 @@ router.delete('/iptal/:id', auth, async (req, res) => {
 // 5. PDF İNDİRME (Form1 / Form2)
 // 🔒 Form2 SADECE admin ve ik
 router.get(
-    '/pdf/:form_tipi/:talep_id',
-    auth,
-    (req, res, next) => {
-        const { form_tipi } = req.params;
-        const { rol } = req.user;
+  '/pdf/:form_tipi/:talep_id',
+  auth, // 
+  (req, res, next) => {
+    const { form_tipi } = req.params;
+    const { rol } = req.user;
 
-        if (form_tipi === 'form2') {
-            if (rol !== 'admin' && rol !== 'ik') {
-                return res.status(403).json({
-                    mesaj: 'Form-2 yalnızca İK ve Admin tarafından görüntülenebilir.'
-                });
-            }
-        }
+    // Form2 sadece admin ve ik
+    if (form_tipi === 'form2') {
+      if (rol !== 'admin' && rol !== 'ik') {
+        return res.status(403).json({
+          mesaj: 'Form-2 yalnızca İK ve Admin tarafından görüntülenebilir.'
+        });
+      }
+    }
 
-        next();
-    },
-    pdfController.pdfOlustur
+    next();
+  },
+  pdfController.pdfOlustur
 );
 
 // 6. Bildirimleri Listele
