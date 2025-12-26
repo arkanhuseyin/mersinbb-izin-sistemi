@@ -30,58 +30,49 @@ const upload = multer({ storage: storage });
 // 📅 İZİN İŞLEMLERİ
 // ============================================================
 
-// 1. İzin Talebi Oluştur
+// 1. İzin Talebi Oluştur (Fotoğraf Yükleme Destekli)
 router.post('/olustur', auth, upload.single('belge'), izinController.talepOlustur);
 
 // 2. İzinleri Listele
 router.get('/listele', auth, izinController.izinleriGetir);
 
-// 3. Talebi Onayla / Reddet
+// 3. Talebi İmzala / Onayla / Reddet
 router.post('/onayla', auth, izinController.talepOnayla);
 
-// 4. İzin İptal Et
+// 4. İzin İptal Et (1 Gün Kuralı)
 router.delete('/iptal/:id', auth, async (req, res) => {
     try {
-        const kontrol = await pool.query(
-            'SELECT durum, baslangic_tarihi, personel_id FROM izin_talepleri WHERE talep_id = $1',
-            [req.params.id]
-        );
-
-        if (kontrol.rows.length === 0) {
-            return res.status(404).json({ mesaj: 'Talep bulunamadı' });
-        }
-
+        const kontrol = await pool.query('SELECT durum, baslangic_tarihi, personel_id FROM izin_talepleri WHERE talep_id = $1', [req.params.id]);
+        
+        if(kontrol.rows.length === 0) return res.status(404).json({mesaj: 'Talep bulunamadı'});
+        
         const talep = kontrol.rows[0];
 
-        // Yetki Kontrolü
-        if (
-            req.user.rol !== 'admin' &&
-            req.user.rol !== 'ik' &&
-            req.user.id !== talep.personel_id
-        ) {
-            return res.status(403).json({ mesaj: 'Bu işlem için yetkiniz yok.' });
+        // Yetki Kontrolü (Sadece kendi talebi, Admin veya İK silebilir)
+        if (req.user.rol !== 'admin' && req.user.rol !== 'ik' && req.user.id !== talep.personel_id) {
+            return res.status(403).json({mesaj: 'Bu işlem için yetkiniz yok.'});
         }
 
-        if (talep.durum === 'IK_ONAYLADI') {
-            return res.status(400).json({ mesaj: 'Onaylanmış izin iptal edilemez.' });
+        // İK Onayladıysa iptal edilemez
+        if(talep.durum === 'IK_ONAYLADI') {
+            return res.status(400).json({mesaj: 'Onaylanmış izin iptal edilemez. İK ile görüşün.'});
         }
 
+        // Tarih Kontrolü (1 Günden az kaldıysa iptal yok)
+        // Admin ve İK bu kuraldan muaftır.
         if (req.user.rol !== 'admin' && req.user.rol !== 'ik') {
             const bugun = new Date();
             const baslangic = new Date(talep.baslangic_tarihi);
-            const farkGun = Math.ceil(
-                (baslangic.getTime() - bugun.getTime()) / (1000 * 60 * 60 * 24)
-            );
+            const farkZaman = baslangic.getTime() - bugun.getTime();
+            const farkGun = Math.ceil(farkZaman / (1000 * 60 * 60 * 24));
 
             if (farkGun < 1) {
-                return res.status(400).json({
-                    mesaj: 'İzin başlangıcına 1 günden az kaldığı için iptal edilemez.'
-                });
+                return res.status(400).json({mesaj: 'İzin başlangıcına 1 günden az kaldığı için iptal edilemez.'});
             }
         }
 
         await pool.query('DELETE FROM izin_talepleri WHERE talep_id = $1', [req.params.id]);
-        res.json({ mesaj: 'İzin talebi iptal edildi.' });
+        res.json({mesaj: 'İzin talebi iptal edildi.'});
 
     } catch (err) {
         console.error(err);
@@ -94,40 +85,16 @@ router.delete('/iptal/:id', auth, async (req, res) => {
 // 🛠️ YARDIMCI VE RAPORLAMA
 // ============================================================
 
-// 5. PDF İNDİRME (Form1 / Form2)
-// 🔒 Form2 SADECE admin ve ik
-router.get(
-  '/pdf/:form_tipi/:talep_id',
-  auth, // 
-  (req, res, next) => {
-    const { form_tipi } = req.params;
-    const { rol } = req.user;
-
-    // Form2 sadece admin ve ik
-    if (form_tipi === 'form2') {
-      if (rol !== 'admin' && rol !== 'ik') {
-        return res.status(403).json({
-          mesaj: 'Form-2 yalnızca İK ve Admin tarafından görüntülenebilir.'
-        });
-      }
-    }
-
-    next();
-  },
-  pdfController.pdfOlustur
-);
+// 5. PDF İNDİRME (Form 1 / Form 2)
+// :form_tipi -> form1 veya form2
+router.get('/pdf/:form_tipi/:talep_id', pdfController.pdfOlustur);
 
 // 6. Bildirimleri Listele
 router.get('/bildirim/listele', auth, async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM bildirimler WHERE personel_id = $1 ORDER BY tarih DESC',
-            [req.user.id]
-        );
+        const result = await pool.query('SELECT * FROM bildirimler WHERE personel_id = $1 ORDER BY tarih DESC', [req.user.id]);
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).send('Hata');
-    }
+    } catch (err) { res.status(500).send('Hata'); }
 });
 
 // 7. Resmi Tatilleri Getir
@@ -135,21 +102,19 @@ router.get('/resmi-tatiller', auth, async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM resmi_tatiller');
         res.json(result.rows);
-    } catch (err) {
-        res.status(500).send('Hata');
-    }
+    } catch (err) { res.status(500).send('Hata'); }
 });
 
-// 8. Yıllık İzin Durum Raporu
+// 8. Yıllık İzin Durum Raporu (Admin/İK İçin Excel Verisi)
 router.get('/rapor/durum', auth, izinController.izinDurumRaporu);
 
-// 9. İzin Hareketleri (Timeline)
+// 9. İzin Hareketlerini Getir (Timeline)
 router.get('/timeline/:talep_id', auth, izinController.getTimeline);
 
-// 10. Sistem Logları (Admin)
+// 10. Sistem Loglarını Getir (Admin)
 router.get('/system-logs', auth, izinController.getSystemLogs);
 
-// 11. Islak İmza Durumu
+// 11. Islak İmza Durumu (Geldi / Gelmedi)
 router.post('/islak-imza-durumu', auth, izinController.islakImzaDurumu);
 
 module.exports = router;
