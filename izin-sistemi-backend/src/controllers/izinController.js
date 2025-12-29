@@ -19,7 +19,7 @@ const tarihFormatla = (tarihStr) => {
 // 2. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM)
 const hesaplaBakiye = async (personel_id) => {
     // Personelin giriş tarihini ve devreden iznini çek
-    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personellers WHERE personel_id = $1", [personel_id]);
+    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
     const giris = new Date(pRes.rows[0].ise_giris_tarihi || '2024-01-01');
@@ -154,7 +154,7 @@ exports.talepOlustur = async (req, res) => {
 // 2. İZİNLERİ LİSTELE
 exports.izinleriGetir = async (req, res) => {
     try {
-        let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.gorev FROM izin_talepleri t JOIN personellers p ON t.personel_id = p.personel_id`;
+        let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.gorev FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
         let params = [];
 
         // Rol bazlı filtreleme
