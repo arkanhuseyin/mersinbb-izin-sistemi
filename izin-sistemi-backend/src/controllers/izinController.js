@@ -73,7 +73,7 @@ exports.talepOlustur = async (req, res) => {
     const personel_id = req.user.id; 
     
     // Kullanıcı bilgilerini taze çek
-    const pRes = await pool.query("SELECT rol_id, gorev FROM personellers WHERE personel_id = $1", [personel_id]);
+    const pRes = await pool.query("SELECT rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
     const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [pRes.rows[0].rol_id]);
     
     const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
