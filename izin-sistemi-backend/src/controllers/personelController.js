@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { logKaydet } = require('../utils/logger');
+const bcrypt = require('bcrypt'); // <-- Şifreleme için şart
 
 // ============================================================
 // 1. TÜM BİRİMLERİ GETİR
@@ -15,7 +16,7 @@ exports.birimleriGetir = async (req, res) => {
 };
 
 // ============================================================
-// 2. YENİ PERSONEL EKLE (ŞEMAYA UYGUN DÜZELTİLDİ)
+// 2. YENİ PERSONEL EKLE (BCRYPT + ŞEMA UYUMU)
 // ============================================================
 exports.personelEkle = async (req, res) => {
     const { 
@@ -26,7 +27,7 @@ exports.personelEkle = async (req, res) => {
         ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden
     } = req.body;
 
-    // Boş gelen alanları NULL yap
+    // Boş gelen alanları NULL yap (Veritabanı hatasını önler)
     const formatNull = (val) => (val === '' || val === undefined ? null : val);
 
     const client = await pool.connect();
@@ -34,26 +35,26 @@ exports.personelEkle = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // ADIM 1: ROL İSMİNİ ID'YE ÇEVİRME
-        // Frontend 'personel' gönderiyor ama DB 'rol_id' istiyor.
-        // Önce rol tablosundan bu ismin ID'sini buluyoruz.
-        let rolId = null;
-        const rolAdi = rol || 'personel'; // Varsayılan rol
+        // --- ADIM 1: ŞİFREYİ HASHLE (GÜVENLİK) ---
+        // Eğer şifre girilmediyse varsayılan '123456' olsun
+        const hamSifre = sifre || '123456'; 
+        const hashedPassword = await bcrypt.hash(hamSifre, 10);
 
-        // Rolleri ara (Küçük harf duyarlılığı için LOWER kullanıyoruz)
+        // --- ADIM 2: ROL İSMİNİ ID'YE ÇEVİRME ---
+        // Frontend 'personel' gönderiyor ama DB 'rol_id' istiyor.
+        let rolId = null;
+        const rolAdi = rol || 'personel'; 
+
         const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [rolAdi]);
         
         if (rolRes.rows.length > 0) {
             rolId = rolRes.rows[0].rol_id;
         } else {
-            // Eğer rol bulunamazsa varsayılan olarak 1 (Genelde Personel) atayalım veya hata verdirelim.
-            // Şimdilik güvenli olması için 'personel' rolünü 1 varsayıyoruz.
-            // Eğer senin DB'de personel rolünün ID'si farklıysa burayı güncelle!
-            rolId = 1; 
+            rolId = 1; // Bulunamazsa varsayılan ID (Genelde 1: Personel)
         }
 
-        // ADIM 2: KAYIT SORGUSU (Sütun isimleri şemana göre düzeltildi)
-        // Düzeltmeler: sifre -> sifre_hash, rol -> rol_id
+        // --- ADIM 3: KAYIT SORGUSU ---
+        // Sütun isimleri veritabanı şemana birebir uyumlu (sifre_hash, rol_id vb.)
         const query = `
             INSERT INTO personeller (
                 tc_no, ad, soyad, sifre_hash, birim_id, rol_id,
@@ -71,7 +72,7 @@ exports.personelEkle = async (req, res) => {
         `;
 
         const values = [
-            tc_no, ad, soyad, sifre, birim_id, rolId,
+            tc_no, ad, soyad, hashedPassword, birim_id, rolId,
             gorev, kadro_tipi, telefon, kan_grubu,
             egitim_durumu, formatNull(dogum_tarihi), medeni_hal, cinsiyet, calisma_durumu || 'Çalışıyor',
             ehliyet_no, src_belge_no, formatNull(psikoteknik_tarihi), surucu_no, gorev_yeri,
@@ -95,7 +96,6 @@ exports.personelEkle = async (req, res) => {
             return res.status(400).json({ mesaj: 'Bu TC Kimlik No ile zaten bir kayıt var.' });
         }
         
-        // Hatanın detayını frontend'e gönderiyoruz ki görebilelim
         res.status(500).json({ 
             mesaj: 'Veritabanı hatası oluştu.', 
             detay: err.message 
@@ -124,9 +124,8 @@ exports.birimGuncelle = async (req, res) => {
         
         // Rol güncelleme varsa ID'sini bulmamız lazım
         if (yeni_rol) {
-            // Frontend string gönderiyorsa (örn: 'admin'), ID'sini bul
             const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [yeni_rol]);
-            let yeniRolId = 1; // Varsayılan
+            let yeniRolId = 1; 
             if (rolRes.rows.length > 0) yeniRolId = rolRes.rows[0].rol_id;
 
             query += ', rol_id = $3 WHERE personel_id = $2';
