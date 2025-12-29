@@ -2,101 +2,140 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
     User, Search, Plus, Save, Truck, FileText, 
-    Briefcase, Ban, Ruler, Shirt 
+    Briefcase, Ban, Ruler, Shirt, Image as ImageIcon,
+    Edit, FileDown, X
 } from 'lucide-react';
 
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('profile');
-    const [user, setUser] = useState(() => { 
-        try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } 
-    });
+    const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } });
     
     const [usersList, setUsersList] = useState([]);
     const [birimler, setBirimler] = useState([]);
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(false);
     
+    // Modallar
     const [showAddModal, setShowAddModal] = useState(false);
     const [dondurmaModal, setDondurmaModal] = useState(null);
     const [transferModal, setTransferModal] = useState(null);
+    const [editModal, setEditModal] = useState(null); // YENİ
 
-    // FORM DURUMU
+    // Yeni Personel Formu
     const [formStep, setFormStep] = useState(1); 
+    const [fotograf, setFotograf] = useState(null); // Dosya State
     const [newPersonel, setNewPersonel] = useState({
-        // 1. Kimlik
-        tc_no: '', ad: '', soyad: '', sifre: '123456', telefon: '',
+        tc_no: '', ad: '', soyad: '', sifre: '123456', telefon: '', adres: '', // Adres
         dogum_tarihi: '', cinsiyet: 'Erkek', medeni_hal: 'Bekar', kan_grubu: '', egitim_durumu: 'Lise',
-        // 2. Kurumsal
         birim_id: '1', gorev: '', kadro_tipi: 'Sürekli İşçi', gorev_yeri: '', calisma_durumu: 'Çalışıyor', rol: 'personel',
-        // 3. Lojistik
         ehliyet_no: '', src_belge_no: '', surucu_no: '', psikoteknik_tarihi: '',
-        // 4. Kıyafet
         ayakkabi_no: '', tisort_beden: '', gomlek_beden: '', suveter_beden: '', mont_beden: ''
     });
 
     const isYetkili = user && ['admin', 'ik', 'filo'].includes(user.rol);
 
     useEffect(() => {
-        if (activeTab === 'users' && isYetkili) {
-            fetchUsers();
-            fetchBirimler();
-        }
+        if (activeTab === 'users' && isYetkili) { fetchUsers(); fetchBirimler(); }
     }, [activeTab]);
 
     const fetchUsers = async () => {
         setYukleniyor(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { 
-                headers: { Authorization: `Bearer ${token}` } 
-            });
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { headers: { Authorization: `Bearer ${token}` } });
             setUsersList(res.data);
         } catch (error) { console.error(error); }
         setYukleniyor(false);
     };
 
-    // --- DÜZELTİLEN FONKSİYON (401 HATASI ÇÖZÜMÜ) ---
     const fetchBirimler = async () => {
         try {
-            const token = localStorage.getItem('token'); // Token'ı al
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/birimler', {
-                headers: { Authorization: `Bearer ${token}` } // Header'a ekle
-            });
+            const token = localStorage.getItem('token');
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/birimler', { headers: { Authorization: `Bearer ${token}` } });
             setBirimler(res.data);
-        } catch (error) { console.error('Birimler çekilemedi:', error); }
+        } catch (error) { console.error(error); }
     };
 
     const handleFormChange = (e) => {
         setNewPersonel({ ...newPersonel, [e.target.name]: e.target.value });
     };
 
+    const handleFileChange = (e) => {
+        setFotograf(e.target.files[0]);
+    };
+
+    // KAYIT (FormData ile)
     const personelKaydet = async (e) => {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
-            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/ekle', newPersonel, {
-                headers: { Authorization: `Bearer ${token}` }
+            const formData = new FormData();
+            
+            Object.keys(newPersonel).forEach(key => {
+                formData.append(key, newPersonel[key] || '');
+            });
+            if (fotograf) formData.append('fotograf', fotograf);
+
+            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/ekle', formData, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
             });
             alert('Personel başarıyla oluşturuldu!');
             setShowAddModal(false);
-            fetchUsers(); // Listeyi yenile
-            // Formu sıfırla
-            setNewPersonel({ 
-                ...newPersonel, tc_no: '', ad: '', soyad: '', telefon: '', ehliyet_no: '' 
-            });
+            fetchUsers();
             setFormStep(1);
+            setFotograf(null);
+            setNewPersonel({...newPersonel, tc_no: '', ad: '', soyad: ''}); // Sıfırla
         } catch (error) {
             console.error(error);
-            // Hata mesajını backend'den alıp gösteriyoruz
-            const mesaj = error.response?.data?.mesaj || 'Kaydedilemedi. Lütfen alanları kontrol edin.';
-            const detay = error.response?.data?.detay || ''; // Varsa teknik detay
+            const mesaj = error.response?.data?.mesaj || 'Hata oluştu.';
+            const detay = error.response?.data?.detay || '';
             alert(`Hata: ${mesaj}\n${detay}`);
         }
     };
 
+    // DÜZENLEME (UPDATE)
+    const personelGuncelle = async (e) => {
+        e.preventDefault();
+        try {
+            const token = localStorage.getItem('token');
+            const formData = new FormData();
+            
+            const fields = ['ad', 'soyad', 'telefon', 'adres', 'gorev', 'kadro_tipi', 'gorev_yeri', 
+                            'ayakkabi_no', 'tisort_beden', 'gomlek_beden', 'suveter_beden', 'mont_beden'];
+            
+            fields.forEach(key => formData.append(key, editModal[key] || ''));
+            
+            if (fotograf) formData.append('fotograf', fotograf);
+
+            await axios.put(`https://mersinbb-izin-sistemi.onrender.com/api/personel/guncelle/${editModal.personel_id}`, formData, {
+                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' }
+            });
+
+            alert('Güncelleme başarılı!');
+            setEditModal(null);
+            setFotograf(null);
+            fetchUsers();
+        } catch (error) { alert('Güncelleme hatası'); }
+    };
+
+    // PDF İNDİRME
+    const downloadPdf = (id, ad) => {
+        const token = localStorage.getItem('token');
+        axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/personel/pdf/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'blob'
+        }).then((response) => {
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${ad}_Kart.pdf`);
+            document.body.appendChild(link);
+            link.click();
+        });
+    };
+
     const filteredUsers = usersList.filter(u => 
         u.ad?.toLowerCase().includes(arama.toLowerCase()) || 
-        u.soyad?.toLowerCase().includes(arama.toLowerCase()) ||
         u.tc_no?.includes(arama)
     );
 
@@ -138,14 +177,17 @@ export default function Settings() {
                                     <tbody>
                                         {yukleniyor ? <tr><td colSpan="5" className="text-center py-4">Yükleniyor...</td></tr> : 
                                          filteredUsers.map(u => (
-                                            <tr key={u.personel_id}>
+                                            <tr key={u.personel_id} style={{cursor:'pointer'}}>
                                                 <td><div className="fw-bold text-dark">{u.ad} {u.soyad}</div><small className="text-muted font-monospace">{u.tc_no}</small></td>
                                                 <td><span className="badge bg-light text-dark border fw-normal">{u.birim_adi}</span></td>
                                                 <td className="small text-muted">{new Date(u.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                                 <td className="text-center">{u.aktif === false ? <span className="badge bg-danger">Pasif</span> : <span className="badge bg-success">Aktif</span>}</td>
                                                 <td className="text-end">
-                                                    <button className="btn btn-sm btn-light me-2" onClick={() => setTransferModal(u)}><Briefcase size={16} className="text-primary"/></button>
-                                                    <button className="btn btn-sm btn-light text-danger" onClick={() => setDondurmaModal(u)}><Ban size={16}/></button>
+                                                    {/* YENİ BUTONLAR */}
+                                                    <button className="btn btn-sm btn-light text-danger me-2" title="PDF İndir" onClick={() => downloadPdf(u.personel_id, u.ad)}><FileDown size={18}/></button>
+                                                    <button className="btn btn-sm btn-light text-primary me-2" title="Düzenle" onClick={() => setEditModal(u)}><Edit size={18}/></button>
+                                                    <button className="btn btn-sm btn-light me-2" onClick={() => setTransferModal(u)}><Briefcase size={18}/></button>
+                                                    <button className="btn btn-sm btn-light text-danger" onClick={() => setDondurmaModal(u)}><Ban size={18}/></button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -167,79 +209,61 @@ export default function Settings() {
                                 <button type="button" className="btn-close btn-close-white" onClick={() => setShowAddModal(false)}></button>
                             </div>
                             <div className="modal-body p-4 bg-light">
-                                
                                 <div className="d-flex justify-content-center mb-4">
                                     <div className="btn-group shadow-sm w-100 bg-white rounded-3 p-1">
-                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 1 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(1)}><User size={16} className="me-2"/> 1. Kimlik</button>
-                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 2 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(2)}><FileText size={16} className="me-2"/> 2. Kurumsal</button>
-                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 3 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(3)}><Truck size={16} className="me-2"/> 3. Lojistik</button>
-                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 4 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(4)}><Shirt size={16} className="me-2"/> 4. Kıyafet</button>
+                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 1 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(1)}>1. Kimlik</button>
+                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 2 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(2)}>2. Kurumsal</button>
+                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 3 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(3)}>3. Lojistik</button>
+                                        <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 4 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(4)}>4. Kıyafet</button>
                                     </div>
                                 </div>
-
                                 <form onSubmit={personelKaydet}>
                                     <div className="card border-0 shadow-sm">
                                         <div className="card-body">
-                                            {/* ADIM 1: KİMLİK */}
                                             {formStep === 1 && (
                                                 <div className="row g-3">
                                                     <div className="col-12"><h6 className="text-primary border-bottom pb-2">Kişisel Bilgiler</h6></div>
+                                                    
+                                                    <div className="col-12">
+                                                        <label className="form-label small fw-bold text-muted">Profil Fotoğrafı</label>
+                                                        <div className="input-group">
+                                                            <span className="input-group-text"><ImageIcon size={18}/></span>
+                                                            <input type="file" className="form-control" accept="image/*" onChange={handleFileChange} />
+                                                        </div>
+                                                    </div>
+
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">TC Kimlik No</label><input type="text" name="tc_no" maxLength="11" className="form-control" required value={newPersonel.tc_no} onChange={handleFormChange}/></div>
                                                     <div className="col-md-3"><label className="small fw-bold text-muted">Ad</label><input type="text" name="ad" className="form-control" required value={newPersonel.ad} onChange={handleFormChange}/></div>
                                                     <div className="col-md-3"><label className="small fw-bold text-muted">Soyad</label><input type="text" name="soyad" className="form-control" required value={newPersonel.soyad} onChange={handleFormChange}/></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Telefon</label><input type="tel" name="telefon" className="form-control" value={newPersonel.telefon} onChange={handleFormChange}/></div>
+                                                    <div className="col-md-12"><label className="small fw-bold text-muted">Adres</label><textarea name="adres" className="form-control" rows="2" value={newPersonel.adres} onChange={handleFormChange} placeholder="Tam adres giriniz..."></textarea></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Doğum Tarihi</label><input type="date" name="dogum_tarihi" className="form-control" value={newPersonel.dogum_tarihi} onChange={handleFormChange}/></div>
-                                                    <div className="col-md-4"><label className="small fw-bold text-muted">Cinsiyet</label><select name="cinsiyet" className="form-select" value={newPersonel.cinsiyet} onChange={handleFormChange}><option>Erkek</option><option>Kadın</option></select></div>
-                                                    <div className="col-md-4"><label className="small fw-bold text-muted">Medeni Hal</label><select name="medeni_hal" className="form-select" value={newPersonel.medeni_hal} onChange={handleFormChange}><option>Bekar</option><option>Evli</option></select></div>
-                                                    <div className="col-md-4"><label className="small fw-bold text-muted">Kan Grubu</label><select name="kan_grubu" className="form-select" value={newPersonel.kan_grubu} onChange={handleFormChange}><option value="">Seçiniz</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Şifre</label><input type="text" name="sifre" className="form-control bg-light" value={newPersonel.sifre} onChange={handleFormChange}/></div>
                                                 </div>
                                             )}
-                                            {/* ADIM 2: KURUMSAL */}
                                             {formStep === 2 && (
                                                 <div className="row g-3">
-                                                    <div className="col-12"><h6 className="text-primary border-bottom pb-2">Kurumsal Bilgiler</h6></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Birim</label><select name="birim_id" className="form-select" value={newPersonel.birim_id} onChange={handleFormChange}>{birimler.map(b => (<option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>))}</select></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Görev Yeri</label><input type="text" name="gorev_yeri" className="form-control" value={newPersonel.gorev_yeri} onChange={handleFormChange}/></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Ünvan / Görevi</label><input type="text" name="gorev" className="form-control" value={newPersonel.gorev} onChange={handleFormChange}/></div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Kadro Tipi</label><select name="kadro_tipi" className="form-select" value={newPersonel.kadro_tipi} onChange={handleFormChange}><option>Sürekli İşçi</option><option>Memur</option><option>Sözleşmeli</option><option>Şirket Personeli</option></select></div>
-                                                    <div className="col-md-6"><label className="small fw-bold text-muted">Çalışma Durumu</label><select name="calisma_durumu" className="form-select" value={newPersonel.calisma_durumu} onChange={handleFormChange}><option>Çalışıyor</option><option>Emekli</option><option>İş Akdi Fesih</option></select></div>
-                                                    <div className="col-md-6"><label className="small fw-bold text-muted">Sistem Yetkisi</label><select name="rol" className="form-select" value={newPersonel.rol} onChange={handleFormChange}><option value="personel">Standart Personel</option><option value="amir">Birim Amiri</option><option value="filo">Filo Yöneticisi</option><option value="ik">İnsan Kaynakları</option></select></div>
                                                 </div>
                                             )}
-                                            {/* ADIM 3: LOJİSTİK */}
                                             {formStep === 3 && (
                                                 <div className="row g-3">
-                                                    <div className="col-12"><h6 className="text-primary border-bottom pb-2">Sürücü & Belge Bilgileri</h6></div>
-                                                    <div className="alert alert-info small d-flex align-items-center"><Truck size={16} className="me-2"/>Şoför olmayan personeller için boş bırakınız.</div>
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Ehliyet No</label><input type="text" name="ehliyet_no" className="form-control" value={newPersonel.ehliyet_no} onChange={handleFormChange}/></div>
-                                                    <div className="col-md-6"><label className="small fw-bold text-muted">SRC Belge No</label><input type="text" name="src_belge_no" className="form-control" value={newPersonel.src_belge_no} onChange={handleFormChange}/></div>
-                                                    <div className="col-md-6"><label className="small fw-bold text-muted">Psikoteknik Bitiş</label><input type="date" name="psikoteknik_tarihi" className="form-control" value={newPersonel.psikoteknik_tarihi} onChange={handleFormChange}/></div>
-                                                    <div className="col-md-6"><label className="small fw-bold text-muted">Sürücü Kart No</label><input type="text" name="surucu_no" className="form-control" value={newPersonel.surucu_no} onChange={handleFormChange}/></div>
                                                 </div>
                                             )}
-                                            {/* ADIM 4: KIYAFET */}
                                             {formStep === 4 && (
                                                 <div className="row g-3">
-                                                    <div className="col-12"><h6 className="text-primary border-bottom pb-2">Kıyafet ve Beden Bilgileri</h6></div>
-                                                    <div className="alert alert-light border small d-flex align-items-center"><Ruler size={16} className="me-2 text-warning"/>Zorunlu değildir, boş bırakılabilir.</div>
-                                                    
-                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Ayakkabı Numarası</label><input type="text" name="ayakkabi_no" className="form-control" placeholder="Örn: 42" value={newPersonel.ayakkabi_no} onChange={handleFormChange}/></div>
-                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Tişört Bedeni</label><select name="tisort_beden" className="form-select" value={newPersonel.tisort_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option></select></div>
-                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Gömlek Bedeni</label><select name="gomlek_beden" className="form-select" value={newPersonel.gomlek_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S (37-38)</option><option>M (39-40)</option><option>L (41-42)</option><option>XL (43-44)</option><option>XXL (45-46)</option></select></div>
-                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Süveter Bedeni</label><select name="suveter_beden" className="form-select" value={newPersonel.suveter_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
-                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Mont Bedeni</label><select name="mont_beden" className="form-select" value={newPersonel.mont_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option></select></div>
+                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Ayakkabı No</label><input type="text" name="ayakkabi_no" className="form-control" value={newPersonel.ayakkabi_no} onChange={handleFormChange}/></div>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                     <div className="d-flex justify-content-between mt-4">
                                         <button type="button" className="btn btn-secondary px-4" onClick={()=>{if(formStep>1)setFormStep(formStep-1); else setShowAddModal(false)}}>{formStep === 1 ? 'İptal' : 'Geri'}</button>
-                                        {formStep < 4 ? (
-                                            <button type="button" className="btn btn-primary px-4 fw-bold" onClick={()=>setFormStep(formStep+1)}>İleri</button>
-                                        ) : (
-                                            <button type="submit" className="btn btn-success px-5 fw-bold shadow-sm"><Save size={18} className="me-2"/> Kaydı Tamamla</button>
-                                        )}
+                                        {formStep < 4 ? <button type="button" className="btn btn-primary px-4 fw-bold" onClick={()=>setFormStep(formStep+1)}>İleri</button> : <button type="submit" className="btn btn-success px-5 fw-bold shadow-sm"><Save size={18} className="me-2"/> Kaydet</button>}
                                     </div>
                                 </form>
                             </div>
@@ -248,20 +272,40 @@ export default function Settings() {
                 </div>
             )}
             
-            {dondurmaModal && (
-                <div className="modal show d-block" style={{backgroundColor:'rgba(0,0,0,0.5)'}}>
-                   <div className="modal-dialog modal-dialog-centered">
-                        <div className="modal-content shadow rounded-4 p-3 text-center">
-                            <h5 className="fw-bold text-danger mb-3">Personel İlişiğini Kes</h5>
-                            <p><strong>{dondurmaModal.ad} {dondurmaModal.soyad}</strong> personeli için işlem seçiniz:</p>
-                            <div className="d-grid gap-2">
-                                <button className="btn btn-outline-danger fw-bold" onClick={()=>alert('Backendde bu fonksiyonu bağla')}>Emeklilik</button>
-                                <button className="btn btn-secondary mt-2" onClick={()=>setDondurmaModal(null)}>İptal</button>
+            {/* DÜZENLEME MODALI */}
+            {editModal && (
+                <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY:'auto' }}>
+                    <div className="modal-dialog modal-dialog-centered modal-lg">
+                        <div className="modal-content shadow rounded-4 border-0">
+                            <div className="modal-header bg-warning-subtle text-dark">
+                                <h5 className="fw-bold mb-0">Personel Düzenle: {editModal.ad} {editModal.soyad}</h5>
+                                <button className="btn-close" onClick={()=>setEditModal(null)}></button>
+                            </div>
+                            <div className="modal-body p-4">
+                                <form onSubmit={personelGuncelle}>
+                                    <div className="row g-3">
+                                        <div className="col-12"><label className="form-label small fw-bold">Fotoğraf Güncelle</label><input type="file" className="form-control" accept="image/*" onChange={handleFileChange} /></div>
+                                        <div className="col-md-6"><label className="small">Ad</label><input className="form-control" value={editModal.ad} onChange={e=>setEditModal({...editModal, ad:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Soyad</label><input className="form-control" value={editModal.soyad} onChange={e=>setEditModal({...editModal, soyad:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Telefon</label><input className="form-control" value={editModal.telefon || ''} onChange={e=>setEditModal({...editModal, telefon:e.target.value})}/></div>
+                                        <div className="col-12"><label className="small">Adres</label><textarea className="form-control" rows="2" value={editModal.adres || ''} onChange={e=>setEditModal({...editModal, adres:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Görevi</label><input className="form-control" value={editModal.gorev || ''} onChange={e=>setEditModal({...editModal, gorev:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Görev Yeri</label><input className="form-control" value={editModal.gorev_yeri || ''} onChange={e=>setEditModal({...editModal, gorev_yeri:e.target.value})}/></div>
+                                        <div className="col-12 border-top pt-2 mt-2"><h6 className="small text-muted">Beden Bilgileri</h6></div>
+                                        <div className="col-md-3"><label className="small">Ayakkabı</label><input className="form-control" value={editModal.ayakkabi_no || ''} onChange={e=>setEditModal({...editModal, ayakkabi_no:e.target.value})}/></div>
+                                        <div className="col-md-3"><label className="small">Tişört</label><input className="form-control" value={editModal.tisort_beden || ''} onChange={e=>setEditModal({...editModal, tisort_beden:e.target.value})}/></div>
+                                        <div className="col-md-3"><label className="small">Gömlek</label><input className="form-control" value={editModal.gomlek_beden || ''} onChange={e=>setEditModal({...editModal, gomlek_beden:e.target.value})}/></div>
+                                        <div className="col-md-3"><label className="small">Mont</label><input className="form-control" value={editModal.mont_beden || ''} onChange={e=>setEditModal({...editModal, mont_beden:e.target.value})}/></div>
+                                    </div>
+                                    <div className="mt-4 text-end"><button type="button" className="btn btn-secondary me-2" onClick={()=>setEditModal(null)}>İptal</button><button type="submit" className="btn btn-warning fw-bold px-4">Güncelle</button></div>
+                                </form>
                             </div>
                         </div>
-                   </div>
+                    </div>
                 </div>
             )}
+            
+            {dondurmaModal && (<div className="modal show d-block" style={{backgroundColor:'rgba(0,0,0,0.5)'}}><div className="modal-dialog modal-dialog-centered"><div className="modal-content p-4"><h5 className="text-danger">İşlem Seçiniz</h5><button className="btn btn-danger mt-2" onClick={()=>alert('Backendde bağlı')}>İlişik Kes</button><button className="btn btn-secondary mt-2" onClick={()=>setDondurmaModal(null)}>İptal</button></div></div></div>)}
         </div>
     );
 }
