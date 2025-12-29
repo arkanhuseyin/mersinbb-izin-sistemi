@@ -8,24 +8,19 @@ const bcrypt = require('bcrypt');
 const auth = require('../middleware/auth');
 const personelController = require('../controllers/personelController');
 
-// --- MULTER VE KLASÖR AYARLARI ---
+// --- KLASÖR AYARLARI ---
 const uploadsBase = path.join(__dirname, '../../uploads');
 const belgerDir = path.join(uploadsBase, 'belgeler');
 const fotoDir = path.join(uploadsBase, 'fotograflar');
 
-// Klasörleri oluştur
 [uploadsBase, belgerDir, fotoDir].forEach(dir => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        // Form alanının adına göre klasör seçimi
-        if (file.fieldname === 'fotograf') {
-            cb(null, fotoDir);
-        } else {
-            cb(null, belgerDir);
-        }
+        if (file.fieldname === 'fotograf') cb(null, fotoDir);
+        else cb(null, belgerDir);
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -36,7 +31,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// --- YARDIMCI FONKSİYON ---
 const tarihDuzelt = (tarih) => {
     if (!tarih || tarih === '') return null;
     return tarih;
@@ -46,36 +40,27 @@ const tarihDuzelt = (tarih) => {
 // 🟢 YÖNETİM İŞLEMLERİ (Admin/İK/Filo)
 // ============================================================
 
-// 1. Birimleri Listele
 router.get('/birimler', auth, personelController.birimleriGetir);
-
-// 2. Yeni Personel Ekle (Yönetici) - Fotoğraf Yükleme Destekli
 router.post('/ekle', auth, upload.single('fotograf'), personelController.personelEkle);
-
-// 3. Personel Güncelle (Yönetici Düzenlemesi)
 router.put('/guncelle/:id', auth, upload.single('fotograf'), personelController.personelGuncelle);
-
-// 4. Personel Transfer Et
 router.post('/transfer', auth, personelController.birimGuncelle);
-
-// 5. Personel Dondur / Pasife Al
 router.post('/dondur', auth, personelController.personelDondur);
-
-// 6. Personel Kartı PDF İndir
 router.get('/pdf/:id', auth, personelController.personelKartiPdf);
 
+// YENİ: Personel Silme (Sadece Pasifse)
+router.delete('/sil/:personel_id', auth, personelController.personelSil);
+
 
 // ============================================================
-// 🔵 KİŞİSEL PROFİL İŞLEMLERİ (Personelin Kendisi)
+// 🔵 KİŞİSEL PROFİL İŞLEMLERİ
 // ============================================================
 
-// 7. Kendi Bilgilerini Getir
 router.get('/bilgi', auth, async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM personeller WHERE personel_id = $1', [req.user.id]);
         if (result.rows.length > 0) {
             const user = result.rows[0];
-            delete user.sifre_hash; // Güvenlik
+            delete user.sifre_hash;
             res.json(user);
         } else {
             res.status(404).send('Kullanıcı bulunamadı');
@@ -86,7 +71,7 @@ router.get('/bilgi', auth, async (req, res) => {
     }
 });
 
-// 8. Profil Değişiklik Talebi ve Şifre Güncelleme (Personel İsteği)
+// Profil Güncelleme ve Şifre Değiştirme
 router.post('/guncelle', auth, upload.fields([
     { name: 'adres_belgesi', maxCount: 1 },
     { name: 'src_belgesi', maxCount: 1 },
@@ -97,7 +82,7 @@ router.post('/guncelle', auth, upload.fields([
         const { email, telefon, adres, src_tarih, psiko_tarih, ehliyet_tarih, yeni_sifre } = req.body;
         const pid = req.user.id;
 
-        // A) ŞİFRE GÜNCELLEME
+        // Şifre Güncelleme
         if (yeni_sifre && yeni_sifre.length >= 6) {
              const hash = await bcrypt.hash(yeni_sifre, 10);
              await pool.query('UPDATE personeller SET sifre_hash = $1 WHERE personel_id = $2', [hash, pid]);
@@ -107,10 +92,9 @@ router.post('/guncelle', auth, upload.fields([
             }
         }
 
-        // B) PROFİL DEĞİŞİKLİK TALEBİ OLUŞTURMA
+        // Profil Değişiklik Talebi
         if (email || telefon || adres || src_tarih || req.files) {
             const yeniVeri = { email, telefon, adres, src_tarih, psiko_tarih, ehliyet_tarih };
-            
             const dosyaYollari = {};
             if (req.files) {
                 if (req.files.adres_belgesi) dosyaYollari.adres_belgesi_yol = req.files.adres_belgesi[0].path;
@@ -125,32 +109,22 @@ router.post('/guncelle', auth, upload.fields([
             );
             return res.json({ mesaj: 'Değişiklik talebiniz yönetici onayına gönderildi.' });
         }
-
         res.json({ mesaj: 'İşlem tamamlandı.' });
-
     } catch (err) {
         console.error(err);
         res.status(500).json({ mesaj: 'Hata oluştu.' });
     }
 });
 
-// 9. Bekleyen Talepleri Listele (Admin/İK)
+// Admin/İK Talepleri
 router.get('/talepler', auth, async (req, res) => {
     try {
         if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
-        
-        const result = await pool.query(`
-            SELECT pd.*, p.ad, p.soyad, p.tc_no 
-            FROM profil_degisiklikleri pd
-            JOIN personeller p ON pd.personel_id = p.personel_id
-            WHERE pd.durum = 'BEKLIYOR'
-            ORDER BY pd.talep_tarihi ASC
-        `);
+        const result = await pool.query(`SELECT pd.*, p.ad, p.soyad, p.tc_no FROM profil_degisiklikleri pd JOIN personeller p ON pd.personel_id = p.personel_id WHERE pd.durum = 'BEKLIYOR' ORDER BY pd.talep_tarihi ASC`);
         res.json(result.rows);
     } catch (err) { res.status(500).send('Hata'); }
 });
 
-// 10. Talebi Onayla/Reddet
 router.post('/talep-islem', auth, async (req, res) => {
     const client = await pool.connect();
     try {
@@ -165,7 +139,6 @@ router.post('/talep-islem', auth, async (req, res) => {
         if (islem === 'ONAYLA') {
             const veri = talep.yeni_veri; 
             const dosyalar = talep.dosya_yollari || {};
-            
             await client.query(`
                 UPDATE personeller SET 
                 email = COALESCE($1, email), telefon = COALESCE($2, telefon), adres = COALESCE($3, adres),
@@ -180,7 +153,6 @@ router.post('/talep-islem', auth, async (req, res) => {
                 dosyalar.psiko_belgesi_yol || null, dosyalar.ehliyet_belgesi_yol || null, 
                 talep.personel_id
             ]);
-
             await client.query("UPDATE profil_degisiklikleri SET durum = 'ONAYLANDI' WHERE id = $1", [id]);
             await client.query("INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)", [talep.personel_id, '✅ Profil Onaylandı', 'Bilgileriniz güncellendi.']);
         } else {
