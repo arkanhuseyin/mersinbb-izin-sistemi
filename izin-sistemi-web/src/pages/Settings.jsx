@@ -16,19 +16,16 @@ export default function Settings() {
     const [filterStatus, setFilterStatus] = useState('all');
     const [yukleniyor, setYukleniyor] = useState(false);
     
-    // Modallar
     const [showAddModal, setShowAddModal] = useState(false);
     const [dondurmaModal, setDondurmaModal] = useState(null);
     const [transferModal, setTransferModal] = useState(null);
     const [editModal, setEditModal] = useState(null); 
 
     const [yeniSifre, setYeniSifre] = useState('');
-
-    // Formlar
     const [formStep, setFormStep] = useState(1); 
     const [fotograf, setFotograf] = useState(null);
     const [newPersonel, setNewPersonel] = useState({
-        tc_no: '', ad: '', soyad: '', sifre: '123456', telefon: '', adres: '',
+        tc_no: '', ad: '', soyad: '', sifre: '', telefon: '', adres: '',
         dogum_tarihi: '', cinsiyet: 'Erkek', medeni_hal: 'Bekar', kan_grubu: '', egitim_durumu: 'Lise',
         birim_id: '1', gorev: '', kadro_tipi: 'Sürekli İşçi', gorev_yeri: '', calisma_durumu: 'Çalışıyor', rol: 'personel',
         ehliyet_no: '', src_belge_no: '', surucu_no: '', psikoteknik_tarihi: '',
@@ -45,7 +42,11 @@ export default function Settings() {
         setYukleniyor(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { headers: { Authorization: `Bearer ${token}` } });
+            // DÜZELTME BURADA: Artık tam listeyi çeken yeni endpoint'i kullanıyoruz.
+            // Bu sayede Düzenle dediğinde veriler boş gelmeyecek ve durumlar doğru olacak.
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/liste', { 
+                headers: { Authorization: `Bearer ${token}` } 
+            });
             setUsersList(res.data);
         } catch (error) { console.error(error); }
         setYukleniyor(false);
@@ -67,7 +68,6 @@ export default function Settings() {
         setFotograf(e.target.files[0]);
     };
 
-    // --- PERSONEL KAYIT ---
     const personelKaydet = async (e) => {
         e.preventDefault();
         try {
@@ -91,7 +91,6 @@ export default function Settings() {
         }
     };
 
-    // --- PERSONEL GÜNCELLEME ---
     const personelGuncelle = async (e) => {
         e.preventDefault();
         try {
@@ -118,7 +117,6 @@ export default function Settings() {
         } catch (error) { alert('Güncelleme hatası'); }
     };
 
-    // --- DONDURMA (PASİF) ---
     const personelDondur = async (sebep) => {
         try {
             const token = localStorage.getItem('token');
@@ -133,7 +131,7 @@ export default function Settings() {
         } catch (error) { alert('Hata oluştu'); }
     };
 
-    // --- AKTİF ETME (ANLIK GÜNCELLEMELİ) ---
+    // AKTİF ETME (ANLIK GÜNCELLEMELİ)
     const personelAktifEt = async (personel_id) => {
         if(!window.confirm('Bu personeli tekrar AKTİF hale getirmek istiyor musunuz?')) return;
         try {
@@ -144,19 +142,16 @@ export default function Settings() {
             
             alert('Personel başarıyla aktif edildi.');
             
-            // ANLIK GÜNCELLEME (Refresh beklememek için)
+            // LİSTEYİ ANLIK GÜNCELLE (Sayfa yenilemeye gerek kalmaz)
             setUsersList(prevList => prevList.map(u => 
                 u.personel_id === personel_id 
                 ? { ...u, aktif: true, calisma_durumu: 'Çalışıyor' } 
                 : u
             ));
 
-            // Garanti olsun diye arka planda yine çek
-            fetchUsers();
         } catch (error) { alert('Hata oluştu'); }
     };
 
-    // --- SİLME (TAMAMEN) ---
     const personelSil = async (personel_id) => {
         if(!window.confirm('DİKKAT: Bu personeli ve tüm verilerini KALICI olarak silmek istiyor musunuz? Bu işlem geri alınamaz!')) return;
         try {
@@ -202,7 +197,7 @@ export default function Settings() {
         const matchesSearch = u.ad?.toLowerCase().includes(arama.toLowerCase()) || 
                               u.tc_no?.includes(arama);
         
-        // Aktiflik kontrolü (Boolean veya 1/0/string)
+        // Aktiflik kontrolü (Boolean/String/Number)
         const isActive = u.aktif === true || u.aktif === 'true' || u.aktif === 1;
         
         if (filterStatus === 'all') return matchesSearch;
@@ -311,7 +306,7 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* --- YENİ PERSONEL MODALI --- */}
+            {/* YENİ PERSONEL MODALI */}
             {showAddModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-lg modal-dialog-centered my-4">
@@ -329,6 +324,7 @@ export default function Settings() {
                                 </div>
                                 <form onSubmit={personelKaydet}>
                                     <div className="card border-0 shadow-sm p-3">
+                                        {/* ADIM 1 */}
                                         {formStep === 1 && (
                                             <div className="row g-2">
                                                 <div className="col-12"><label className="small fw-bold">Fotoğraf</label><input type="file" className="form-control" onChange={handleFileChange}/></div>

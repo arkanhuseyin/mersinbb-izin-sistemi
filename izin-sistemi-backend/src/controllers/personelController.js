@@ -17,8 +17,27 @@ const trFix = (str) => {
 };
 
 // ============================================================
-// 1. LİSTELEME İŞLEMLERİ
+// 1. LİSTELEME İŞLEMLERİ (YENİ EKLENDİ - KRİTİK DÜZELTME)
 // ============================================================
+
+// TÜM PERSONEL LİSTESİ (DETAYLI)
+exports.personelListesi = async (req, res) => {
+    try {
+        // Tüm sütunları (p.*) ve birim adını çekiyoruz.
+        // Böylece Düzenle modalında ayakkabı no, adres vb. her şey dolu gelir.
+        const result = await pool.query(`
+            SELECT p.*, b.birim_adi 
+            FROM personeller p 
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id 
+            ORDER BY p.ad ASC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mesaj: 'Personel listesi alınamadı.' });
+    }
+};
+
 exports.birimleriGetir = async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM birimler ORDER BY birim_id ASC');
@@ -201,15 +220,12 @@ exports.personelKartiPdf = async (req, res) => {
         doc.pipe(res);
 
         // --- 1. HEADER (pdf1.png) ---
-        // 'templates' klasörü 'src'nin bir üstünde varsayılıyor
         const headerPath = path.join(__dirname, '../../templates/pdf1.png');
         
         if (fs.existsSync(headerPath)) {
-            // Resmi en tepeye, tam genişlikte yerleştir
             doc.image(headerPath, 0, 0, { width: 595.28, height: 100, fit: [595.28, 150] });
         }
 
-        // İçerik başlangıcı (Resmin altı)
         let yPos = 160; 
 
         // Başlık
@@ -219,14 +235,12 @@ exports.personelKartiPdf = async (req, res) => {
         // Çizgi
         doc.moveTo(40, yPos + 25).lineTo(555, yPos + 25).strokeColor('#cccccc').lineWidth(2).stroke();
 
-        yPos += 40; // Aşağı in
+        yPos += 40; 
 
-        // --- FOTOĞRAF (SAĞ TARAF) ---
+        // --- FOTOĞRAF ---
         if (p.fotograf_yolu && fs.existsSync(p.fotograf_yolu)) {
             try {
-                // Çerçeve
                 doc.rect(430, yPos, 110, 130).strokeColor('#333333').lineWidth(1).stroke();
-                // Resim
                 doc.image(p.fotograf_yolu, 431, yPos + 1, { width: 108, height: 128, fit: [108, 128] });
             } catch (e) { console.log('Resim yüklenemedi'); }
         } else {
@@ -234,36 +248,28 @@ exports.personelKartiPdf = async (req, res) => {
             doc.fillColor('#999').fontSize(10).text('FOTOGRAF', 430, yPos + 60, { width: 110, align: 'center' });
         }
 
-        // --- BİLGİ TABLOSU (SOL TARAF) ---
+        // --- BİLGİ TABLOSU ---
         const leftX = 50;
         const valueX = 180;
         let currentY = yPos;
 
-        // Satır fonksiyonu
         const row = (label, value) => {
-            // Arka plan
             doc.rect(leftX, currentY - 5, 360, 22).fillColor(currentY % 44 === 0 ? '#f5f5f5' : '#ffffff').fill();
-            // Etiket
             doc.fillColor('#333333').font('Helvetica-Bold').fontSize(10).text(label + ':', leftX + 10, currentY);
-            // Değer
             doc.fillColor('#000000').font('Helvetica').fontSize(10).text(trFix(value), valueX, currentY);
             currentY += 24;
         };
 
-        // KİMLİK
         doc.fillColor('#d32f2f').font('Helvetica-Bold').fontSize(12).text('KİMLİK VE İLETİŞİM', leftX, currentY - 30);
-        
         row('TC Kimlik No', p.tc_no);
         row('Adı Soyadı', `${p.ad} ${p.soyad}`);
         row('Telefon', p.telefon);
         row('Doğum Tarihi', p.dogum_tarihi ? new Date(p.dogum_tarihi).toLocaleDateString('tr-TR') : '-');
         
-        // Adres (Uzun metin için özel)
         doc.fillColor('#333333').font('Helvetica-Bold').text('Adres:', leftX + 10, currentY);
         doc.fillColor('#000000').font('Helvetica').text(trFix(p.adres), valueX, currentY, { width: 230 });
         currentY += 45; 
 
-        // KURUMSAL
         currentY += 10;
         doc.fillColor('#d32f2f').font('Helvetica-Bold').fontSize(12).text('KURUMSAL BİLGİLER', leftX, currentY - 5);
         currentY += 15;
@@ -274,7 +280,6 @@ exports.personelKartiPdf = async (req, res) => {
         row('Görev Yeri', p.gorev_yeri);
         row('İşe Giriş', p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-');
 
-        // BEDEN
         currentY += 10;
         doc.fillColor('#d32f2f').font('Helvetica-Bold').fontSize(12).text('BEDEN VE KIYAFET', leftX, currentY - 5);
         currentY += 15;
@@ -283,7 +288,6 @@ exports.personelKartiPdf = async (req, res) => {
         row('Gömlek', p.gomlek_beden);
         row('Tişört', p.tisort_beden);
 
-        // Alt Bilgi
         doc.fontSize(8).fillColor('#888888').text('Mersin Büyükşehir Belediyesi - Ulaşım Dairesi Başkanlığı', 50, 780, { align: 'center', width: 500 });
 
         doc.end();
@@ -319,7 +323,7 @@ exports.personelDondur = async (req, res) => {
     }
 };
 
-// AKTİF ET (DÜZELTİLDİ: calisma_durumu Eklendi)
+// AKTİF ET (Kritik Düzeltme Yapıldı)
 exports.personelAktifEt = async (req, res) => {
     const { personel_id } = req.body;
     
@@ -328,7 +332,7 @@ exports.personelAktifEt = async (req, res) => {
     }
 
     try {
-        // ÖNEMLİ: Aktif ederken 'calisma_durumu'nu da 'Çalışıyor' yapıyoruz ki 'Pasif ()' görünmesin.
+        // ÖNEMLİ: Aktif ederken 'calisma_durumu'nu da 'Çalışıyor' yapıyoruz
         await pool.query("UPDATE personeller SET aktif = TRUE, calisma_durumu = 'Çalışıyor' WHERE personel_id = $1", [personel_id]);
         
         await logKaydet(req.user.id, 'AKTIF_ETME', `Personel (${personel_id}) tekrar aktif edildi.`, req);

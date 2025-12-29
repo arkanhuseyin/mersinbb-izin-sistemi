@@ -40,12 +40,15 @@ const tarihDuzelt = (tarih) => {
 // 🟢 YÖNETİM İŞLEMLERİ
 // ============================================================
 
+// YENİ: Tam Personel Listesi (Düzenle modalı ve filtreleme için)
+router.get('/liste', auth, personelController.personelListesi);
+
 router.get('/birimler', auth, personelController.birimleriGetir);
 router.post('/ekle', auth, upload.single('fotograf'), personelController.personelEkle);
 router.put('/guncelle/:id', auth, upload.single('fotograf'), personelController.personelGuncelle);
 router.post('/transfer', auth, personelController.birimGuncelle);
 
-// *** DONDUR / AKTİF ET / SİL ***
+// *** DURUM YÖNETİMİ ***
 router.post('/dondur', auth, personelController.personelDondur);
 router.post('/aktif-et', auth, personelController.personelAktifEt);
 router.delete('/sil/:personel_id', auth, personelController.personelSil);
