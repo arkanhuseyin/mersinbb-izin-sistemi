@@ -1,7 +1,11 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
 
-// --- YARDIMCI: Tarih Formatı Düzeltici ---
+// ============================================================
+// 🛠️ YARDIMCI FONKSİYONLAR
+// ============================================================
+
+// 1. Tarih Formatı Düzeltici
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     if (tarihStr.includes('-')) return tarihStr;
@@ -12,31 +16,32 @@ const tarihFormatla = (tarihStr) => {
     return tarihStr;
 };
 
-// --- YARDIMCI: Yıllık İzin Bakiyesi Hesapla (DÜZELTİLDİ) ---
+// 2. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM - GEÇMİŞ DAHİL)
 const hesaplaBakiye = async (personel_id) => {
-    // 1. Personelin giriş tarihini çek
-    const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
+    // A. Personelin giriş tarihini ve GEÇMİŞTEN DEVREDEN iznini çek
+    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
     const giris = new Date(pRes.rows[0].ise_giris_tarihi || '2024-01-01');
+    const devreden = pRes.rows[0].devreden_izin || 0; // Veritabanına elle girilen eski bakiye
     const bugun = new Date();
     
-    // Çalışılan Yıl
+    // B. Kıdem (Çalışılan Yıl) Hesabı
     const workedYears = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365));
     const startYear = giris.getFullYear();
     
-    // Toplam Hakedişi Hesapla
-    let hakedis = 0;
+    // C. BU YIL İÇİN Hak Ediş Hesabı (Senin kurallarına göre)
+    let buYilHakedis = 0;
     if (startYear < 2018) {
-        if (workedYears < 1) hakedis = 0; else if (workedYears <= 5) hakedis = 14; else if (workedYears <= 15) hakedis = 19; else hakedis = 25;
+        if (workedYears < 1) buYilHakedis = 0; else if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25;
     } else if (startYear < 2024) {
-        if (workedYears < 1) hakedis = 0; else if (startYear < 2019) { if (workedYears <= 5) hakedis = 14; else if (workedYears <= 15) hakedis = 19; else hakedis = 25; } else { if (workedYears <= 3) hakedis = 16; else if (workedYears <= 5) hakedis = 18; else if (workedYears <= 15) hakedis = 25; else hakedis = 30; }
+        if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2019) { if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25; } else { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; }
     } else { 
-        if (workedYears < 1) hakedis = 0; else if (startYear < 2025) { if (workedYears <= 3) hakedis = 16; else if (workedYears <= 5) hakedis = 18; else if (workedYears <= 15) hakedis = 25; else hakedis = 30; } else { if (workedYears <= 3) hakedis = 18; else if (workedYears <= 5) hakedis = 20; else if (workedYears <= 15) hakedis = 27; else hakedis = 32; }
+        if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2025) { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; } else { if (workedYears <= 3) buYilHakedis = 18; else if (workedYears <= 5) buYilHakedis = 20; else if (workedYears <= 15) buYilHakedis = 27; else buYilHakedis = 32; }
     }
 
-    // 2. Kullanılan İzinleri Çek (DÜZELTİLDİ: TAMAMLANDI durumu eklendi)
-    // Hem 'IK_ONAYLADI' (İmza Bekleyen) hem 'TAMAMLANDI' (Biten) izinleri düşüyoruz.
+    // D. Sadece BU YIL Kullanılan İzinleri Çek
+    // Mantık: (Devreden + Bu Yıl Hakediş) - (Bu Yıl Kullanılan)
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -46,11 +51,17 @@ const hesaplaBakiye = async (personel_id) => {
         AND baslangic_tarihi >= date_trunc('year', CURRENT_DATE)
     `, [personel_id]);
 
-    const used = parseInt(uRes.rows[0].used);
+    const usedThisYear = parseInt(uRes.rows[0].used);
     
-    return hakedis - used; // Kalan Bakiye
+    // E. Sonuç Döndür
+    const totalBalance = devreden + buYilHakedis;
+    return totalBalance - usedThisYear; // Net Kalan Bakiye
 };
 
+
+// ============================================================
+// 🚀 TEMEL İŞLEVLER
+// ============================================================
 
 // 1. YENİ İZİN TALEBİ OLUŞTUR
 exports.talepOlustur = async (req, res) => {
@@ -70,7 +81,7 @@ exports.talepOlustur = async (req, res) => {
             const kalanHak = await hesaplaBakiye(personel_id);
             if (parseInt(kac_gun) > kalanHak) {
                 return res.status(400).json({ 
-                    mesaj: `Yetersiz Bakiye! Kalan yıllık izin hakkınız: ${kalanHak} gün. Talep edilen: ${kac_gun} gün.` 
+                    mesaj: `Yetersiz Bakiye! Toplam (Devreden Dahil) kalan hakkınız: ${kalanHak} gün. Talep edilen: ${kac_gun} gün.` 
                 });
             }
         }
@@ -79,6 +90,7 @@ exports.talepOlustur = async (req, res) => {
         bitis_tarihi = tarihFormatla(bitis_tarihi);
         ise_baslama = tarihFormatla(ise_baslama);
 
+        // Onay mekanizması başlangıç durumu
         let baslangicDurumu = 'ONAY_BEKLIYOR';
         if (userRole === 'filo') baslangicDurumu = 'YAZICI_ONAYLADI';
         const birimRes = await pool.query('SELECT birim_adi FROM birimler WHERE birim_id = $1', [userBirimId]);
@@ -112,14 +124,18 @@ exports.izinleriGetir = async (req, res) => {
         let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
         let params = [];
 
-        if (['admin', 'ik', 'filo'].includes(req.user.rol)) { } 
-        else if (['amir', 'yazici'].includes(req.user.rol)) {
+        // Rol bazlı filtreleme
+        if (['admin', 'ik', 'filo'].includes(req.user.rol)) { 
+            // Tümünü görür
+        } else if (['amir', 'yazici'].includes(req.user.rol)) {
             query += ` WHERE p.birim_id = $1`;
             params.push(req.user.birim);
         } else {
+            // Standart kullanıcı sadece kendini görür
             query += ` WHERE t.personel_id = $1`;
             params.push(req.user.id);
         }
+        
         query += ` ORDER BY t.olusturma_tarihi DESC`;
         const result = await pool.query(query, params);
         res.json(result.rows);
@@ -135,12 +151,15 @@ exports.talepOnayla = async (req, res) => {
     try {
         await client.query('BEGIN');
 
+        // Varsa onaylayanın imzasını kaydet
         if (imza_data) {
              await client.query(`INSERT INTO imzalar (personel_id, imza_data, talep_id) VALUES ($1, $2, $3)`, [onaylayan_id, imza_data, talep_id]);
         }
 
+        // Durumu güncelle
         await client.query(`UPDATE izin_talepleri SET durum = $1 WHERE talep_id = $2`, [yeni_durum, talep_id]);
 
+        // Hareket ve Log kaydı
         let islemBaslik = '';
         let aciklama = '';
         if (yeni_durum === 'AMIR_ONAYLADI') { islemBaslik = 'AMİR ONAYI'; aciklama = 'Amir tarafından onaylandı.'; }
@@ -151,6 +170,7 @@ exports.talepOnayla = async (req, res) => {
         await hareketKaydet(talep_id, onaylayan_id, islemBaslik, aciklama);
         await logKaydet(onaylayan_id, 'İZİN_İŞLEMİ', `Talep ${talep_id} durumu: ${yeni_durum}`, req);
 
+        // Bildirim Gönderimi
         if (yeni_durum === 'IK_ONAYLADI') {
             const talepSonuc = await client.query('SELECT t.personel_id, t.baslangic_tarihi, p.ad, p.soyad FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE t.talep_id = $1', [talep_id]);
             const pid = talepSonuc.rows[0].personel_id;
@@ -176,24 +196,23 @@ exports.talepOnayla = async (req, res) => {
     }
 };
 
-// 4. YILLIK İZİN HAKEDİŞ RAPORU (DÜZELTİLDİ)
+// 4. YILLIK İZİN HAKEDİŞ RAPORU (DETAYLI)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
 
     try {
-        // DÜZELTME: Hem IK_ONAYLADI hem TAMAMLANDI durumlarını 'Kullanılmış' sayıyoruz
         const query = `
             SELECT 
-                p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, b.birim_adi,
-                COALESCE(SUM(it.kac_gun), 0) as kullanilan_izin
+                p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.devreden_izin, b.birim_adi,
+                COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan
             FROM personeller p
             LEFT JOIN birimler b ON p.birim_id = b.birim_id
             LEFT JOIN izin_talepleri it ON p.personel_id = it.personel_id 
-                AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') -- BURASI DÜZELDİ
+                AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI')
                 AND it.izin_turu = 'YILLIK İZİN'
                 AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE)
             WHERE p.aktif = TRUE
-            GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi
+            GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.devreden_izin
             ORDER BY p.ad ASC
         `;
         
@@ -204,20 +223,29 @@ exports.izinDurumRaporu = async (req, res) => {
             const workedYears = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365));
             const startYear = giris.getFullYear();
             
-            let hakedis = 0;
+            // Hak Ediş Hesabı
+            let buYilHakedis = 0;
             if (startYear < 2018) {
-                if (workedYears < 1) hakedis = 0; else if (workedYears <= 5) hakedis = 14; else if (workedYears <= 15) hakedis = 19; else hakedis = 25;
+                if (workedYears < 1) buYilHakedis = 0; else if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25;
             } else if (startYear < 2024) {
-                if (workedYears < 1) hakedis = 0; else if (startYear < 2019) { if (workedYears <= 5) hakedis = 14; else if (workedYears <= 15) hakedis = 19; else hakedis = 25; } else { if (workedYears <= 3) hakedis = 16; else if (workedYears <= 5) hakedis = 18; else if (workedYears <= 15) hakedis = 25; else hakedis = 30; }
+                if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2019) { if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25; } else { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; }
             } else { 
-                if (workedYears < 1) hakedis = 0; else if (startYear < 2025) { if (workedYears <= 3) hakedis = 16; else if (workedYears <= 5) hakedis = 18; else if (workedYears <= 15) hakedis = 25; else hakedis = 30; } else { if (workedYears <= 3) hakedis = 18; else if (workedYears <= 5) hakedis = 20; else if (workedYears <= 15) hakedis = 27; else hakedis = 32; }
+                if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2025) { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; } else { if (workedYears <= 3) buYilHakedis = 18; else if (workedYears <= 5) buYilHakedis = 20; else if (workedYears <= 15) buYilHakedis = 27; else buYilHakedis = 32; }
             }
+
+            const devreden = parseInt(p.devreden_izin) || 0;
+            const kullanilan = parseInt(p.bu_yil_kullanilan) || 0;
+            const toplamHavuz = devreden + buYilHakedis;
+            const kalanNet = toplamHavuz - kullanilan;
 
             return {
                 ...p,
-                hakedis: hakedis,
-                kalan: hakedis - parseInt(p.kullanilan_izin),
-                uyari: (hakedis - parseInt(p.kullanilan_izin)) > 50
+                devreden_izin: devreden,
+                bu_yil_hakedis: buYilHakedis,
+                toplam_havuz: toplamHavuz,
+                kullanilan: kullanilan,
+                kalan: kalanNet,
+                uyari: kalanNet > 40 // Belli bir günden fazla izni birikenleri işaretle
             };
         }));
         res.json(rapor);
@@ -252,7 +280,57 @@ exports.islakImzaDurumu = async (req, res) => {
     } catch (e) { res.status(500).send('Hata'); }
 };
 
-// ... (Timeline, Loglar ve Geçmiş fonksiyonları aynı)
-exports.getTimeline = async (req, res) => { try { const result = await pool.query(`SELECT h.*, p.ad, p.soyad, r.rol_adi FROM izin_hareketleri h JOIN personeller p ON h.islem_yapan_id = p.personel_id JOIN roller r ON p.rol_id = r.rol_id WHERE h.talep_id = $1 ORDER BY h.tarih ASC`, [req.params.talep_id]); res.json(result.rows); } catch (e) { res.status(500).send('Hata'); } };
-exports.getSystemLogs = async (req, res) => { try { const result = await pool.query(`SELECT l.*, p.ad, p.soyad, p.tc_no FROM sistem_loglari l LEFT JOIN personeller p ON l.personel_id = p.personel_id ORDER BY l.tarih DESC LIMIT 100`); res.json(result.rows); } catch (e) { res.status(500).send('Hata'); } };
-exports.getPersonelGecmis = async (req, res) => { const { tc_no } = req.query; try { const result = await pool.query(`SELECT t.*, p.ad, p.soyad, p.tc_no FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE p.tc_no LIKE $1 OR LOWER(p.ad) LIKE $2 OR LOWER(p.soyad) LIKE $2 ORDER BY t.olusturma_tarihi DESC`, [`%${tc_no}%`, `%${tc_no.toLowerCase()}%`]); res.json(result.rows); } catch(e) { res.status(500).send('Hata'); } };
+// ============================================================
+// 📋 OKUMA İŞLEVLERİ (Timeline, Log, Geçmiş)
+// ============================================================
+
+// 6. Talep Hareket Geçmişi (Timeline)
+exports.getTimeline = async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT h.*, p.ad, p.soyad, r.rol_adi 
+             FROM izin_hareketleri h 
+             JOIN personeller p ON h.islem_yapan_id = p.personel_id 
+             JOIN roller r ON p.rol_id = r.rol_id 
+             WHERE h.talep_id = $1 
+             ORDER BY h.tarih ASC`, 
+            [req.params.talep_id]
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).send('Hata');
+    }
+};
+
+// 7. Sistem Loglarını Getir
+exports.getSystemLogs = async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT l.*, p.ad, p.soyad, p.tc_no 
+             FROM sistem_loglari l 
+             LEFT JOIN personeller p ON l.personel_id = p.personel_id 
+             ORDER BY l.tarih DESC LIMIT 100`
+        );
+        res.json(result.rows);
+    } catch (e) {
+        res.status(500).send('Hata');
+    }
+};
+
+// 8. Personel Geçmiş İzinleri (Arama)
+exports.getPersonelGecmis = async (req, res) => {
+    const { tc_no } = req.query;
+    try {
+        const result = await pool.query(
+            `SELECT t.*, p.ad, p.soyad, p.tc_no 
+             FROM izin_talepleri t 
+             JOIN personeller p ON t.personel_id = p.personel_id 
+             WHERE p.tc_no LIKE $1 OR LOWER(p.ad) LIKE $2 OR LOWER(p.soyad) LIKE $2 
+             ORDER BY t.olusturma_tarihi DESC`, 
+            [`%${tc_no}%`, `%${tc_no.toLowerCase()}%`]
+        );
+        res.json(result.rows);
+    } catch(e) {
+        res.status(500).send('Hata');
+    }
+};
