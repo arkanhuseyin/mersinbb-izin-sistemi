@@ -1,10 +1,12 @@
 const pool = require('../config/db');
+const { logKaydet } = require('../utils/logger');
 
+// ============================================================
 // 1. TÜM BİRİMLERİ GETİR (Dropdown İçin)
+// ============================================================
 exports.birimleriGetir = async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM birimler ORDER BY birim_id ASC');
-        if (!result.rows) return res.json([]);
         res.json(result.rows);
     } catch (err) {
         console.error(err);
@@ -12,112 +14,142 @@ exports.birimleriGetir = async (req, res) => {
     }
 };
 
-// 2. PERSONEL TRANSFER ET
-exports.birimGuncelle = async (req, res) => {
-    if (!['admin', 'ik', 'yazici', 'filo'].includes(req.user.rol)) {
-        return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
-    }
-    const { personel_id, yeni_birim_id } = req.body;
+// ============================================================
+// 2. YENİ PERSONEL EKLE (TAM DETAYLI + KIYAFET)
+// ============================================================
+exports.personelEkle = async (req, res) => {
+    // Frontend'den gelen 25 farklı veriyi alıyoruz
+    const { 
+        // 1. Kimlik
+        tc_no, ad, soyad, sifre, telefon, dogum_tarihi, 
+        cinsiyet, medeni_hal, kan_grubu, egitim_durumu,
+        
+        // 2. Kurumsal
+        birim_id, rol, gorev, kadro_tipi, gorev_yeri, calisma_durumu,
+        
+        // 3. Lojistik / Sürücü
+        ehliyet_no, src_belge_no, psikoteknik_tarihi, surucu_no,
+
+        // 4. Kıyafet / Beden (YENİ)
+        ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden
+    } = req.body;
+
+    // Şifreyi olduğu gibi alıyoruz (İstersen burada bcrypt ile hashleyebilirsin)
+    const hashedPassword = sifre; 
+
+    // Boş gelen tarih veya sayısal alanları NULL yapmak için yardımcı fonksiyon
+    const formatNull = (val) => (val === '' || val === undefined ? null : val);
+
     try {
-        await pool.query('UPDATE personeller SET birim_id = $1 WHERE personel_id = $2', [yeni_birim_id, personel_id]);
-        const birimRes = await pool.query('SELECT birim_adi FROM birimler WHERE birim_id = $1', [yeni_birim_id]);
-        res.json({ mesaj: `Personel '${birimRes.rows[0]?.birim_adi}' birimine transfer edildi.` });
-    } catch (err) { res.status(500).json({ mesaj: 'Hata oluştu.' }); }
+        const query = `
+            INSERT INTO personeller (
+                tc_no, ad, soyad, sifre, birim_id, rol,
+                gorev, kadro_tipi, telefon, kan_grubu,
+                egitim_durumu, dogum_tarihi, medeni_hal, cinsiyet, calisma_durumu,
+                ehliyet_no, src_belge_no, psikoteknik_tarihi, surucu_no, gorev_yeri,
+                ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6,
+                $7, $8, $9, $10,
+                $11, $12, $13, $14, $15,
+                $16, $17, $18, $19, $20,
+                $21, $22, $23, $24, $25
+            ) RETURNING *
+        `;
+
+        const values = [
+            tc_no, ad, soyad, hashedPassword, birim_id, rol || 'personel',
+            gorev, kadro_tipi, telefon, kan_grubu,
+            egitim_durumu, formatNull(dogum_tarihi), medeni_hal, cinsiyet, calisma_durumu || 'Çalışıyor',
+            ehliyet_no, src_belge_no, formatNull(psikoteknik_tarihi), surucu_no, gorev_yeri,
+            ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden
+        ];
+
+        const result = await pool.query(query, values);
+        
+        // İşlem Logu
+        await logKaydet(req.user.id, 'PERSONEL_EKLEME', `${ad} ${soyad} (TC: ${tc_no}) sisteme eklendi.`, req);
+
+        res.json({ mesaj: 'Personel kartı başarıyla oluşturuldu.', personel: result.rows[0] });
+
+    } catch (err) {
+        console.error('Personel Ekleme Hatası:', err);
+        if (err.code === '23505') { 
+            return res.status(400).json({ mesaj: 'Bu TC Kimlik No ile kayıtlı personel zaten var!' });
+        }
+        res.status(500).json({ mesaj: 'Veritabanı hatası oluştu.' });
+    }
 };
 
-// 3. PERSONELİ DONDUR (Pasife Al)
-exports.personelDondur = async (req, res) => {
-    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
+// ============================================================
+// 3. PERSONEL TRANSFER ET (Birim/Rol Değişikliği)
+// ============================================================
+exports.birimGuncelle = async (req, res) => {
+    // Sadece yetkili roller yapabilir
+    if (!['admin', 'ik', 'yazici', 'filo'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Bu işlem için yetkiniz yok.' });
+    }
+
+    const { personel_id, yeni_birim_id, yeni_rol } = req.body;
     
-    const { personel_id, neden } = req.body;
     try {
-        await pool.query(
-            `UPDATE personeller SET aktif = FALSE, ayrilma_nedeni = $1, ayrilma_tarihi = NOW() WHERE personel_id = $2`,
-            [neden, personel_id]
-        );
-        res.json({ mesaj: 'Personel üyeliği donduruldu (Pasife Alındı).' });
+        let query = 'UPDATE personeller SET birim_id = $1';
+        let params = [yeni_birim_id, personel_id];
+        
+        // Eğer rol de değişecekse sorguyu güncelle
+        if (yeni_rol) {
+            query += ', rol = $3 WHERE personel_id = $2';
+            params = [yeni_birim_id, personel_id, yeni_rol];
+        } else {
+            query += ' WHERE personel_id = $2';
+        }
+
+        await pool.query(query, params);
+        
+        // Log al
+        await logKaydet(req.user.id, 'TRANSFER', `Personel (${personel_id}) transfer edildi.`, req);
+
+        res.json({ mesaj: 'Personel transfer işlemi başarılı.' });
     } catch (err) { 
         console.error(err);
-        res.status(500).json({ mesaj: 'Hata oluştu.' }); 
+        res.status(500).send('Transfer sırasında hata oluştu.'); 
     }
 };
 
-// 4. PERSONELİ AKTİF ET
-exports.personelAktifEt = async (req, res) => {
-    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
+// ============================================================
+// 4. PERSONEL DONDUR / PASİFE AL / SİL
+// ============================================================
+exports.personelDondur = async (req, res) => {
+    if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     
-    const { personel_id } = req.body;
-    try {
-        await pool.query(
-            `UPDATE personeller SET aktif = TRUE, ayrilma_nedeni = NULL, ayrilma_tarihi = NULL WHERE personel_id = $1`,
-            [personel_id]
-        );
-        res.json({ mesaj: 'Personel tekrar aktif edildi.' });
-    } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
-};
+    const { personel_id, sebep } = req.body; // Sebep: 'EMEKLİLİK', 'İSTİFA' vb.
 
-// 5. ROL DEĞİŞTİR
-exports.rolGuncelle = async (req, res) => {
-    if (req.user.rol !== 'admin') return res.status(403).json({ mesaj: 'Sadece Admin rol değiştirebilir.' });
-    const { personel_id, yeni_rol_adi } = req.body;
-    try {
-        const rolRes = await pool.query('SELECT rol_id FROM roller WHERE rol_adi = $1', [yeni_rol_adi]);
-        if(rolRes.rows.length === 0) return res.status(400).json({mesaj:'Geçersiz rol'});
-        await pool.query('UPDATE personeller SET rol_id = $1 WHERE personel_id = $2', [rolRes.rows[0].rol_id, personel_id]);
-        res.json({ mesaj: 'Rol başarıyla güncellendi.' });
-    } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
-};
-
-// 6. PERSONEL SİL (GÜNCELLENDİ - TÜM BAĞIMLILIKLAR EKLENDİ) ✅
-exports.personelSil = async (req, res) => {
-    if (req.user.rol !== 'admin') return res.status(403).json({ mesaj: 'Sadece Admin silebilir.' });
-    
-    const { personel_id } = req.params; 
-    
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        const userRes = await client.query('SELECT aktif, ad, soyad FROM personeller WHERE personel_id = $1', [personel_id]);
+        // 1. Personeli pasife çek
+        await client.query(
+            "UPDATE personeller SET aktif = FALSE, calisma_durumu = $1 WHERE personel_id = $2", 
+            [sebep, personel_id]
+        );
+
+        // 2. Gelecek tarihli izin taleplerini iptal et
+        await client.query(
+            "UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE personel_id = $1 AND baslangic_tarihi > CURRENT_DATE",
+            [personel_id]
+        );
+
+        // 3. Log kaydı
+        await logKaydet(req.user.id, 'PERSONEL_CIKARMA', `Personel (${personel_id}) pasife alındı. Sebep: ${sebep}`, req);
         
-        if (userRes.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ mesaj: 'Personel bulunamadı.' });
-        }
-
-        const user = userRes.rows[0];
-
-        // Güvenlik: Aktif personel silinemez
-        if (user.aktif) {
-            await client.query('ROLLBACK');
-            return res.status(400).json({ 
-                mesaj: `GÜVENLİK UYARISI: ${user.ad} ${user.soyad} şu an AKTİF durumda! Silmek için önce 'Dondur' butonuna basarak pasife almalısınız.` 
-            });
-        }
-
-        // --- TÜM BAĞIMLI KAYITLARI SİL ---
-        await client.query('DELETE FROM bildirimler WHERE personel_id = $1', [personel_id]);
-        await client.query('DELETE FROM imzalar WHERE personel_id = $1', [personel_id]);
-        await client.query('DELETE FROM profil_degisiklikleri WHERE personel_id = $1', [personel_id]);
-        await client.query('DELETE FROM gorevler WHERE personel_id = $1', [personel_id]);
-        await client.query('DELETE FROM yetkiler WHERE personel_id = $1', [personel_id]);
-        
-        // Loglardaki hatayı çözen satır:
-        await client.query('DELETE FROM sistem_loglari WHERE personel_id = $1', [personel_id]);
-
-        // İzin taleplerini ve onlara bağlı hareketleri siler (CASCADE varsa hareketlere gerek kalmaz ama garantiye alalım)
-        await client.query('DELETE FROM izin_talepleri WHERE personel_id = $1', [personel_id]);
-        
-        // Son olarak personeli sil
-        await client.query('DELETE FROM personeller WHERE personel_id = $1', [personel_id]);
-
         await client.query('COMMIT');
-        res.json({ mesaj: 'Pasif personel ve tüm verileri başarıyla silindi.' });
+        res.json({ mesaj: `Personel pasife alındı. Sebep: ${sebep}` });
 
-    } catch (err) { 
+    } catch (err) {
         await client.query('ROLLBACK');
-        console.error("Silme Hatası Detay:", err); // Render loglarında detay görmek için
-        res.status(500).json({ mesaj: `Silme işlemi başarısız: ${err.message}` }); 
+        console.error(err);
+        res.status(500).json({ mesaj: 'İşlem sırasında hata oluştu' });
     } finally {
         client.release();
     }
