@@ -5,18 +5,19 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-// YARDIMCI: Boş alan kontrolü
+// YARDIMCI: Boş alanları NULL yap (Veritabanı hatasını önler)
 const formatNull = (val) => (val === '' || val === undefined || val === 'null' ? null : val);
 
-// YARDIMCI: Türkçe Karakter Temizleme (PDF Dosya Adı İçin)
-const trToEng = (str) => {
-    if (!str) return '';
-    return str.replace(/Ğ/g, 'G').replace(/Ü/g, 'U').replace(/Ş/g, 'S').replace(/İ/g, 'I').replace(/Ö/g, 'O').replace(/Ç/g, 'C')
-              .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c');
+// YARDIMCI: Türkçe Karakter Düzeltme (PDF standart fontlarında bozulmayı önlemek için)
+const trFix = (str) => {
+    if (!str) return '-';
+    return String(str)
+        .replace(/Ğ/g, 'G').replace(/Ü/g, 'U').replace(/Ş/g, 'S').replace(/İ/g, 'I').replace(/Ö/g, 'O').replace(/Ç/g, 'C')
+        .replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ş/g, 's').replace(/ı/g, 'i').replace(/ö/g, 'o').replace(/ç/g, 'c');
 };
 
 // ============================================================
-// 1. TÜM BİRİMLERİ GETİR
+// 1. LİSTELEME İŞLEMLERİ
 // ============================================================
 exports.birimleriGetir = async (req, res) => {
     try {
@@ -29,7 +30,7 @@ exports.birimleriGetir = async (req, res) => {
 };
 
 // ============================================================
-// 2. YENİ PERSONEL EKLE
+// 2. YENİ PERSONEL EKLE (TÜM ALANLAR)
 // ============================================================
 exports.personelEkle = async (req, res) => {
     const { 
@@ -46,13 +47,16 @@ exports.personelEkle = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        const hamSifre = sifre || ''; 
+        // Şifre Hashleme
+        const hamSifre = sifre || '123456'; 
         const hashedPassword = await bcrypt.hash(hamSifre, 10);
 
+        // Rol ID Bulma
         let rolId = 1;
-        const rolAdi = rol || 'personel'; 
-        const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [rolAdi]);
-        if (rolRes.rows.length > 0) rolId = rolRes.rows[0].rol_id;
+        if (rol) {
+            const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [rol]);
+            if (rolRes.rows.length > 0) rolId = rolRes.rows[0].rol_id;
+        }
 
         const query = `
             INSERT INTO personeller (
@@ -71,7 +75,6 @@ exports.personelEkle = async (req, res) => {
                 $27, TRUE
             ) RETURNING *
         `;
-        // NOT: 'aktif' alanını varsayılan olarak TRUE gönderiyoruz.
 
         const values = [
             tc_no, ad, soyad, hashedPassword, birim_id, rolId,
@@ -103,6 +106,7 @@ exports.personelEkle = async (req, res) => {
 // ============================================================
 exports.personelGuncelle = async (req, res) => {
     const { id } = req.params;
+    // Gelen tüm verileri parçalayalım
     const { 
         ad, soyad, telefon, adres, gorev, kadro_tipi, gorev_yeri,
         ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden,
@@ -115,13 +119,14 @@ exports.personelGuncelle = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        // Rol güncellemesi varsa ID'sini bul
+        // Rol değişecekse ID bul
         let rolId = null;
         if(rol) {
             const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [rol]);
             if(rolRes.rows.length > 0) rolId = rolRes.rows[0].rol_id;
         }
 
+        // Dinamik güncelleme sorgusu oluşturuyoruz
         let query = `
             UPDATE personeller SET 
             ad = $1, soyad = $2, telefon = $3, adres = $4,
@@ -141,7 +146,7 @@ exports.personelGuncelle = async (req, res) => {
             tc_no, formatNull(dogum_tarihi), cinsiyet, medeni_hal, kan_grubu
         ];
 
-        let paramIndex = 18;
+        let paramIndex = 18; // 17 tane parametre yukarıda eklendi
 
         if (birim_id) {
             query += `, birim_id = $${paramIndex}`;
@@ -161,6 +166,7 @@ exports.personelGuncelle = async (req, res) => {
             paramIndex++;
         }
 
+        // WHERE koşulu en son eklenir
         query += ` WHERE personel_id = $${paramIndex}`;
         values.push(id);
 
@@ -179,7 +185,7 @@ exports.personelGuncelle = async (req, res) => {
 };
 
 // ============================================================
-// 4. PERSONEL KARTI PDF OLUŞTURMA
+// 4. KURUMSAL PDF OLUŞTURMA (HEADER RESİMLİ)
 // ============================================================
 exports.personelKartiPdf = async (req, res) => {
     const { id } = req.params;
@@ -193,138 +199,234 @@ exports.personelKartiPdf = async (req, res) => {
         if (result.rows.length === 0) return res.status(404).send('Personel bulunamadı');
         const p = result.rows[0];
 
-        const doc = new PDFDocument({ margin: 50 });
+        // A4 Boyutu
+        const doc = new PDFDocument({ margin: 0, size: 'A4' });
         
-        // Türkçe karakterleri dosya isminden temizle
-        const filename = `${trToEng(p.ad)}_${trToEng(p.soyad)}_Kart.pdf`;
-
+        const filename = `${trFix(p.ad)}_${trFix(p.soyad)}_Kart.pdf`;
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         doc.pipe(res);
 
-        // --- PDF TASARIMI ---
-        // Font tanımlaması yapmadığımız için standart fontta TR karakterler bozuk çıkabilir.
-        // PDFKit varsayılan olarak Helvetica kullanır ve TR karakter desteklemez.
-        // Şimdilik standart karakterlerle yazdıracağız.
-
-        doc.fontSize(20).text('MERSIN BUYUKSEHIR BELEDIYESI', { align: 'center' });
-        doc.fontSize(14).text('PERSONEL BILGI KARTI', { align: 'center' });
-        doc.moveDown(2);
-
-        if (p.fotograf_yolu && fs.existsSync(p.fotograf_yolu)) {
-            try {
-                doc.image(p.fotograf_yolu, 450, 80, { width: 100, height: 120, fit: [100, 120] });
-            } catch(e) { console.log('Resim yüklenemedi:', e); }
+        // --- 1. KURUMSAL HEADER (pdf1.png) ---
+        // Path: backend klasörünün bir üstündeki templates klasörü
+        const headerPath = path.join(__dirname, '../../templates/pdf1.png');
+        
+        if (fs.existsSync(headerPath)) {
+            // Resmi sayfanın en üstüne, tam genişlikte yerleştir
+            doc.image(headerPath, 0, 0, { width: 595.28 }); // A4 Genişliği ~595px
+        } else {
+            console.log('Header resmi bulunamadı:', headerPath);
         }
 
-        const satirYaz = (baslik, deger) => {
-            doc.fontSize(10).font('Helvetica-Bold').text(baslik + ':', { continued: true });
-            doc.font('Helvetica').text(`  ${deger || '-'}`);
-            doc.moveDown(0.5);
+        // İçerik başlangıç Y koordinatı (Resmin altından başla)
+        let yPos = 160; 
+
+        // --- 2. BAŞLIK ---
+        doc.fillColor('#000000');
+        doc.font('Helvetica-Bold').fontSize(18).text('PERSONEL BILGI KARTI', 0, yPos, { align: 'center', width: 595.28 });
+        
+        // Alt çizgi
+        doc.moveTo(50, yPos + 25).lineTo(545, yPos + 25).strokeColor('#cccccc').lineWidth(1).stroke();
+
+        yPos += 50; // Aşağı in
+
+        // --- 3. FOTOĞRAF (SAĞ ÜST) ---
+        if (p.fotograf_yolu && fs.existsSync(p.fotograf_yolu)) {
+            try {
+                // Çerçeve
+                doc.rect(420, yPos, 100, 120).strokeColor('#333333').lineWidth(1).stroke();
+                // Resim
+                doc.image(p.fotograf_yolu, 421, yPos + 1, { width: 98, height: 118, fit: [98, 118] });
+            } catch (e) { console.log('Personel resmi yüklenemedi:', e); }
+        } else {
+            // Resim yoksa gri kutu
+            doc.rect(420, yPos, 100, 120).fillColor('#f0f0f0').fill().strokeColor('#333333').stroke();
+            doc.fillColor('#999999').fontSize(10).text('FOTOGRAF', 420, yPos + 55, { width: 100, align: 'center' });
+        }
+
+        // --- 4. BİLGİ TABLOSU ---
+        const leftX = 50;
+        const valueX = 180;
+        let currentY = yPos;
+
+        // Satır Yazdırma Fonksiyonu
+        const row = (label, value) => {
+            // Arka plan şeridi (Sırayla gri/beyaz)
+            doc.rect(leftX, currentY - 5, 350, 20).fillColor(currentY % 40 === 0 ? '#f9f9f9' : '#ffffff').fill();
+            
+            // Etiket
+            doc.fillColor('#333333').font('Helvetica-Bold').fontSize(10).text(label + ':', leftX + 5, currentY);
+            
+            // Değer
+            doc.fillColor('#000000').font('Helvetica').fontSize(10).text(trFix(value), valueX, currentY);
+            
+            currentY += 22;
         };
 
-        // KİMLİK
-        doc.fontSize(12).font('Helvetica-Bold').text('KIMLIK VE ILETISIM', { underline: true });
-        doc.moveDown(0.5);
-        satirYaz('TC Kimlik No', p.tc_no);
-        satirYaz('Adi Soyadi', `${p.ad} ${p.soyad}`); // TR karakter sorunu olmasın diye font yüklemesi gerekir ama şimdilik böyle
-        satirYaz('Telefon', p.telefon);
-        satirYaz('Adres', p.adres);
-        satirYaz('Dogum Tarihi', p.dogum_tarihi ? new Date(p.dogum_tarihi).toLocaleDateString('tr-TR') : '-');
-
-        doc.moveDown(1);
+        // BÖLÜM: KİMLİK
+        doc.fillColor('#d32f2f').font('Helvetica-Bold').fontSize(12).text('KIMLIK VE ILETISIM', leftX, currentY - 30);
         
-        // KURUMSAL
-        doc.fontSize(12).font('Helvetica-Bold').text('KURUMSAL BILGILER', { underline: true });
-        doc.moveDown(0.5);
-        satirYaz('Sicil No', p.personel_id);
-        satirYaz('Birim', p.birim_adi);
-        satirYaz('Gorevi', p.gorev);
-        satirYaz('Kadro Tipi', p.kadro_tipi);
-        satirYaz('Gorev Yeri', p.gorev_yeri);
-
-        doc.moveDown(1);
+        row('TC Kimlik No', p.tc_no);
+        row('Ad Soyad', `${p.ad} ${p.soyad}`);
+        row('Telefon', p.telefon);
+        row('Dogum Tarihi', p.dogum_tarihi ? new Date(p.dogum_tarihi).toLocaleDateString('tr-TR') : '-');
         
-        // BEDEN
-        doc.fontSize(12).font('Helvetica-Bold').text('BEDEN VE KIYAFET', { underline: true });
-        doc.moveDown(0.5);
-        satirYaz('Ayakkabi No', p.ayakkabi_no);
-        satirYaz('Mont Bedeni', p.mont_beden);
-        satirYaz('Gomlek', p.gomlek_beden);
-        satirYaz('Tisort', p.tisort_beden);
+        // Adres (Uzun olabileceği için özel işlem)
+        doc.fillColor('#333333').font('Helvetica-Bold').text('Adres:', leftX + 5, currentY);
+        doc.fillColor('#000000').font('Helvetica').text(trFix(p.adres), valueX, currentY, { width: 220 });
+        currentY += 40; 
+
+        // BÖLÜM: KURUMSAL
+        currentY += 10;
+        doc.fillColor('#d32f2f').font('Helvetica-Bold').fontSize(12).text('KURUMSAL BILGILER', leftX, currentY - 5);
+        currentY += 15;
+        row('Sicil No', p.personel_id);
+        row('Birim', p.birim_adi);
+        row('Gorev', p.gorev);
+        row('Kadro Tipi', p.kadro_tipi);
+        row('Gorev Yeri', p.gorev_yeri);
+        row('Ise Giris', p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-');
+
+        // BÖLÜM: BEDEN
+        currentY += 10;
+        doc.fillColor('#d32f2f').font('Helvetica-Bold').fontSize(12).text('BEDEN VE KIYAFET', leftX, currentY - 5);
+        currentY += 15;
+        row('Ayakkabi No', p.ayakkabi_no);
+        row('Mont Bedeni', p.mont_beden);
+        row('Gomlek', p.gomlek_beden);
+        row('Tisort', p.tisort_beden);
+
+        // Alt Bilgi
+        doc.fontSize(8).fillColor('#888888').text('Bu belge Mersin Buyuksehir Belediyesi Personel Yonetim Sistemi tarafindan uretilmistir.', 50, 780, { align: 'center', width: 500 });
 
         doc.end();
 
     } catch (err) {
         console.error('PDF Hatası:', err);
-        res.status(500).send('PDF Oluşturulamadı');
+        res.status(500).send('PDF Olusturulamadi');
     }
 };
 
 // ============================================================
-// 5. PERSONEL TRANSFER ET
+// 5. DURUM YÖNETİMİ (DONDUR - AKTİF ET - SİL)
 // ============================================================
-exports.birimGuncelle = async (req, res) => {
-    if (!req.user || !['admin', 'ik', 'yazici', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
-    const { personel_id, yeni_birim_id, yeni_rol } = req.body;
-    try {
-        await pool.query('UPDATE personeller SET birim_id = $1 WHERE personel_id = $2', [yeni_birim_id, personel_id]);
-        if (yeni_rol) {
-            const rolRes = await pool.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [yeni_rol]);
-            if (rolRes.rows.length > 0) {
-                await pool.query('UPDATE personeller SET rol_id = $1 WHERE personel_id = $2', [rolRes.rows[0].rol_id, personel_id]);
-            }
-        }
-        await logKaydet(req.user.id, 'TRANSFER', `Personel (${personel_id}) transfer edildi.`, req);
-        res.json({ mesaj: 'Transfer başarılı.' });
-    } catch (err) { console.error(err); res.status(500).json({ mesaj: 'Hata oluştu' }); }
-};
 
-// ============================================================
-// 6. PERSONEL DONDUR (PASİFE ALMA)
-// ============================================================
+// DONDURMA (PASİFE ALMA)
 exports.personelDondur = async (req, res) => {
-    if (!req.user || !['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz işlem.' });
     const { personel_id, sebep } = req.body;
     try {
-        await pool.query("UPDATE personeller SET aktif = FALSE, calisma_durumu = $1 WHERE personel_id = $2", [sebep, personel_id]);
-        await pool.query("UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE personel_id = $1 AND baslangic_tarihi > CURRENT_DATE", [personel_id]);
-        await logKaydet(req.user.id, 'PERSONEL_CIKARMA', `Personel (${personel_id}) pasife alındı. Sebep: ${sebep}`, req);
-        res.json({ mesaj: 'Personel pasife alındı.' });
-    } catch (err) { console.error(err); res.status(500).json({ mesaj: 'Hata oluştu' }); }
+        const client = await pool.connect();
+        await client.query('BEGIN');
+        
+        // Aktif=FALSE yap
+        await client.query("UPDATE personeller SET aktif = FALSE, calisma_durumu = $1 WHERE personel_id = $2", [sebep, personel_id]);
+        
+        // İleri tarihli izinleri iptal et
+        await client.query("UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE personel_id = $1 AND baslangic_tarihi > CURRENT_DATE", [personel_id]);
+        
+        await logKaydet(req.user.id, 'PASIFE_ALMA', `Personel (${personel_id}) pasife alındı. Sebep: ${sebep}`, req);
+        
+        await client.query('COMMIT');
+        client.release();
+        res.json({ mesaj: 'Personel başarıyla donduruldu (Pasife alındı).' });
+    } catch (err) { 
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu' }); 
+    }
 };
 
-// ============================================================
-// 7. PERSONEL SİL (Sadece Pasifse)
-// ============================================================
+// AKTİF ETME (GERİ ALMA)
+exports.personelAktifEt = async (req, res) => {
+    const { personel_id } = req.body;
+    
+    if (!req.user || !['admin', 'ik'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Yetkisiz işlem.' });
+    }
+
+    try {
+        await pool.query("UPDATE personeller SET aktif = TRUE, calisma_durumu = 'Çalışıyor' WHERE personel_id = $1", [personel_id]);
+        await logKaydet(req.user.id, 'AKTIF_ETME', `Personel (${personel_id}) tekrar aktif edildi.`, req);
+        res.json({ mesaj: 'Personel başarıyla aktif edildi.' });
+    } catch (err) { 
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu' }); 
+    }
+};
+
+// KALICI SİLME (Sadece Pasifse Silinir)
 exports.personelSil = async (req, res) => {
-    if (!req.user || !['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz işlem.' });
+    if (!req.user || !['admin', 'ik'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Yetkisiz işlem.' });
+    }
+    
     const { personel_id } = req.params;
     const client = await pool.connect();
 
     try {
+        // Önce kontrol et: Aktif mi?
         const pRes = await client.query("SELECT aktif FROM personeller WHERE personel_id = $1", [personel_id]);
         if (pRes.rows.length === 0) return res.status(404).json({ mesaj: 'Personel bulunamadı.' });
         
         if (pRes.rows[0].aktif) {
-            return res.status(400).json({ mesaj: `DİKKAT: Aktif personel silinemez! Önce 'Dondur' işlemi yapınız.` });
+            return res.status(400).json({ mesaj: 'DİKKAT: Aktif personel silinemez! Önce "Dondur" işlemi yapmalısınız.' });
         }
 
         await client.query('BEGIN');
+
+        // Bağlı tüm verileri sil (Foreign Key hatası almamak için)
+        // Sırası önemlidir.
         await client.query('DELETE FROM bildirimler WHERE personel_id = $1', [personel_id]);
         await client.query('DELETE FROM imzalar WHERE personel_id = $1', [personel_id]);
         await client.query('DELETE FROM profil_degisiklikleri WHERE personel_id = $1', [personel_id]);
         await client.query('DELETE FROM gorevler WHERE personel_id = $1', [personel_id]);
         await client.query('DELETE FROM yetkiler WHERE personel_id = $1', [personel_id]);
-        await client.query('DELETE FROM sistem_loglari WHERE personel_id = $1', [personel_id]);
+        await client.query('DELETE FROM sistem_loglari WHERE personel_id = $1', [personel_id]); // Logları da siliyoruz
         await client.query('DELETE FROM izin_talepleri WHERE personel_id = $1', [personel_id]);
+        
+        // En son personeli sil
         await client.query('DELETE FROM personeller WHERE personel_id = $1', [personel_id]);
 
         await client.query('COMMIT');
-        res.json({ mesaj: 'Pasif personel ve tüm verileri silindi.' });
+        res.json({ mesaj: 'Personel ve tüm geçmiş verileri başarıyla silindi.' });
+
     } catch (err) { 
         await client.query('ROLLBACK');
         console.error('Silme hatası:', err);
         res.status(500).json({ mesaj: 'Silme işlemi başarısız.', detay: err.message });
-    } finally { client.release(); }
+    } finally {
+        client.release();
+    }
+};
+
+// TRANSFER İŞLEMİ
+exports.birimGuncelle = async (req, res) => {
+    if (!req.user || !['admin', 'ik', 'yazici', 'filo'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Yetkisiz' });
+    }
+
+    const { personel_id, yeni_birim_id, yeni_rol } = req.body;
+    
+    try {
+        const client = await pool.connect();
+        await client.query('BEGIN');
+
+        await client.query('UPDATE personeller SET birim_id = $1 WHERE personel_id = $2', [yeni_birim_id, personel_id]);
+        
+        if (yeni_rol) {
+            const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [yeni_rol]);
+            if (rolRes.rows.length > 0) {
+                await client.query('UPDATE personeller SET rol_id = $1 WHERE personel_id = $2', [rolRes.rows[0].rol_id, personel_id]);
+            }
+        }
+
+        await logKaydet(req.user.id, 'TRANSFER', `Personel (${personel_id}) transfer edildi.`, req);
+        
+        await client.query('COMMIT');
+        client.release();
+        res.json({ mesaj: 'Transfer başarılı.' });
+
+    } catch (err) { 
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu' }); 
+    }
 };
