@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
     User, Search, Plus, Save, Truck, FileText, 
-    Briefcase, Ban, Ruler, Shirt // İkonları ekledik
+    Briefcase, Ban, Ruler, Shirt 
 } from 'lucide-react';
 
 export default function Settings() {
@@ -20,7 +20,7 @@ export default function Settings() {
     const [dondurmaModal, setDondurmaModal] = useState(null);
     const [transferModal, setTransferModal] = useState(null);
 
-    // FORM DURUMU: Adım sayısı 4'e çıktı
+    // FORM DURUMU
     const [formStep, setFormStep] = useState(1); 
     const [newPersonel, setNewPersonel] = useState({
         // 1. Kimlik
@@ -30,7 +30,7 @@ export default function Settings() {
         birim_id: '1', gorev: '', kadro_tipi: 'Sürekli İşçi', gorev_yeri: '', calisma_durumu: 'Çalışıyor', rol: 'personel',
         // 3. Lojistik
         ehliyet_no: '', src_belge_no: '', surucu_no: '', psikoteknik_tarihi: '',
-        // 4. Kıyafet (YENİ)
+        // 4. Kıyafet
         ayakkabi_no: '', tisort_beden: '', gomlek_beden: '', suveter_beden: '', mont_beden: ''
     });
 
@@ -47,17 +47,23 @@ export default function Settings() {
         setYukleniyor(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { 
+                headers: { Authorization: `Bearer ${token}` } 
+            });
             setUsersList(res.data);
         } catch (error) { console.error(error); }
         setYukleniyor(false);
     };
 
+    // --- DÜZELTİLEN FONKSİYON (401 HATASI ÇÖZÜMÜ) ---
     const fetchBirimler = async () => {
         try {
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/birimler');
+            const token = localStorage.getItem('token'); // Token'ı al
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/birimler', {
+                headers: { Authorization: `Bearer ${token}` } // Header'a ekle
+            });
             setBirimler(res.data);
-        } catch (error) { console.error(error); }
+        } catch (error) { console.error('Birimler çekilemedi:', error); }
     };
 
     const handleFormChange = (e) => {
@@ -73,11 +79,18 @@ export default function Settings() {
             });
             alert('Personel başarıyla oluşturuldu!');
             setShowAddModal(false);
-            fetchUsers();
-            setNewPersonel({ ...newPersonel, tc_no: '', ad: '', soyad: '' });
+            fetchUsers(); // Listeyi yenile
+            // Formu sıfırla
+            setNewPersonel({ 
+                ...newPersonel, tc_no: '', ad: '', soyad: '', telefon: '', ehliyet_no: '' 
+            });
             setFormStep(1);
         } catch (error) {
-            alert('Hata: ' + (error.response?.data?.mesaj || 'Kaydedilemedi'));
+            console.error(error);
+            // Hata mesajını backend'den alıp gösteriyoruz
+            const mesaj = error.response?.data?.mesaj || 'Kaydedilemedi. Lütfen alanları kontrol edin.';
+            const detay = error.response?.data?.detay || ''; // Varsa teknik detay
+            alert(`Hata: ${mesaj}\n${detay}`);
         }
     };
 
@@ -146,8 +159,8 @@ export default function Settings() {
 
             {/* YENİ PERSONEL MODALI */}
             {showAddModal && (
-                <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-                    <div className="modal-dialog modal-lg modal-dialog-centered">
+                <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
+                    <div className="modal-dialog modal-lg modal-dialog-centered my-4">
                         <div className="modal-content shadow-lg rounded-4 border-0">
                             <div className="modal-header bg-primary text-white">
                                 <h5 className="modal-title fw-bold d-flex align-items-center gap-2"><Plus size={24} /> Personel Kayıt Formu</h5>
@@ -155,7 +168,6 @@ export default function Settings() {
                             </div>
                             <div className="modal-body p-4 bg-light">
                                 
-                                {/* ADIM BUTONLARI */}
                                 <div className="d-flex justify-content-center mb-4">
                                     <div className="btn-group shadow-sm w-100 bg-white rounded-3 p-1">
                                         <button className={`btn btn-sm fw-bold rounded-2 py-2 ${formStep === 1 ? 'btn-primary' : 'btn-light text-muted'}`} onClick={() => setFormStep(1)}><User size={16} className="me-2"/> 1. Kimlik</button>
@@ -206,45 +218,21 @@ export default function Settings() {
                                                     <div className="col-md-6"><label className="small fw-bold text-muted">Sürücü Kart No</label><input type="text" name="surucu_no" className="form-control" value={newPersonel.surucu_no} onChange={handleFormChange}/></div>
                                                 </div>
                                             )}
-                                            {/* ADIM 4: KIYAFET (YENİ) */}
+                                            {/* ADIM 4: KIYAFET */}
                                             {formStep === 4 && (
                                                 <div className="row g-3">
                                                     <div className="col-12"><h6 className="text-primary border-bottom pb-2">Kıyafet ve Beden Bilgileri</h6></div>
                                                     <div className="alert alert-light border small d-flex align-items-center"><Ruler size={16} className="me-2 text-warning"/>Zorunlu değildir, boş bırakılabilir.</div>
                                                     
-                                                    <div className="col-md-6">
-                                                        <label className="form-label small fw-bold text-muted">Ayakkabı Numarası</label>
-                                                        <input type="text" name="ayakkabi_no" className="form-control" placeholder="Örn: 42" value={newPersonel.ayakkabi_no} onChange={handleFormChange}/>
-                                                    </div>
-                                                    <div className="col-md-6">
-                                                        <label className="form-label small fw-bold text-muted">Tişört Bedeni</label>
-                                                        <select name="tisort_beden" className="form-select" value={newPersonel.tisort_beden} onChange={handleFormChange}>
-                                                            <option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="col-md-6">
-                                                        <label className="form-label small fw-bold text-muted">Gömlek Bedeni</label>
-                                                        <select name="gomlek_beden" className="form-select" value={newPersonel.gomlek_beden} onChange={handleFormChange}>
-                                                            <option value="">Seçiniz</option><option>S (37-38)</option><option>M (39-40)</option><option>L (41-42)</option><option>XL (43-44)</option><option>XXL (45-46)</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="col-md-6">
-                                                        <label className="form-label small fw-bold text-muted">Süveter Bedeni</label>
-                                                        <select name="suveter_beden" className="form-select" value={newPersonel.suveter_beden} onChange={handleFormChange}>
-                                                            <option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="col-md-6">
-                                                        <label className="form-label small fw-bold text-muted">Mont Bedeni</label>
-                                                        <select name="mont_beden" className="form-select" value={newPersonel.mont_beden} onChange={handleFormChange}>
-                                                            <option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option>
-                                                        </select>
-                                                    </div>
+                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Ayakkabı Numarası</label><input type="text" name="ayakkabi_no" className="form-control" placeholder="Örn: 42" value={newPersonel.ayakkabi_no} onChange={handleFormChange}/></div>
+                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Tişört Bedeni</label><select name="tisort_beden" className="form-select" value={newPersonel.tisort_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option></select></div>
+                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Gömlek Bedeni</label><select name="gomlek_beden" className="form-select" value={newPersonel.gomlek_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S (37-38)</option><option>M (39-40)</option><option>L (41-42)</option><option>XL (43-44)</option><option>XXL (45-46)</option></select></div>
+                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Süveter Bedeni</label><select name="suveter_beden" className="form-select" value={newPersonel.suveter_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+                                                    <div className="col-md-6"><label className="form-label small fw-bold text-muted">Mont Bedeni</label><select name="mont_beden" className="form-select" value={newPersonel.mont_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option><option>3XL</option></select></div>
                                                 </div>
                                             )}
                                         </div>
                                     </div>
-                                    {/* FOOTER BUTONLAR */}
                                     <div className="d-flex justify-content-between mt-4">
                                         <button type="button" className="btn btn-secondary px-4" onClick={()=>{if(formStep>1)setFormStep(formStep-1); else setShowAddModal(false)}}>{formStep === 1 ? 'İptal' : 'Geri'}</button>
                                         {formStep < 4 ? (
@@ -260,7 +248,6 @@ export default function Settings() {
                 </div>
             )}
             
-            {/* DONDURMA MODALI */}
             {dondurmaModal && (
                 <div className="modal show d-block" style={{backgroundColor:'rgba(0,0,0,0.5)'}}>
                    <div className="modal-dialog modal-dialog-centered">
