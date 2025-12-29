@@ -178,7 +178,7 @@ exports.personelGuncelle = async (req, res) => {
         }
 
         let query = `
-            UPDATE personellers SET 
+            UPDATE personeller SET 
             ad=$1, soyad=$2, telefon=$3, adres=$4, gorev=$5, kadro_tipi=$6, gorev_yeri=$7,
             ayakkabi_no=$8, tisort_beden=$9, gomlek_beden=$10, suveter_beden=$11, mont_beden=$12,
             tc_no=COALESCE($13, tc_no), 
