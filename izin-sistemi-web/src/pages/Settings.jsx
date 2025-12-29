@@ -14,27 +14,46 @@ export default function Settings() {
     const [filterStatus, setFilterStatus] = useState('all');
     const [yukleniyor, setYukleniyor] = useState(false);
     
-    // Modallar
     const [showModal, setShowModal] = useState(false);
-    const [modalMode, setModalMode] = useState('add'); // 'add' veya 'edit'
-    const [modalTab, setModalTab] = useState(1); // 1: Bilgiler, 2: İzinler
-    
+    const [modalMode, setModalMode] = useState('add'); 
+    const [modalTab, setModalTab] = useState(1); 
     const [dondurmaModal, setDondurmaModal] = useState(null);
 
     const [yeniSifre, setYeniSifre] = useState('');
     const [fotograf, setFotograf] = useState(null);
 
-    // İzin Hesaplama State'i
     const [izinGecmisi, setIzinGecmisi] = useState([]);
     const [izinHakki, setIzinHakki] = useState(0);
     const [kullanilanIzin, setKullanilanIzin] = useState(0);
     const [kidemYili, setKidemYili] = useState(0);
 
-    // Form State (Tüm detaylar)
+    // --- GÖREV LİSTELERİ ---
+    const sabitListeler = {
+        gorevler: [
+            "Şoför", "Baş Şoför", "Şef", "Yıkama", "Sefer Çıkış Kontrol", "Araç Bakım Onarım", "Yardımcı Hizmetler", 
+            "Dış Görev", "İdari İzinli", "Santral Operatörü", "Çıkış Görevlisi", "Eğitim ve Disiplin İşleri", 
+            "Saha Görevlisi", "Büro Personeli", "Memur", "Düz İşçi (KHK)", "Yol Kontrol Ekibi", "Kaza Ekibi", 
+            "Geçici İşçi", "Usta", "Kadrolu İşçi", "Sürekli İşçi", "Personel İşleri", "Genel Evrak", "Muhasebe", 
+            "Bilgisayar Teknikeri", "Harita Teknikeri", "Ulaştırma Teknikeri", "Elektrik Teknikeri", "Bilgisayar Mühendisi", 
+            "Ulaştırma Mühendisi", "Gece Bekçisi", "Makine Mühendisi", "Makine Teknikeri", "Mersin 33 Kart", "Manevracı", 
+            "İnspektör", "Binek Araç Şoförü", "Servis Şoförü", "Hareket Görevlisi", "Şube Müdürü", "Yazıcı", 
+            "Hareket Planlama", "Lojistik", "Saha Tespit ve İnceleme", "AKILLI ULAŞIM SİSTEMİ (AUS)", "Puantör", 
+            "Yazı İşleri", "Araç Takip Sistemleri", "Hareket Memuru", "Gece Servis Şoförü", "Oryantasyon", 
+            "Günlük Görevlendirmeci", "Ücret Toplama Sistemi (EÜTS)"
+        ],
+        kadroTipleri: [
+            "Sürekli İşçi", "Kadrolu İşçi", "Memur", "Sözleşmeli Personel", "Şirket Personeli", "Geçici İşçi", "Düz İşçi (KHK)"
+        ]
+    };
+
     const initialFormState = {
         tc_no: '', ad: '', soyad: '', sifre: '123456', telefon: '', telefon2: '', adres: '',
         dogum_tarihi: '', cinsiyet: 'Erkek', medeni_hal: 'Bekar', kan_grubu: '', egitim_durumu: 'Lise',
-        birim_id: '1', gorev: '', kadro_tipi: 'Sürekli İşçi', gorev_yeri: '', calisma_durumu: 'Çalışıyor', rol: 'personel',
+        birim_id: '1', 
+        gorev: '',          
+        kadro_tipi: '',     
+        gorev_yeri: '', calisma_durumu: 'Çalışıyor', 
+        rol: 'personel',    // OTOMATİK BELİRLENECEK
         ehliyet_no: '', ehliyet_sinifi: '', ehliyet_bitis_tarihi: '', src_belge_no: '', psikoteknik_tarihi: '', surucu_no: '',
         ayakkabi_no: '', tisort_beden: '', gomlek_beden: '', suveter_beden: '', mont_beden: '',
         sicil_no: '', asis_kart_no: '', hareket_merkezi: '', ise_giris_tarihi: '', ayrilma_tarihi: ''
@@ -47,7 +66,30 @@ export default function Settings() {
         if (activeTab === 'users' && isYetkili) { fetchUsers(); fetchBirimler(); }
     }, [activeTab]);
 
-    // İşe Giriş Tarihi Değişince Hesapla
+    // --- OTOMATİK ROL ATAMA MANTIĞI ---
+    const handleGorevChange = (e) => {
+        const secilenGorev = e.target.value;
+        let otomatikRol = 'personel'; // Varsayılan: Şoför, Yıkamacı, Memur vb.
+
+        // AMİR GRUBU (Birim Amiri)
+        if (['Baş Şoför', 'Günlük Görevlendirmeci', 'Puantör'].includes(secilenGorev)) {
+            otomatikRol = 'amir';
+        } 
+        // YAZICI GRUBU (Birim Yazıcısı)
+        else if (['Yazıcı'].includes(secilenGorev)) {
+            otomatikRol = 'yazici';
+        } 
+        // İK GRUBU (En Üst Onaycı)
+        else if (['Personel İşleri'].includes(secilenGorev)) {
+            otomatikRol = 'ik'; 
+        }
+        // ŞEF ve MÜDÜR (Özel Statü - Direkt İK onayı ama yetkili olabilirler)
+        // Eğer Şeflerin de sisteme girip onay yapmasını istersen 'sef' rolü eklenebilir. 
+        // Şimdilik standart personel gibi ama izin akışı farklı olacak.
+
+        setFormData({ ...formData, gorev: secilenGorev, rol: otomatikRol });
+    };
+
     useEffect(() => {
         if (formData.ise_giris_tarihi) {
             const giris = new Date(formData.ise_giris_tarihi);
@@ -56,7 +98,6 @@ export default function Settings() {
             const yil = Math.floor(fark / (1000 * 60 * 60 * 24 * 365.25));
             setKidemYili(yil < 0 ? 0 : yil);
 
-            // Hak Hesaplama
             let toplamHak = 0;
             if (yil >= 1) {
                 for (let i = 1; i <= yil; i++) {
@@ -67,11 +108,10 @@ export default function Settings() {
             }
             setIzinHakki(toplamHak);
 
-            // Kullanılan Hesaplama
             if (izinGecmisi.length > 0) {
                 const toplamKullanilan = izinGecmisi
-                    .filter(i => i.durum === 'IK_ONAYLADI' && i.izin_turu === 'YILLIK İZİN')
-                    .reduce((acc, curr) => acc + (curr.kac_gun || 0), 0);
+                    .filter(i => (i.durum === 'IK_ONAYLADI' || i.durum === 'TAMAMLANDI') && i.izin_turu === 'YILLIK İZİN')
+                    .reduce((acc, curr) => acc + (curr.gun_sayisi || 0), 0);
                 setKullanilanIzin(toplamKullanilan);
             } else {
                 setKullanilanIzin(0);
@@ -79,7 +119,6 @@ export default function Settings() {
         }
     }, [formData.ise_giris_tarihi, izinGecmisi]);
 
-    // Modal açıldığında izin geçmişini çek
     useEffect(() => {
         if (showModal && modalMode === 'edit' && modalTab === 2 && formData.personel_id) {
             fetchIzinGecmisi(formData.personel_id);
@@ -130,7 +169,8 @@ export default function Settings() {
                 ehliyet_bitis_tarihi: fixDate(data.ehliyet_bitis_tarihi),
                 psikoteknik_tarihi: fixDate(data.psikoteknik_tarihi),
                 ise_giris_tarihi: fixDate(data.ise_giris_tarihi),
-                ayrilma_tarihi: fixDate(data.ayrilma_tarihi)
+                ayrilma_tarihi: fixDate(data.ayrilma_tarihi),
+                rol: data.rol_adi || 'personel'
             });
         } else {
             setFormData(initialFormState);
@@ -180,7 +220,6 @@ export default function Settings() {
             }
             alert('İşlem başarılı.');
             
-            // Listeyi anlık güncelle
             setUsersList(prev => prev.map(u => {
                 if (u.personel_id !== id) return u;
                 if (type === 'aktif') return { ...u, aktif: true, calisma_durumu: 'Çalışıyor' };
@@ -241,7 +280,6 @@ export default function Settings() {
             <div className="card shadow-sm border-0 rounded-4" style={{minHeight: '600px'}}>
                 <div className="card-body p-4">
                     
-                    {/* --- TAB 1: PROFİLİM --- */}
                     {activeTab === 'profile' && (
                         <div className="row justify-content-center">
                             <div className="col-md-6 text-center">
@@ -267,7 +305,6 @@ export default function Settings() {
                         </div>
                     )}
 
-                    {/* --- TAB 2: PERSONEL YÖNETİMİ --- */}
                     {activeTab === 'users' && isYetkili && (
                         <>
                             <div className="d-flex justify-content-between align-items-end mb-4">
@@ -292,7 +329,7 @@ export default function Settings() {
                             <div className="table-responsive">
                                 <table className="table table-hover align-middle">
                                     <thead className="bg-light text-muted small text-uppercase">
-                                        <tr><th>TC / Ad Soyad</th><th>Birim</th><th>Giriş Tarihi</th><th className="text-center">Durum</th><th className="text-end">İşlemler</th></tr>
+                                        <tr><th>TC / Ad Soyad</th><th>Birim / Görev</th><th>Giriş Tarihi</th><th className="text-center">Durum</th><th className="text-end">İşlemler</th></tr>
                                     </thead>
                                     <tbody>
                                         {yukleniyor ? <tr><td colSpan="5" className="text-center py-4">Yükleniyor...</td></tr> : 
@@ -301,7 +338,10 @@ export default function Settings() {
                                             return (
                                                 <tr key={u.personel_id} className={!isActive ? 'table-light text-muted' : ''}>
                                                     <td><div className="fw-bold">{u.ad} {u.soyad}</div><small className="text-muted font-monospace">{u.tc_no}</small></td>
-                                                    <td><span className="badge bg-light text-dark border fw-normal">{u.birim_adi}</span></td>
+                                                    <td>
+                                                        <span className="badge bg-light text-dark border fw-normal me-1">{u.birim_adi}</span>
+                                                        <span className="badge bg-primary bg-opacity-10 text-primary border fw-normal">{u.rol_adi}</span>
+                                                    </td>
                                                     <td className="small">{new Date(u.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                                     <td className="text-center">{!isActive ? <span className="badge bg-secondary">Pasif ({u.calisma_durumu})</span> : <span className="badge bg-success">Aktif</span>}</td>
                                                     <td className="text-end">
@@ -328,7 +368,6 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* --- DETAYLI PERSONEL MODALI --- */}
             {showModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-xl modal-dialog-centered my-4">
@@ -351,7 +390,6 @@ export default function Settings() {
 
                                 <div className="p-4">
                                     <form onSubmit={handleSubmit}>
-                                        {/* --- SEKME 1: DETAYLI BİLGİLER --- */}
                                         {modalTab === 1 && (
                                             <div className="row g-3">
                                                 <div className="col-md-3 text-center border-end">
@@ -394,8 +432,24 @@ export default function Settings() {
                                                         <div className="col-md-3"><label className="small fw-bold">Çalışma Durumu</label><select className="form-select form-select-sm" value={formData.calisma_durumu} onChange={e=>setFormData({...formData, calisma_durumu:e.target.value})}><option>Çalışıyor</option><option>Emekli</option><option>İş Akdi Fesih</option></select></div>
 
                                                         <div className="col-md-4"><label className="small fw-bold">Birim</label><select className="form-select form-select-sm" value={formData.birim_id} onChange={e=>setFormData({...formData, birim_id:e.target.value})}>{birimler.map(b=><option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>)}</select></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Görevi</label><input className="form-control form-control-sm" value={formData.gorev} onChange={e=>setFormData({...formData, gorev:e.target.value})} /></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Kadro Tipi</label><select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})}><option>Sürekli İşçi</option><option>Memur</option><option>Sözleşmeli</option><option>Şirket Personeli</option></select></div>
+                                                        
+                                                        {/* --- GÖREV LİSTESİ --- */}
+                                                        <div className="col-md-4">
+                                                            <label className="small fw-bold text-primary">Görevi (Rol Otomatik)</label>
+                                                            <select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange}>
+                                                                <option value="">Seçiniz...</option>
+                                                                {sabitListeler.gorevler.sort().map(g => <option key={g} value={g}>{g}</option>)}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* --- KADRO LİSTESİ --- */}
+                                                        <div className="col-md-4">
+                                                            <label className="small fw-bold">Kadro Tipi</label>
+                                                            <select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})}>
+                                                                <option value="">Seçiniz...</option>
+                                                                {sabitListeler.kadroTipleri.map(k => <option key={k} value={k}>{k}</option>)}
+                                                            </select>
+                                                        </div>
 
                                                         <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Lojistik ve Beden</h6></div>
                                                         <div className="col-md-3"><label className="small fw-bold">Ehliyet No</label><input className="form-control form-control-sm" value={formData.ehliyet_no} onChange={e=>setFormData({...formData, ehliyet_no:e.target.value})} /></div>
@@ -414,7 +468,6 @@ export default function Settings() {
                                             </div>
                                         )}
 
-                                        {/* --- SEKME 2: İZİN & TARİH YÖNETİMİ --- */}
                                         {modalTab === 2 && (
                                             <div className="p-3">
                                                 <div className="row mb-4 bg-light p-3 rounded border">
@@ -426,25 +479,12 @@ export default function Settings() {
                                                         <div className="form-text text-muted small">Bu tarih değiştirildiğinde kıdem ve izin hakları yeniden hesaplanır.</div>
                                                     </div>
                                                     
-                                                    {/* YENİ EKLENEN: AYRILMA TARİHİ */}
                                                     <div className="col-md-6">
                                                         <label className="form-label fw-bold text-danger d-flex align-items-center gap-2">
                                                             <AlertCircle size={18}/> İşten Ayrılış Tarihi (Varsa)
                                                         </label>
                                                         <input type="date" className="form-control border-danger bg-danger-subtle" value={formData.ayrilma_tarihi} onChange={e=>setFormData({...formData, ayrilma_tarihi:e.target.value})} />
                                                         <div className="form-text text-danger small fw-bold">DİKKAT: Buraya tarih girerseniz personel otomatik olarak "Pasif" durumuna geçer ve sisteme giremez.</div>
-                                                    </div>
-                                                </div>
-
-                                                <div className="card bg-white border shadow-sm mb-4">
-                                                    <div className="card-body py-2">
-                                                        <h6 className="fw-bold text-primary mb-2">Otomatik Hesaplanan İzin Hakları</h6>
-                                                        <div className="d-flex justify-content-between small text-dark">
-                                                            <div className="border-end pe-3">Kıdem: <br/><strong className="fs-5">{kidemYili} Yıl</strong></div>
-                                                            <div className="border-end pe-3">Toplam Hak: <br/><strong className="fs-5 text-primary">{izinHakki} Gün</strong></div>
-                                                            <div className="border-end pe-3">Kullanılan: <br/><strong className="fs-5 text-danger">{kullanilanIzin} Gün</strong></div>
-                                                            <div>Kalan İzin: <br/><strong className="fs-5 text-success">{izinHakki - kullanilanIzin} Gün</strong></div>
-                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -461,9 +501,9 @@ export default function Settings() {
                                                                         <td>{izin.izin_turu}</td>
                                                                         <td>{new Date(izin.baslangic_tarihi).toLocaleDateString('tr-TR')}</td>
                                                                         <td>{new Date(izin.bitis_tarihi).toLocaleDateString('tr-TR')}</td>
-                                                                        <td className="fw-bold">{izin.kac_gun}</td>
+                                                                        <td className="fw-bold">{izin.gun_sayisi}</td>
                                                                         <td>
-                                                                            {izin.durum === 'IK_ONAYLADI' ? <span className="badge bg-success">Onaylı</span> : 
+                                                                            {izin.durum === 'IK_ONAYLADI' || izin.durum === 'TAMAMLANDI' ? <span className="badge bg-success">Onaylı</span> : 
                                                                              izin.durum === 'REDDEDILDI' ? <span className="badge bg-danger">Red</span> : 
                                                                              <span className="badge bg-warning text-dark">Bekliyor</span>}
                                                                         </td>
@@ -474,6 +514,9 @@ export default function Settings() {
                                                             )}
                                                         </tbody>
                                                     </table>
+                                                </div>
+                                                <div className="alert alert-warning mt-3 py-2 small">
+                                                    * Bu tablo veritabanından anlık çekilmektedir. Yeni onaylanan izinler buraya otomatik düşer.
                                                 </div>
                                             </div>
                                         )}
@@ -490,7 +533,6 @@ export default function Settings() {
                 </div>
             )}
 
-            {/* DONDURMA MODALI */}
             {dondurmaModal && (
                 <div className="modal show d-block" style={{backgroundColor:'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-dialog-centered">

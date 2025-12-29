@@ -157,29 +157,47 @@ exports.personelEkle = async (req, res) => {
 exports.personelGuncelle = async (req, res) => {
     const { id } = req.params;
     const body = req.body;
-    
     const fotograf_yolu = req.file ? req.file.path : undefined;
     const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
+        // Rol isminden ID bulma (Otomatik rol ataması Frontend'den 'rol' stringi olarak gelir)
         let rolId = null;
         if(body.rol) {
             const rolRes = await client.query("SELECT rol_id FROM roller WHERE LOWER(rol_adi) = LOWER($1)", [body.rol]);
             if(rolRes.rows.length > 0) rolId = rolRes.rows[0].rol_id;
         }
 
+        // Aktiflik Durumu: Ayrılma tarihi varsa PASİF yap
+        let aktiflikDurumu = body.aktif; 
+        if (body.ayrilma_tarihi && body.ayrilma_tarihi.length > 5) {
+            aktiflikDurumu = false;
+        }
+
         let query = `
-            UPDATE personeller SET 
+            UPDATE personellers SET 
             ad=$1, soyad=$2, telefon=$3, adres=$4, gorev=$5, kadro_tipi=$6, gorev_yeri=$7,
             ayakkabi_no=$8, tisort_beden=$9, gomlek_beden=$10, suveter_beden=$11, mont_beden=$12,
-            tc_no=COALESCE($13, tc_no), dogum_tarihi=COALESCE($14, dogum_tarihi), cinsiyet=COALESCE($15, cinsiyet), 
-            medeni_hal=COALESCE($16, medeni_hal), kan_grubu=COALESCE($17, kan_grubu),
-            telefon2=$18, ehliyet_no=$19, ehliyet_sinifi=$20, ehliyet_bitis_tarihi=COALESCE($21, ehliyet_bitis_tarihi),
-            src_belge_no=$22, psikoteknik_tarihi=COALESCE($23, psikoteknik_tarihi),
-            sicil_no=$24, asis_kart_no=$25, hareket_merkezi=$26, ise_giris_tarihi=COALESCE($27, ise_giris_tarihi),
-            calisma_durumu=$28
+            tc_no=COALESCE($13, tc_no), 
+            dogum_tarihi=COALESCE($14, dogum_tarihi), 
+            cinsiyet=COALESCE($15, cinsiyet), 
+            medeni_hal=COALESCE($16, medeni_hal), 
+            kan_grubu=COALESCE($17, kan_grubu),
+            telefon2=$18, 
+            ehliyet_no=$19, 
+            ehliyet_sinifi=$20, 
+            ehliyet_bitis_tarihi=COALESCE($21, ehliyet_bitis_tarihi),
+            src_belge_no=$22, 
+            psikoteknik_tarihi=COALESCE($23, psikoteknik_tarihi),
+            sicil_no=$24, 
+            asis_kart_no=$25, 
+            hareket_merkezi=$26, 
+            ise_giris_tarihi=COALESCE($27, ise_giris_tarihi),
+            calisma_durumu=$28,
+            ayrilma_tarihi=$29,
+            aktif=COALESCE($30, aktif)
         `;
         
         const values = [
@@ -189,10 +207,12 @@ exports.personelGuncelle = async (req, res) => {
             body.telefon2, body.ehliyet_no, body.ehliyet_sinifi, formatNull(body.ehliyet_bitis_tarihi),
             body.src_belge_no, formatNull(body.psikoteknik_tarihi),
             body.sicil_no, body.asis_kart_no, body.hareket_merkezi, formatNull(body.ise_giris_tarihi),
-            body.calisma_durumu
+            body.calisma_durumu,
+            formatNull(body.ayrilma_tarihi),
+            aktiflikDurumu
         ];
 
-        let pIdx = 29;
+        let pIdx = 31; 
 
         if (body.birim_id) { query += `, birim_id=$${pIdx++}`; values.push(body.birim_id); }
         if (rolId) { query += `, rol_id=$${pIdx++}`; values.push(rolId); }
@@ -202,10 +222,13 @@ exports.personelGuncelle = async (req, res) => {
         values.push(id);
 
         await client.query(query, values);
-        await logKaydet(req.user.id, 'GUNCELLEME', `Personel (${id}) güncellendi.`, req);
+        
+        const yapanId = req.user ? req.user.id : 0; // Hata önleyici
+        await logKaydet(yapanId, 'GUNCELLEME', `Personel (${id}) güncellendi.`, req);
 
         await client.query('COMMIT');
-        res.json({ mesaj: 'Personel bilgileri güncellendi.' });
+        res.json({ mesaj: 'Personel başarıyla güncellendi.' });
+
     } catch (err) {
         await client.query('ROLLBACK');
         console.error(err);

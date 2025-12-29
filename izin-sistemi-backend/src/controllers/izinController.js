@@ -63,7 +63,7 @@ const hesaplaBakiye = async (personel_id) => {
 // 🚀 TEMEL İŞLEVLER
 // ============================================================
 
-// 1. YENİ İZİN TALEBİ OLUŞTUR
+// 1. YENİ İZİN TALEBİ OLUŞTUR (Hiyerarşik Onay Mantığıyla)
 exports.talepOlustur = async (req, res) => {
     let { 
         baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, 
@@ -72,8 +72,13 @@ exports.talepOlustur = async (req, res) => {
     
     const belge_yolu = req.file ? req.file.path : null;
     const personel_id = req.user.id; 
-    const userRole = req.user.rol;
-    const userBirimId = req.user.birim;
+    
+    // Kullanıcının güncel rol ve görev bilgilerini çekelim (Token eski kalmış olabilir)
+    const pRes = await pool.query("SELECT rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
+    const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [pRes.rows[0].rol_id]);
+    
+    const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase(); // 'personel', 'amir', 'yazici', 'ik' vb.
+    const userGorev = pRes.rows[0].gorev || '';
 
     try {
         // --- BAKİYE KONTROLÜ ---
@@ -81,7 +86,7 @@ exports.talepOlustur = async (req, res) => {
             const kalanHak = await hesaplaBakiye(personel_id);
             if (parseInt(kac_gun) > kalanHak) {
                 return res.status(400).json({ 
-                    mesaj: `Yetersiz Bakiye! Toplam (Devreden Dahil) kalan hakkınız: ${kalanHak} gün. Talep edilen: ${kac_gun} gün.` 
+                    mesaj: `Yetersiz Bakiye! Toplam kalan hakkınız: ${kalanHak} gün. Talep edilen: ${kac_gun} gün.` 
                 });
             }
         }
@@ -90,11 +95,44 @@ exports.talepOlustur = async (req, res) => {
         bitis_tarihi = tarihFormatla(bitis_tarihi);
         ise_baslama = tarihFormatla(ise_baslama);
 
-        // Onay mekanizması başlangıç durumu
-        let baslangicDurumu = 'ONAY_BEKLIYOR';
-        if (userRole === 'filo') baslangicDurumu = 'YAZICI_ONAYLADI';
-        const birimRes = await pool.query('SELECT birim_adi FROM birimler WHERE birim_id = $1', [userBirimId]);
-        if (birimRes.rows.length > 0 && birimRes.rows[0].birim_adi === 'İDARİ PERSONEL') baslangicDurumu = 'YAZICI_ONAYLADI';
+        // --- HİYERARŞİK ONAY DURUMU BELİRLEME ---
+        
+        // Varsayılan: En alt kademe (Amir onayı bekler)
+        let baslangicDurumu = 'ONAY_BEKLIYOR'; 
+
+        // GRUP 1: AMİRLER (Baş Şoför vb.) -> Kendi onaylarını geçmiş sayılırlar, Yazıcıya düşer.
+        if (userRole === 'amir') {
+            baslangicDurumu = 'AMIR_ONAYLADI';
+        }
+        
+        // GRUP 2: YAZICILAR -> Amir ve Yazıcı onayını geçmiş sayılırlar, İK'ya düşer.
+        else if (userRole === 'yazici') {
+            baslangicDurumu = 'YAZICI_ONAYLADI';
+        }
+
+        // GRUP 3: OFİS PERSONELİ, MÜHENDİSLER, TEKNİKERLER -> Direkt İK'ya düşer.
+        // Amir onayı gerektirmeyen görevler listesi:
+        const ofisGorevleri = [
+            'Memur', 'Büro Personeli', 'Genel Evrak', 'Muhasebe', 'Bilgisayar Mühendisi', 
+            'Makine Mühendisi', 'Ulaştırma Mühendisi', 'Bilgisayar Teknikeri', 'Harita Teknikeri', 
+            'Elektrik Teknikeri', 'Makine Teknikeri', 'Ulaştırma Teknikeri', 'Mersin 33 Kart', 
+            'Lojistik', 'Saha Tespit ve İnceleme', 'Araç Takip Sistemleri', 'Yazı İşleri'
+        ];
+        
+        if (ofisGorevleri.some(g => userGorev.includes(g))) {
+            baslangicDurumu = 'YAZICI_ONAYLADI'; // Direkt İK onayı bekleyecek
+        }
+
+        // GRUP 4: ŞEF ve ŞUBE MÜDÜRÜ -> Direkt İK'ya düşer.
+        if (userGorev.includes('Şef') || userGorev.includes('Şube Müdürü')) {
+            baslangicDurumu = 'YAZICI_ONAYLADI'; // Direkt İK onayı bekleyecek
+        }
+
+        // İK Personeli ise -> Kendi talebi direkt onaylanmış gibi işlem görebilir veya Amirine düşebilir. 
+        // Senin senaryonda İK en tepe olduğu için, prosedür gereği 'YAZICI_ONAYLADI' başlatıp başka bir İK'nın onaylamasını sağlayabiliriz.
+        if (userRole === 'ik') {
+            baslangicDurumu = 'YAZICI_ONAYLADI';
+        }
 
         const yeniTalep = await pool.query(
             `INSERT INTO izin_talepleri 
