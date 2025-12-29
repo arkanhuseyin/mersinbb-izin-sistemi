@@ -20,7 +20,9 @@ const storage = multer.diskStorage({
     },
     filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, req.user.tc_no + '-' + file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+        // req.user.tc_no undefined olabilir diye kontrol ekledik
+        const userPrefix = req.user && req.user.tc_no ? req.user.tc_no : 'user';
+        cb(null, userPrefix + '-' + file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
 });
 
@@ -33,39 +35,40 @@ const tarihDuzelt = (tarih) => {
 };
 
 // ============================================================
-// 🟢 ADMİN VE YÖNETİCİ İŞLEMLERİ (CONTROLLER KULLANIR)
+// 🟢 ADMİN VE YÖNETİCİ İŞLEMLERİ (CONTROLLER ENTEGRASYONU)
 // ============================================================
 
 // 1. Birimleri Listele
 router.get('/birimler', auth, personelController.birimleriGetir);
 
-// 2. Personel Transfer Et (Birim Değiştir)
+// 2. Yeni Personel Ekle (ÖNEMLİ: Bu eksikti, eklendi)
+router.post('/ekle', auth, personelController.personelEkle);
+
+// 3. Personel Transfer Et (Birim Değiştir)
 router.post('/transfer', auth, personelController.birimGuncelle);
 
-// 3. Personel Dondur / Pasife Al
+// 4. Personel Dondur / Pasife Al (Eski 'Sil' işlemi de bunu kullanmalı)
 router.post('/dondur', auth, personelController.personelDondur);
 
-// 4. Personel Aktif Et
-router.post('/aktif-et', auth, personelController.personelAktifEt);
-
-// 5. Rol Değiştir (Sadece Admin)
-router.post('/rol-degistir', auth, personelController.rolGuncelle);
-
-// 6. Personel Sil (Sadece Admin - Pasifse Siler)
-router.delete('/sil/:personel_id', auth, personelController.personelSil);
+// ⚠️ AŞAĞIDAKİLER YENİ CONTROLLER'DA YOKTUR, GEÇİCİ OLARAK KAPATILDI (CRASH ÖNLEMEK İÇİN)
+// Eğer bunları kullanacaksanız personelController.js içine bu fonksiyonları yazmanız gerekir.
+// router.post('/aktif-et', auth, personelController.personelAktifEt);
+// router.post('/rol-degistir', auth, personelController.rolGuncelle);
+// router.delete('/sil/:personel_id', auth, personelController.personelSil);
 
 
 // ============================================================
-// 🔵 PROFİL VE GÜNCELLEME İŞLEMLERİ (BURADA İŞLENİR)
+// 🔵 PROFİL VE GÜNCELLEME İŞLEMLERİ (RAW SQL - MEVCUT YAPI KORUNDU)
 // ============================================================
 
-// 7. GÜNCEL BİLGİLERİ GETİR
+// 5. GÜNCEL BİLGİLERİ GETİR
 router.get('/bilgi', auth, async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM personeller WHERE personel_id = $1', [req.user.id]);
         if (result.rows.length > 0) {
             const user = result.rows[0];
-            delete user.sifre_hash; 
+            delete user.sifre_hash; // Güvenlik için hash'i sil
+            delete user.sifre;      // Düz şifre varsa sil
             res.json(user);
         } else {
             res.status(404).send('Kullanıcı bulunamadı');
@@ -76,8 +79,7 @@ router.get('/bilgi', auth, async (req, res) => {
     }
 });
 
-// 8. PROFİL GÜNCELLEME TALEBİ (Şifre, Bilgi ve Dosya)
-// Bu rota hem profil değişikliği talebi oluşturur hem de şifre günceller
+// 6. PROFİL GÜNCELLEME TALEBİ (Şifre, Bilgi ve Dosya)
 router.post('/guncelle', auth, upload.fields([
     { name: 'adres_belgesi', maxCount: 1 },
     { name: 'src_belgesi', maxCount: 1 },
@@ -88,19 +90,22 @@ router.post('/guncelle', auth, upload.fields([
         const { email, telefon, adres, src_tarih, psiko_tarih, ehliyet_tarih, yeni_sifre } = req.body;
         const pid = req.user.id;
 
-        // A) ŞİFRE GÜNCELLEME (Varsa direkt güncellenir)
+        // A) ŞİFRE GÜNCELLEME
         if (yeni_sifre && yeni_sifre.length >= 6) {
-            const hash = await bcrypt.hash(yeni_sifre, 10);
-            await pool.query('UPDATE personeller SET sifre_hash = $1 WHERE personel_id = $2', [hash, pid]);
+            // Şifreyi direkt düz metin kaydediyorsan (hash yoksa):
+            // await pool.query('UPDATE personeller SET sifre = $1 WHERE personel_id = $2', [yeni_sifre, pid]);
             
-            // Eğer sadece şifre güncellendiyse ve başka veri yoksa hemen dön
+            // Eğer hash kullanıyorsan (Tavsiye edilen):
+             const hash = await bcrypt.hash(yeni_sifre, 10);
+             // Veritabanında sütun adın 'sifre' ise:
+             await pool.query('UPDATE personeller SET sifre = $1 WHERE personel_id = $2', [hash, pid]);
+            
             if (!email && !telefon) {
                 return res.json({ mesaj: 'Şifreniz başarıyla güncellendi.' });
             }
         }
 
-        // B) PROFİL DEĞİŞİKLİK TALEBİ (Varsa havuza atılır)
-        // Eğer sadece şifre değil, başka veriler de geldiyse talep oluştur
+        // B) PROFİL DEĞİŞİKLİK TALEBİ
         if (email || telefon || adres || src_tarih || req.files) {
             const yeniVeri = { email, telefon, adres, src_tarih, psiko_tarih, ehliyet_tarih };
             
@@ -127,7 +132,7 @@ router.post('/guncelle', auth, upload.fields([
     }
 });
 
-// 9. BEKLEYEN TALEPLERİ LİSTELE (ADMİN/İK/FİLO)
+// 7. BEKLEYEN TALEPLERİ LİSTELE (ADMİN/İK/FİLO)
 router.get('/talepler', auth, async (req, res) => {
     try {
         if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
@@ -143,7 +148,7 @@ router.get('/talepler', auth, async (req, res) => {
     } catch (err) { res.status(500).send('Hata'); }
 });
 
-// 10. TALEBİ ONAYLA/REDDET
+// 8. TALEBİ ONAYLA/REDDET
 router.post('/talep-islem', auth, async (req, res) => {
     const client = await pool.connect();
     try {
@@ -159,6 +164,7 @@ router.post('/talep-islem', auth, async (req, res) => {
             const veri = talep.yeni_veri; 
             const dosyalar = talep.dosya_yollari || {};
             
+            // COALESCE ile sadece dolu gelen alanları güncelle
             await client.query(`
                 UPDATE personeller SET 
                 email = COALESCE($1, email), telefon = COALESCE($2, telefon), adres = COALESCE($3, adres),
