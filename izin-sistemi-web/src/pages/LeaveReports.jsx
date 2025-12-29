@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Download, AlertTriangle, Search, FileBarChart, CheckCircle } from 'lucide-react';
+import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, Info } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
 
 export default function LeaveReports() {
@@ -23,18 +23,21 @@ export default function LeaveReports() {
         });
     }, []);
 
-    // EXCEL İNDİRME FONKSİYONU
+    // --- GÜNCELLENMİŞ EXCEL İNDİRME FONKSİYONU ---
     const exportExcel = () => {
         const wb = XLSX.utils.book_new();
+        // Yeni backend verilerine göre sütunları ayırdık
         const ws = XLSX.utils.json_to_sheet(rapor.map(p => ({
             "Ad Soyad": `${p.ad} ${p.soyad}`,
             "TC No": p.tc_no,
             "Birim": p.birim_adi,
             "İşe Giriş": new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'),
-            "Hakediş (Yıllık)": p.hakedis,
-            "Kullanılan": p.kullanilan_izin,
+            "Devreden (Eski)": p.devreden_izin,   // YENİ
+            "Bu Yıl Hakediş": p.bu_yil_hakedis,   // YENİ
+            "Toplam Havuz": p.toplam_havuz,       // YENİ
+            "Kullanılan": p.kullanilan,
             "Kalan İzin": p.kalan,
-            "Durum": p.uyari ? "KRİTİK (50+)" : "Normal"
+            "Durum": p.uyari ? "KRİTİK (40+)" : "Normal"
         })));
 
         XLSX.utils.book_append_sheet(wb, ws, "İzin Raporu");
@@ -56,7 +59,7 @@ export default function LeaveReports() {
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
                         <FileBarChart size={28} className="text-primary"/> İzin Takip Raporu
                     </h2>
-                    <p className="text-muted m-0">Personel izin hakedişleri ve kalan gün durumları.</p>
+                    <p className="text-muted m-0">Personel izin hakedişleri, devreden bakiyeler ve kalan gün durumları.</p>
                 </div>
                 <button className="btn btn-success fw-bold shadow-sm px-4" onClick={exportExcel}>
                     <Download size={18} className="me-2"/> Excel Olarak İndir
@@ -86,8 +89,11 @@ export default function LeaveReports() {
                                 <tr>
                                     <th className="ps-4 py-3">Personel</th>
                                     <th>Birim</th>
-                                    <th>İşe Giriş Tarihi</th>
-                                    <th className="text-center">Toplam Hak</th>
+                                    <th>İşe Giriş</th>
+                                    {/* YENİ SÜTUNLAR */}
+                                    <th className="text-center bg-warning-subtle text-warning-emphasis">Devreden</th>
+                                    <th className="text-center bg-info-subtle text-info-emphasis">Bu Yıl</th>
+                                    <th className="text-center fw-bold">Toplam Havuz</th>
                                     <th className="text-center">Kullanılan</th>
                                     <th className="text-center">Kalan</th>
                                     <th className="text-end pe-4">Durum</th>
@@ -95,7 +101,7 @@ export default function LeaveReports() {
                             </thead>
                             <tbody>
                                 {yukleniyor ? (
-                                    <tr><td colspan="7" className="text-center py-5">Yükleniyor...</td></tr>
+                                    <tr><td colSpan="9" className="text-center py-5">Yükleniyor...</td></tr>
                                 ) : filtered.map((p, i) => (
                                     <tr key={i} className={p.uyari ? 'table-danger' : ''}>
                                         <td className="ps-4">
@@ -105,11 +111,21 @@ export default function LeaveReports() {
                                         <td><span className="badge bg-light text-dark border fw-normal">{p.birim_adi}</span></td>
                                         <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                         
-                                        <td className="text-center fw-bold">{p.hakedis} Gün</td>
-                                        <td className="text-center text-muted">{p.kullanilan_izin} Gün</td>
+                                        {/* YENİ VERİLER */}
+                                        <td className="text-center bg-warning-subtle text-dark font-monospace">
+                                            {p.devreden_izin > 0 ? `+${p.devreden_izin}` : '-'}
+                                        </td>
+                                        <td className="text-center bg-info-subtle text-dark font-monospace">
+                                            {p.bu_yil_hakedis}
+                                        </td>
+                                        <td className="text-center fw-bold fs-6">
+                                            {p.toplam_havuz}
+                                        </td>
+
+                                        <td className="text-center text-muted">{p.kullanilan}</td>
                                         
                                         <td className="text-center">
-                                            <span className={`fw-bold fs-6 ${p.kalan < 5 ? 'text-danger' : 'text-primary'}`}>
+                                            <span className={`badge ${p.kalan < 5 ? 'bg-danger' : 'bg-primary'} fs-6 rounded-pill px-3`}>
                                                 {p.kalan} Gün
                                             </span>
                                         </td>
@@ -117,9 +133,9 @@ export default function LeaveReports() {
                                         <td className="text-end pe-4">
                                             {p.uyari ? (
                                                 <span className="badge bg-danger text-white px-3 py-2 rounded-pill">
-                                                    <AlertTriangle size={14} className="me-1"/> KRİTİK (50+)
+                                                    <AlertTriangle size={14} className="me-1"/> BİRİKEN (40+)
                                                 </span>
-                                            ) : p.kullanilan_izin == 0 ? (
+                                            ) : p.kullanilan === 0 ? (
                                                 <span className="badge bg-warning text-dark px-3 py-2 rounded-pill">
                                                     HİÇ KULLANMADI
                                                 </span>
@@ -132,7 +148,7 @@ export default function LeaveReports() {
                                     </tr>
                                 ))}
                                 {!yukleniyor && filtered.length === 0 && (
-                                    <tr><td colspan="7" className="text-center py-5 text-muted">Kayıt bulunamadı.</td></tr>
+                                    <tr><td colSpan="9" className="text-center py-5 text-muted">Kayıt bulunamadı.</td></tr>
                                 )}
                             </tbody>
                         </table>
