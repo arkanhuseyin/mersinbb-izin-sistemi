@@ -39,9 +39,10 @@ const izinHakedisHesapla = (iseGirisTarihi) => {
 exports.personelListesi = async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT p.*, b.birim_adi 
+            SELECT p.*, b.birim_adi, r.rol_adi 
             FROM personeller p 
             LEFT JOIN birimler b ON p.birim_id = b.birim_id 
+            LEFT JOIN roller r ON p.rol_id = r.rol_id
             ORDER BY p.ad ASC
         `);
         res.json(result.rows);
@@ -152,7 +153,7 @@ exports.personelEkle = async (req, res) => {
 };
 
 // ============================================================
-// 3. PERSONEL GÜNCELLE
+// 3. PERSONEL GÜNCELLE (500 HATASI DÜZELTİLDİ)
 // ============================================================
 exports.personelGuncelle = async (req, res) => {
     const { id } = req.params;

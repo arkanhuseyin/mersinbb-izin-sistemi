@@ -116,7 +116,10 @@ exports.talepOlustur = async (req, res) => {
             'Memur', 'Büro Personeli', 'Genel Evrak', 'Muhasebe', 'Bilgisayar Mühendisi', 
             'Makine Mühendisi', 'Ulaştırma Mühendisi', 'Bilgisayar Teknikeri', 'Harita Teknikeri', 
             'Elektrik Teknikeri', 'Makine Teknikeri', 'Ulaştırma Teknikeri', 'Mersin 33 Kart', 
-            'Lojistik', 'Saha Tespit ve İnceleme', 'Araç Takip Sistemleri', 'Yazı İşleri'
+            'Lojistik', 'Saha Tespit ve İnceleme', 'Araç Takip Sistemleri', 'Yazı İşleri',
+            'İnspektör', 'Hareket Görevlisi', 'Hareket Memuru', 'Dış Görev', 'İdari İzinli', 'Santral Operatörü',
+            'Eğitim ve Disiplin İşleri', 'Saha Görevlisi', 'Düz İşçi (KHK)', 'Yol Kontrol Ekibi', 'Kaza Ekibi',
+            'Yardımcı Hizmetler', 'Çıkış Görevlisi', 'Geçici İşçi', 'Usta', 'Kadrolu İşçi', 'Sürekli İşçi'
         ];
         
         if (ofisGorevleri.some(g => userGorev.includes(g))) {
@@ -159,7 +162,7 @@ exports.talepOlustur = async (req, res) => {
 // 2. İZİNLERİ LİSTELE
 exports.izinleriGetir = async (req, res) => {
     try {
-        let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
+        let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.gorev FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
         let params = [];
 
         // Rol bazlı filtreleme

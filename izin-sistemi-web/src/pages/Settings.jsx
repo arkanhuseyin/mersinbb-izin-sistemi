@@ -368,6 +368,7 @@ export default function Settings() {
                 </div>
             </div>
 
+            {/* --- DETAYLI PERSONEL MODALI (2 SEKME) --- */}
             {showModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-xl modal-dialog-centered my-4">
@@ -433,7 +434,7 @@ export default function Settings() {
 
                                                         <div className="col-md-4"><label className="small fw-bold">Birim</label><select className="form-select form-select-sm" value={formData.birim_id} onChange={e=>setFormData({...formData, birim_id:e.target.value})}>{birimler.map(b=><option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>)}</select></div>
                                                         
-                                                        {/* --- GÖREV LİSTESİ --- */}
+                                                        {/* --- GÜNCELLENEN ALAN: GÖREV SEÇİMİ (ROLÜ OTOMATİK AYARLAR) --- */}
                                                         <div className="col-md-4">
                                                             <label className="small fw-bold text-primary">Görevi (Rol Otomatik)</label>
                                                             <select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange}>
@@ -442,7 +443,7 @@ export default function Settings() {
                                                             </select>
                                                         </div>
 
-                                                        {/* --- KADRO LİSTESİ --- */}
+                                                        {/* --- GÜNCELLENEN ALAN: KADRO TİPİ --- */}
                                                         <div className="col-md-4">
                                                             <label className="small fw-bold">Kadro Tipi</label>
                                                             <select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})}>
