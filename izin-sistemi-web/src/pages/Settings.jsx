@@ -24,7 +24,7 @@ export default function Settings() {
 
     const [yeniSifre, setYeniSifre] = useState('');
 
-    // Form Durumları
+    // Formlar
     const [formStep, setFormStep] = useState(1); 
     const [fotograf, setFotograf] = useState(null);
     const [newPersonel, setNewPersonel] = useState({
@@ -133,7 +133,7 @@ export default function Settings() {
         } catch (error) { alert('Hata oluştu'); }
     };
 
-    // --- AKTİF ETME (GERİ ALMA) ---
+    // --- AKTİF ETME (ANLIK GÜNCELLEMELİ) ---
     const personelAktifEt = async (personel_id) => {
         if(!window.confirm('Bu personeli tekrar AKTİF hale getirmek istiyor musunuz?')) return;
         try {
@@ -141,7 +141,17 @@ export default function Settings() {
             await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/aktif-et', { personel_id }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
+            
             alert('Personel başarıyla aktif edildi.');
+            
+            // ANLIK GÜNCELLEME (Refresh beklememek için)
+            setUsersList(prevList => prevList.map(u => 
+                u.personel_id === personel_id 
+                ? { ...u, aktif: true, calisma_durumu: 'Çalışıyor' } 
+                : u
+            ));
+
+            // Garanti olsun diye arka planda yine çek
             fetchUsers();
         } catch (error) { alert('Hata oluştu'); }
     };
@@ -161,7 +171,6 @@ export default function Settings() {
         }
     };
 
-    // --- PDF ---
     const downloadPdf = (id, ad) => {
         const token = localStorage.getItem('token');
         axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/personel/pdf/${id}`, {
@@ -177,7 +186,6 @@ export default function Settings() {
         });
     };
 
-    // --- ŞİFRE ---
     const profilGuncelle = async (e) => {
         e.preventDefault();
         try {
@@ -190,12 +198,11 @@ export default function Settings() {
         } catch (error) { alert('Hata oluştu'); }
     };
 
-    // --- FİLTRELEME ---
     const filteredUsers = usersList.filter(u => {
         const matchesSearch = u.ad?.toLowerCase().includes(arama.toLowerCase()) || 
                               u.tc_no?.includes(arama);
         
-        // Aktiflik kontrolü (Boolean veya 1/0 gelebilir)
+        // Aktiflik kontrolü (Boolean veya 1/0/string)
         const isActive = u.aktif === true || u.aktif === 'true' || u.aktif === 1;
         
         if (filterStatus === 'all') return matchesSearch;
@@ -218,7 +225,6 @@ export default function Settings() {
             <div className="card shadow-sm border-0 rounded-4" style={{minHeight: '600px'}}>
                 <div className="card-body p-4">
                     
-                    {/* TAB 1: PROFİLİM */}
                     {activeTab === 'profile' && (
                         <div className="row justify-content-center">
                             <div className="col-md-6 text-center">
@@ -244,7 +250,6 @@ export default function Settings() {
                         </div>
                     )}
 
-                    {/* TAB 2: PERSONEL YÖNETİMİ */}
                     {activeTab === 'users' && isYetkili && (
                         <>
                             <div className="d-flex justify-content-between align-items-end mb-4">
@@ -283,14 +288,12 @@ export default function Settings() {
                                                     <td className="small">{new Date(u.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                                     <td className="text-center">{!isActive ? <span className="badge bg-secondary">Pasif ({u.calisma_durumu})</span> : <span className="badge bg-success">Aktif</span>}</td>
                                                     <td className="text-end">
-                                                        <button className="btn btn-sm btn-light text-primary me-1" title="PDF İndir" onClick={() => downloadPdf(u.personel_id, u.ad)}><FileDown size={18}/></button>
-                                                        <button className="btn btn-sm btn-light text-dark me-1" title="Düzenle" onClick={() => setEditModal(u)}><Edit size={18}/></button>
+                                                        <button className="btn btn-sm btn-light text-danger me-1" title="PDF" onClick={() => downloadPdf(u.personel_id, u.ad)}><FileDown size={18}/></button>
+                                                        <button className="btn btn-sm btn-light text-primary me-1" title="Düzenle" onClick={() => setEditModal(u)}><Edit size={18}/></button>
                                                         
                                                         {isActive ? (
-                                                            // AKTİFSE: SADECE DONDURMA
-                                                            <button className="btn btn-sm btn-light text-warning" title="Pasife Al (Dondur)" onClick={() => setDondurmaModal(u)}><Ban size={18}/></button>
+                                                            <button className="btn btn-sm btn-light text-warning" title="Pasife Al" onClick={() => setDondurmaModal(u)}><Ban size={18}/></button>
                                                         ) : (
-                                                            // PASİFSE: AKTİF ET VEYA SİL
                                                             <>
                                                                 <button className="btn btn-sm btn-light text-success me-1" title="Aktif Et" onClick={() => personelAktifEt(u.personel_id)}><CheckCircle size={18}/></button>
                                                                 <button className="btn btn-sm btn-light text-danger" title="Tamamen Sil" onClick={() => personelSil(u.personel_id)}><Trash2 size={18}/></button>
@@ -308,7 +311,7 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* --- YENİ PERSONEL MODALI (4 ADIM) --- */}
+            {/* --- YENİ PERSONEL MODALI --- */}
             {showAddModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-lg modal-dialog-centered my-4">
@@ -326,7 +329,6 @@ export default function Settings() {
                                 </div>
                                 <form onSubmit={personelKaydet}>
                                     <div className="card border-0 shadow-sm p-3">
-                                        {/* ADIM 1 */}
                                         {formStep === 1 && (
                                             <div className="row g-2">
                                                 <div className="col-12"><label className="small fw-bold">Fotoğraf</label><input type="file" className="form-control" onChange={handleFileChange}/></div>
@@ -342,7 +344,6 @@ export default function Settings() {
                                                 <div className="col-4"><label className="small">Kan Grubu</label><select className="form-select" name="kan_grubu" value={newPersonel.kan_grubu} onChange={handleFormChange}><option value="">Seçiniz</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
                                             </div>
                                         )}
-                                        {/* ADIM 2 */}
                                         {formStep === 2 && (
                                             <div className="row g-2">
                                                 <div className="col-6"><label className="small">Birim</label><select name="birim_id" className="form-select" value={newPersonel.birim_id} onChange={handleFormChange}>{birimler.map(b => (<option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>))}</select></div>
@@ -353,7 +354,6 @@ export default function Settings() {
                                                 <div className="col-6"><label className="small">Yetki Rolü</label><select name="rol" className="form-select" value={newPersonel.rol} onChange={handleFormChange}><option value="personel">Standart Personel</option><option value="amir">Birim Amiri</option><option value="filo">Filo Yöneticisi</option><option value="ik">İnsan Kaynakları</option></select></div>
                                             </div>
                                         )}
-                                        {/* ADIM 3 */}
                                         {formStep === 3 && (
                                             <div className="row g-2">
                                                 <div className="col-6"><label className="small">Ehliyet No</label><input className="form-control" value={newPersonel.ehliyet_no} onChange={handleFormChange} name="ehliyet_no"/></div>
@@ -362,7 +362,6 @@ export default function Settings() {
                                                 <div className="col-6"><label className="small">Sürücü Kart No</label><input className="form-control" value={newPersonel.surucu_no} onChange={handleFormChange} name="surucu_no"/></div>
                                             </div>
                                         )}
-                                        {/* ADIM 4 */}
                                         {formStep === 4 && (
                                             <div className="row g-2">
                                                 <div className="col-6"><label className="small">Ayakkabı No</label><input className="form-control" value={newPersonel.ayakkabi_no} onChange={handleFormChange} name="ayakkabi_no"/></div>
@@ -384,7 +383,7 @@ export default function Settings() {
                 </div>
             )}
             
-            {/* --- DÜZENLEME MODALI (TÜM ALANLAR) --- */}
+            {/* --- DÜZENLEME MODALI --- */}
             {editModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY:'auto' }}>
                     <div className="modal-dialog modal-dialog-centered modal-lg">
