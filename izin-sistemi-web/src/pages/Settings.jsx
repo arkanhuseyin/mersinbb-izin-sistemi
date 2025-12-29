@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
     User, Search, Plus, Save, Truck, FileText, 
     Briefcase, Ban, Ruler, Shirt, Image as ImageIcon,
-    Edit, FileDown, X, Lock, KeyRound, Filter, Trash2
+    Edit, FileDown, Lock, KeyRound, Filter, Trash2
 } from 'lucide-react';
 
 export default function Settings() {
@@ -13,7 +13,7 @@ export default function Settings() {
     const [usersList, setUsersList] = useState([]);
     const [birimler, setBirimler] = useState([]);
     const [arama, setArama] = useState('');
-    const [filterStatus, setFilterStatus] = useState('all'); // YENİ: FİLTRE DURUMU
+    const [filterStatus, setFilterStatus] = useState('all');
     const [yukleniyor, setYukleniyor] = useState(false);
     
     // Modallar
@@ -22,10 +22,9 @@ export default function Settings() {
     const [transferModal, setTransferModal] = useState(null);
     const [editModal, setEditModal] = useState(null); 
 
-    // Profil Şifre Değişikliği İçin
     const [yeniSifre, setYeniSifre] = useState('');
 
-    // Yeni Personel Formu
+    // Formlar
     const [formStep, setFormStep] = useState(1); 
     const [fotograf, setFotograf] = useState(null);
     const [newPersonel, setNewPersonel] = useState({
@@ -68,9 +67,6 @@ export default function Settings() {
         setFotograf(e.target.files[0]);
     };
 
-    // --- PERSONEL İŞLEMLERİ ---
-
-    // 1. Kayıt
     const personelKaydet = async (e) => {
         e.preventDefault();
         try {
@@ -94,15 +90,18 @@ export default function Settings() {
         }
     };
 
-    // 2. Güncelleme
     const personelGuncelle = async (e) => {
         e.preventDefault();
         try {
             const token = localStorage.getItem('token');
             const formData = new FormData();
             
-            const fields = ['ad', 'soyad', 'telefon', 'adres', 'gorev', 'kadro_tipi', 'gorev_yeri', 
-                            'ayakkabi_no', 'tisort_beden', 'gomlek_beden', 'suveter_beden', 'mont_beden'];
+            // Tüm alanları gönderiyoruz
+            const fields = [
+                'ad', 'soyad', 'telefon', 'adres', 'gorev', 'kadro_tipi', 'gorev_yeri', 
+                'ayakkabi_no', 'tisort_beden', 'gomlek_beden', 'suveter_beden', 'mont_beden',
+                'tc_no', 'dogum_tarihi', 'cinsiyet', 'medeni_hal', 'kan_grubu', 'birim_id', 'rol'
+            ];
             
             fields.forEach(key => formData.append(key, editModal[key] || ''));
             if (fotograf) formData.append('fotograf', fotograf);
@@ -118,7 +117,6 @@ export default function Settings() {
         } catch (error) { alert('Güncelleme hatası'); }
     };
 
-    // 3. Dondurma
     const personelDondur = async (sebep) => {
         try {
             const token = localStorage.getItem('token');
@@ -133,10 +131,8 @@ export default function Settings() {
         } catch (error) { alert('Hata oluştu'); }
     };
 
-    // 4. Silme (Tamamen) - YENİ
     const personelSil = async (personel_id) => {
         if(!window.confirm('Bu personeli ve tüm verilerini KALICI olarak silmek istediğinize emin misiniz?')) return;
-        
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`https://mersinbb-izin-sistemi.onrender.com/api/personel/sil/${personel_id}`, {
@@ -149,7 +145,6 @@ export default function Settings() {
         }
     };
 
-    // 5. PDF İndir
     const downloadPdf = (id, ad) => {
         const token = localStorage.getItem('token');
         axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/personel/pdf/${id}`, {
@@ -159,13 +154,12 @@ export default function Settings() {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${ad}_Kart.pdf`);
+            link.setAttribute('download', 'Personel_Kart.pdf'); // Sabit isim verdik hata olmasın diye
             document.body.appendChild(link);
             link.click();
         });
     };
 
-    // 6. Profil Şifre Güncelleme
     const profilGuncelle = async (e) => {
         e.preventDefault();
         try {
@@ -178,12 +172,12 @@ export default function Settings() {
         } catch (error) { alert('Hata oluştu'); }
     };
 
-    // --- FİLTRELEME MANTIĞI ---
     const filteredUsers = usersList.filter(u => {
         const matchesSearch = u.ad?.toLowerCase().includes(arama.toLowerCase()) || 
                               u.tc_no?.includes(arama);
         
-        const isActive = u.aktif === true || u.aktif === 'true'; // Bazı DB'ler string dönebilir
+        // Pasif/Aktif Kontrolü (Genişletilmiş)
+        const isActive = u.aktif === true || u.aktif === 'true' || u.aktif === 1;
         
         if (filterStatus === 'all') return matchesSearch;
         if (filterStatus === 'active') return matchesSearch && isActive;
@@ -205,7 +199,6 @@ export default function Settings() {
             <div className="card shadow-sm border-0 rounded-4" style={{minHeight: '600px'}}>
                 <div className="card-body p-4">
                     
-                    {/* --- TAB 1: PROFİLİM --- */}
                     {activeTab === 'profile' && (
                         <div className="row justify-content-center">
                             <div className="col-md-6 text-center">
@@ -231,7 +224,6 @@ export default function Settings() {
                         </div>
                     )}
 
-                    {/* --- TAB 2: PERSONEL YÖNETİMİ --- */}
                     {activeTab === 'users' && isYetkili && (
                         <>
                             <div className="d-flex justify-content-between align-items-end mb-4">
@@ -241,7 +233,6 @@ export default function Settings() {
                                         <input type="text" className="form-control border-start-0" placeholder="Personel ara (TC, Ad)..." value={arama} onChange={e => setArama(e.target.value)}/>
                                     </div>
                                     
-                                    {/* FİLTRE DROPDOWN */}
                                     <div className="d-flex align-items-center gap-2">
                                         <Filter size={16} className="text-muted"/>
                                         <select className="form-select form-select-sm w-auto border-0 bg-light fw-bold text-muted" 
@@ -263,7 +254,7 @@ export default function Settings() {
                                     <tbody>
                                         {yukleniyor ? <tr><td colSpan="5" className="text-center py-4">Yükleniyor...</td></tr> : 
                                          filteredUsers.map(u => {
-                                            const isActive = u.aktif === true || u.aktif === 'true';
+                                            const isActive = u.aktif === true || u.aktif === 'true' || u.aktif === 1;
                                             return (
                                                 <tr key={u.personel_id} className={!isActive ? 'table-light text-muted' : ''}>
                                                     <td><div className="fw-bold">{u.ad} {u.soyad}</div><small className="text-muted font-monospace">{u.tc_no}</small></td>
@@ -275,10 +266,8 @@ export default function Settings() {
                                                         <button className="btn btn-sm btn-light text-primary me-1" title="Düzenle" onClick={() => setEditModal(u)}><Edit size={18}/></button>
                                                         
                                                         {isActive ? (
-                                                            // AKTİFSE: DONDURMA İKONU
                                                             <button className="btn btn-sm btn-light text-warning" title="Pasife Al" onClick={() => setDondurmaModal(u)}><Ban size={18}/></button>
                                                         ) : (
-                                                            // PASİFSE: SİLME İKONU (TRASH)
                                                             <button className="btn btn-sm btn-light text-danger" title="Tamamen Sil" onClick={() => personelSil(u.personel_id)}><Trash2 size={18}/></button>
                                                         )}
                                                     </td>
@@ -293,7 +282,7 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* YENİ PERSONEL MODALI (Eski kodun aynısı, kısaltıldı) */}
+            {/* --- YENİ PERSONEL MODALI (ARTIK TAMAMEN DOLU) --- */}
             {showAddModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-lg modal-dialog-centered my-4">
@@ -303,7 +292,6 @@ export default function Settings() {
                                 <button className="btn-close btn-close-white" onClick={() => setShowAddModal(false)}></button>
                             </div>
                             <div className="modal-body p-4 bg-light">
-                                {/* ADIM BUTONLARI */}
                                 <div className="btn-group w-100 mb-4 bg-white shadow-sm">
                                     <button className={`btn btn-sm fw-bold ${formStep===1?'btn-primary':'btn-light'}`} onClick={()=>setFormStep(1)}>1. Kimlik</button>
                                     <button className={`btn btn-sm fw-bold ${formStep===2?'btn-primary':'btn-light'}`} onClick={()=>setFormStep(2)}>2. Kurumsal</button>
@@ -312,6 +300,7 @@ export default function Settings() {
                                 </div>
                                 <form onSubmit={personelKaydet}>
                                     <div className="card border-0 shadow-sm p-3">
+                                        {/* 1. KİMLİK */}
                                         {formStep === 1 && (
                                             <div className="row g-2">
                                                 <div className="col-12"><label className="small fw-bold">Fotoğraf</label><input type="file" className="form-control" onChange={handleFileChange}/></div>
@@ -321,17 +310,46 @@ export default function Settings() {
                                                 <div className="col-6"><label className="small">Telefon</label><input className="form-control" value={newPersonel.telefon} onChange={handleFormChange} name="telefon"/></div>
                                                 <div className="col-12"><label className="small">Adres</label><textarea className="form-control" rows="2" value={newPersonel.adres} onChange={handleFormChange} name="adres"></textarea></div>
                                                 <div className="col-6"><label className="small">Doğum Tarihi</label><input type="date" className="form-control" value={newPersonel.dogum_tarihi} onChange={handleFormChange} name="dogum_tarihi"/></div>
+                                                <div className="col-4"><label className="small">Cinsiyet</label><select className="form-select" name="cinsiyet" value={newPersonel.cinsiyet} onChange={handleFormChange}><option>Erkek</option><option>Kadın</option></select></div>
+                                                <div className="col-4"><label className="small">Medeni Hal</label><select className="form-select" name="medeni_hal" value={newPersonel.medeni_hal} onChange={handleFormChange}><option>Bekar</option><option>Evli</option></select></div>
+                                                <div className="col-4"><label className="small">Kan Grubu</label><select className="form-select" name="kan_grubu" value={newPersonel.kan_grubu} onChange={handleFormChange}><option value="">Seçiniz</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
                                                 <div className="col-6"><label className="small">Şifre</label><input className="form-control" value={newPersonel.sifre} onChange={handleFormChange} name="sifre"/></div>
                                             </div>
                                         )}
-                                        {/* Diğer adımlar (Kurumsal, Lojistik, Kıyafet) form alanları aynı kalacak */}
-                                        {/* Yer tasarrufu için burayı kısa tutuyorum, önceki koddan kopyalayabilirsin */}
-                                        {formStep === 2 && <div className="text-center text-muted py-5">Kurumsal Bilgileri Giriniz (Önceki kod ile aynı)</div>}
-                                        {formStep === 3 && <div className="text-center text-muted py-5">Lojistik Bilgileri Giriniz (Önceki kod ile aynı)</div>}
-                                        {formStep === 4 && <div className="text-center text-muted py-5">Kıyafet Bilgileri Giriniz (Önceki kod ile aynı)</div>}
+                                        {/* 2. KURUMSAL (ARTIK DOLU) */}
+                                        {formStep === 2 && (
+                                            <div className="row g-2">
+                                                <div className="col-6"><label className="small">Birim</label><select name="birim_id" className="form-select" value={newPersonel.birim_id} onChange={handleFormChange}>{birimler.map(b => (<option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>))}</select></div>
+                                                <div className="col-6"><label className="small">Görev Yeri</label><input className="form-control" value={newPersonel.gorev_yeri} onChange={handleFormChange} name="gorev_yeri"/></div>
+                                                <div className="col-6"><label className="small">Ünvan/Görev</label><input className="form-control" value={newPersonel.gorev} onChange={handleFormChange} name="gorev"/></div>
+                                                <div className="col-6"><label className="small">Kadro Tipi</label><select name="kadro_tipi" className="form-select" value={newPersonel.kadro_tipi} onChange={handleFormChange}><option>Sürekli İşçi</option><option>Memur</option><option>Sözleşmeli</option><option>Şirket Personeli</option></select></div>
+                                                <div className="col-6"><label className="small">Çalışma Durumu</label><select name="calisma_durumu" className="form-select" value={newPersonel.calisma_durumu} onChange={handleFormChange}><option>Çalışıyor</option><option>Emekli</option><option>İş Akdi Fesih</option></select></div>
+                                                <div className="col-6"><label className="small">Yetki Rolü</label><select name="rol" className="form-select" value={newPersonel.rol} onChange={handleFormChange}><option value="personel">Standart Personel</option><option value="amir">Birim Amiri</option><option value="filo">Filo Yöneticisi</option><option value="ik">İnsan Kaynakları</option></select></div>
+                                            </div>
+                                        )}
+                                        {/* 3. LOJİSTİK (ARTIK DOLU) */}
+                                        {formStep === 3 && (
+                                            <div className="row g-2">
+                                                <div className="col-6"><label className="small">Ehliyet No</label><input className="form-control" value={newPersonel.ehliyet_no} onChange={handleFormChange} name="ehliyet_no"/></div>
+                                                <div className="col-6"><label className="small">SRC Belge No</label><input className="form-control" value={newPersonel.src_belge_no} onChange={handleFormChange} name="src_belge_no"/></div>
+                                                <div className="col-6"><label className="small">Psikoteknik Bitiş</label><input type="date" className="form-control" value={newPersonel.psikoteknik_tarihi} onChange={handleFormChange} name="psikoteknik_tarihi"/></div>
+                                                <div className="col-6"><label className="small">Sürücü Kart No</label><input className="form-control" value={newPersonel.surucu_no} onChange={handleFormChange} name="surucu_no"/></div>
+                                            </div>
+                                        )}
+                                        {/* 4. KIYAFET (ARTIK DOLU) */}
+                                        {formStep === 4 && (
+                                            <div className="row g-2">
+                                                <div className="col-6"><label className="small">Ayakkabı No</label><input className="form-control" value={newPersonel.ayakkabi_no} onChange={handleFormChange} name="ayakkabi_no"/></div>
+                                                <div className="col-6"><label className="small">Tişört Beden</label><select className="form-select" name="tisort_beden" value={newPersonel.tisort_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+                                                <div className="col-6"><label className="small">Gömlek Beden</label><select className="form-select" name="gomlek_beden" value={newPersonel.gomlek_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+                                                <div className="col-6"><label className="small">Mont Beden</label><select className="form-select" name="mont_beden" value={newPersonel.mont_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+                                                <div className="col-6"><label className="small">Süveter Beden</label><select className="form-select" name="suveter_beden" value={newPersonel.suveter_beden} onChange={handleFormChange}><option value="">Seçiniz</option><option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option></select></div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="mt-3 text-end">
-                                        <button type="submit" className="btn btn-success fw-bold px-4">Kaydet</button>
+                                        {formStep > 1 && <button type="button" className="btn btn-secondary me-2" onClick={()=>setFormStep(formStep-1)}>Geri</button>}
+                                        {formStep < 4 ? <button type="button" className="btn btn-primary" onClick={()=>setFormStep(formStep+1)}>İleri</button> : <button type="submit" className="btn btn-success fw-bold px-4">Kaydet</button>}
                                     </div>
                                 </form>
                             </div>
@@ -340,7 +358,7 @@ export default function Settings() {
                 </div>
             )}
             
-            {/* DÜZENLEME MODALI */}
+            {/* --- DÜZENLEME MODALI (TAM VE EKSİKSİZ) --- */}
             {editModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY:'auto' }}>
                     <div className="modal-dialog modal-dialog-centered modal-lg">
@@ -352,14 +370,31 @@ export default function Settings() {
                             <div className="modal-body p-4">
                                 <form onSubmit={personelGuncelle}>
                                     <div className="row g-3">
-                                        <div className="col-12"><label className="small fw-bold">Fotoğraf</label><input type="file" className="form-control" onChange={handleFileChange}/></div>
-                                        <div className="col-6"><label className="small">Ad</label><input className="form-control" value={editModal.ad} onChange={e=>setEditModal({...editModal, ad:e.target.value})}/></div>
-                                        <div className="col-6"><label className="small">Soyad</label><input className="form-control" value={editModal.soyad} onChange={e=>setEditModal({...editModal, soyad:e.target.value})}/></div>
+                                        <div className="col-12"><h6 className="border-bottom pb-1 text-primary">Kişisel Bilgiler</h6></div>
+                                        <div className="col-12"><label className="form-label small fw-bold">Fotoğraf Güncelle</label><input type="file" className="form-control" accept="image/*" onChange={handleFileChange} /></div>
+                                        <div className="col-md-6"><label className="small">TC No</label><input className="form-control" value={editModal.tc_no} onChange={e=>setEditModal({...editModal, tc_no:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Ad</label><input className="form-control" value={editModal.ad} onChange={e=>setEditModal({...editModal, ad:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Soyad</label><input className="form-control" value={editModal.soyad} onChange={e=>setEditModal({...editModal, soyad:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Telefon</label><input className="form-control" value={editModal.telefon || ''} onChange={e=>setEditModal({...editModal, telefon:e.target.value})}/></div>
                                         <div className="col-12"><label className="small">Adres</label><textarea className="form-control" rows="2" value={editModal.adres || ''} onChange={e=>setEditModal({...editModal, adres:e.target.value})}/></div>
-                                        <div className="col-6"><label className="small">Görevi</label><input className="form-control" value={editModal.gorev || ''} onChange={e=>setEditModal({...editModal, gorev:e.target.value})}/></div>
-                                        <div className="col-6"><label className="small">Ayakkabı No</label><input className="form-control" value={editModal.ayakkabi_no || ''} onChange={e=>setEditModal({...editModal, ayakkabi_no:e.target.value})}/></div>
+                                        
+                                        <div className="col-md-4"><label className="small">Cinsiyet</label><select className="form-select" value={editModal.cinsiyet} onChange={e=>setEditModal({...editModal, cinsiyet:e.target.value})}><option>Erkek</option><option>Kadın</option></select></div>
+                                        <div className="col-md-4"><label className="small">Medeni Hal</label><select className="form-select" value={editModal.medeni_hal} onChange={e=>setEditModal({...editModal, medeni_hal:e.target.value})}><option>Bekar</option><option>Evli</option></select></div>
+                                        <div className="col-md-4"><label className="small">Kan Grubu</label><select className="form-select" value={editModal.kan_grubu} onChange={e=>setEditModal({...editModal, kan_grubu:e.target.value})}><option value="">Seçiniz</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
+
+                                        <div className="col-12 mt-3"><h6 className="border-bottom pb-1 text-primary">Kurumsal Bilgiler</h6></div>
+                                        <div className="col-md-6"><label className="small">Birim</label><select className="form-select" value={editModal.birim_id} onChange={e=>setEditModal({...editModal, birim_id:e.target.value})}>{birimler.map(b => (<option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>))}</select></div>
+                                        <div className="col-md-6"><label className="small">Görevi</label><input className="form-control" value={editModal.gorev || ''} onChange={e=>setEditModal({...editModal, gorev:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Görev Yeri</label><input className="form-control" value={editModal.gorev_yeri || ''} onChange={e=>setEditModal({...editModal, gorev_yeri:e.target.value})}/></div>
+                                        <div className="col-md-6"><label className="small">Kadro Tipi</label><select className="form-select" value={editModal.kadro_tipi} onChange={e=>setEditModal({...editModal, kadro_tipi:e.target.value})}><option>Sürekli İşçi</option><option>Memur</option><option>Sözleşmeli</option><option>Şirket Personeli</option></select></div>
+
+                                        <div className="col-12 mt-3"><h6 className="border-bottom pb-1 text-primary">Beden Bilgileri</h6></div>
+                                        <div className="col-md-3"><label className="small">Ayakkabı</label><input className="form-control" value={editModal.ayakkabi_no || ''} onChange={e=>setEditModal({...editModal, ayakkabi_no:e.target.value})}/></div>
+                                        <div className="col-md-3"><label className="small">Tişört</label><input className="form-control" value={editModal.tisort_beden || ''} onChange={e=>setEditModal({...editModal, tisort_beden:e.target.value})}/></div>
+                                        <div className="col-md-3"><label className="small">Gömlek</label><input className="form-control" value={editModal.gomlek_beden || ''} onChange={e=>setEditModal({...editModal, gomlek_beden:e.target.value})}/></div>
+                                        <div className="col-md-3"><label className="small">Mont</label><input className="form-control" value={editModal.mont_beden || ''} onChange={e=>setEditModal({...editModal, mont_beden:e.target.value})}/></div>
                                     </div>
-                                    <div className="mt-4 text-end"><button className="btn btn-warning fw-bold px-4">Güncelle</button></div>
+                                    <div className="mt-4 text-end"><button type="button" className="btn btn-secondary me-2" onClick={()=>setEditModal(null)}>İptal</button><button type="submit" className="btn btn-warning fw-bold px-4">Güncelle</button></div>
                                 </form>
                             </div>
                         </div>
@@ -387,4 +422,3 @@ export default function Settings() {
         </div>
     );
 }
-// Render PDFKit Fix Denemesi - v2
