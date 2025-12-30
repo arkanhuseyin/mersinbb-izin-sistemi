@@ -28,7 +28,7 @@ const getYillikHakedis = (kidemYili) => {
 // 3. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM)
 const hesaplaBakiye = async (personel_id) => {
     // A. Personel bilgilerini çek
-    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personellers WHERE personel_id = $1", [personel_id]);
+    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
     const giris = new Date(pRes.rows[0].ise_giris_tarihi || '2024-01-01');
@@ -74,7 +74,7 @@ exports.talepOlustur = async (req, res) => {
     const personel_id = req.user.id; 
     
     // Rol ve Görev Bilgisi
-    const pRes = await pool.query("SELECT rol_id, gorev FROM personellers WHERE personel_id = $1", [personel_id]);
+    const pRes = await pool.query("SELECT rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
     const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [pRes.rows[0].rol_id]);
     
     const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
