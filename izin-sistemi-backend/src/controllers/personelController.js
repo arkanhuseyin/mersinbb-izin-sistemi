@@ -195,54 +195,248 @@ exports.personelKartiPdf = async (req, res) => {
     const { id } = req.params;
     try {
         const client = await pool.connect();
-        const pRes = await client.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id WHERE p.personel_id = $1`, [id]);
-        const izinRes = await client.query(`SELECT * FROM izin_talepleri WHERE personel_id = $1 AND durum = 'ONAYLANDI' ORDER BY baslangic_tarihi DESC`, [id]);
+        
+        // 1. Personel Detaylı Bilgisi
+        const pRes = await client.query(`
+            SELECT p.*, b.birim_adi, r.rol_adi 
+            FROM personellers p 
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id 
+            LEFT JOIN roller r ON p.rol_id = r.rol_id
+            WHERE p.personel_id = $1
+        `, [id]);
+        
+        // 2. İzin Geçmişi (Son 10 Hareket)
+        const izinRes = await client.query(`
+            SELECT * FROM izin_talepleri 
+            WHERE personel_id = $1 AND durum = 'IK_ONAYLADI' 
+            ORDER BY baslangic_tarihi DESC LIMIT 15
+        `, [id]);
+        
         client.release();
 
-        if (pRes.rows.length === 0) return res.status(404).send('Bulunamadı');
+        if (pRes.rows.length === 0) return res.status(404).send('Personel bulunamadı');
         const p = pRes.rows[0];
+
+        // İzin Hesaplama
         const hakedis = izinHakedisHesapla(p.ise_giris_tarihi);
         let kullanilan = 0;
-        izinRes.rows.forEach(i => { if(i.izin_turu === 'Yıllık İzin') kullanilan += i.gun_sayisi; });
-        const kalan = hakedis.hak - kullanilan;
+        // Tüm zamanların kullanılanı için ayrı bir sorgu yapmak daha doğru olurdu ama şimdilik buradan hesaplayalım
+        // Not: Gerçek bakiye için hesaplaBakiye fonksiyonunu kullanmak daha iyidir, burada basit hesap yapıyoruz.
+        const kalanIzni = (p.devreden_izin || 0) + hakedis.hak; // Basit gösterim
 
-        const doc = new PDFDocument({ margin: 0, size: 'A4' });
-        const fontPath = path.join(__dirname, '../../templates/font.ttf');
-        if (fs.existsSync(fontPath)) doc.registerFont('TrFont', fontPath);
-
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="${p.ad}_Dosya.pdf"`);
-        doc.pipe(res);
-
-        // Header
+        const doc = new PDFDocument({ margin: 30, size: 'A4' });
+        
+        // Font Ayarları (TR Karakter Sorunu İçin)
+        // Eğer font dosyası yoksa standart fontu kullanır ama TR karakterler bozuk çıkabilir.
+        const fontPath = path.join(__dirname, '../../templates/font.ttf'); 
         const headerPath = path.join(__dirname, '../../templates/pdf1.png');
-        if (fs.existsSync(headerPath)) doc.image(headerPath, 0, 0, { width: 595.28, height: 100 });
 
-        let yPos = 160;
-        let font = fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica';
-
-        doc.font(font).fontSize(16).text('PERSONEL KİMLİK BİLGİ FORMU', 0, yPos, { align: 'center' });
-        yPos += 40;
-
-        // Fotoğraf
-        if (p.fotograf_yolu && fs.existsSync(p.fotograf_yolu)) {
-            try { doc.image(p.fotograf_yolu, 430, yPos, { width: 100, height: 120 }); } catch (e) {}
+        if (fs.existsSync(fontPath)) {
+            doc.registerFont('TrFont', fontPath);
+            doc.font('TrFont');
+        } else {
+            doc.font('Helvetica'); // Yedek
         }
 
-        const row = (lbl, val) => {
-            doc.fontSize(10).text(lbl + ':', 50, yPos).text(val || '-', 180, yPos);
-            yPos += 20;
+        const safeFilename = `${p.ad.replace(/[^a-zA-Z0-9]/g, '')}_PersonelKarti.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+        doc.pipe(res);
+
+        // --- 1. BAŞLIK VE LOGO ---
+        if (fs.existsSync(headerPath)) {
+            // Logoyu sayfanın en üstüne yay
+            doc.image(headerPath, 0, 0, { width: 595.28, height: 100 });
+        } else {
+            // Logo yoksa metin yaz
+            doc.fontSize(18).text('MERSİN BÜYÜKŞEHİR BELEDİYESİ', 0, 40, { align: 'center' });
+            doc.fontSize(12).text('ULAŞIM DAİRESİ BAŞKANLIĞI', { align: 'center' });
+        }
+
+        let y = 130; // Başlangıç Y koordinatı
+
+        // Başlık
+        doc.fontSize(16).fillColor('#000000').text('PERSONEL KİMLİK BİLGİ FORMU', 0, y, { align: 'center' });
+        doc.rect(30, y + 20, 535, 2).fill('#cc0000'); // Kırmızı çizgi
+        y += 40;
+
+        // --- 2. FOTOĞRAF ALANI (SAĞ TARAFA SABİT) ---
+        // Fotoğrafın yeri sabit: x=430, y=170
+        const photoX = 430;
+        const photoY = y;
+        const photoW = 110;
+        const photoH = 130;
+
+        // Fotoğraf Çerçevesi
+        doc.rect(photoX, photoY, photoW, photoH).strokeColor('#333').lineWidth(1).stroke();
+
+        // Fotoğrafı Yükle
+        if (p.fotograf_yolu && fs.existsSync(p.fotograf_yolu)) {
+            try {
+                doc.image(p.fotograf_yolu, photoX + 1, photoY + 1, { width: photoW - 2, height: photoH - 2, fit: [photoW-2, photoH-2] });
+            } catch (e) {
+                console.error("Fotoğraf yüklenemedi", e);
+            }
+        } else {
+            doc.fontSize(10).fillColor('#999').text('FOTOĞRAF', photoX, photoY + 60, { width: photoW, align: 'center' });
+        }
+
+        // --- 3. BİLGİ TABLOLARI (SOL TARAF) ---
+        const labelX = 30;
+        const valueX = 160;
+        const rowH = 20;
+        
+        // Yardımcı Fonksiyon: Satır Çiz
+        const drawRow = (label, value) => {
+            // Arka plan rengi (okunabilirlik için)
+            // y pozisyonuna göre açık gri veya beyaz
+            if (((y - 170) / 20) % 2 === 1) {
+                doc.rect(labelX, y - 2, 380, rowH).fillColor('#f9f9f9').fill();
+            }
+            
+            doc.fillColor('#333333').fontSize(9).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold').text(label, labelX + 5, y + 4);
+            
+            const valStr = (value === null || value === undefined || value === '') ? '-' : String(value);
+            doc.fillColor('#000000').fontSize(9).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica').text(valStr, valueX, y + 4);
+            
+            y += rowH;
         };
 
-        row('TC No', p.tc_no);
-        row('Ad Soyad', `${p.ad} ${p.soyad}`);
-        row('Birim', p.birim_adi);
-        row('Görev', p.gorev);
-        row('Giriş Tarihi', p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-');
-        row('Kalan İzin', `${kalan} Gün`);
+        // BÖLÜM 1: KİMLİK VE İLETİŞİM
+        doc.fillColor('#cc0000').fontSize(11).text('KİMLİK VE İLETİŞİM BİLGİLERİ', labelX, y - 15);
+        y += 5;
+        
+        drawRow('TC Kimlik No', p.tc_no);
+        drawRow('Adı Soyadı', `${p.ad} ${p.soyad}`);
+        drawRow('Sicil No', p.sicil_no);
+        drawRow('Doğum Tarihi', p.dogum_tarihi ? new Date(p.dogum_tarihi).toLocaleDateString('tr-TR') : '-');
+        drawRow('Kan Grubu', p.kan_grubu);
+        drawRow('Telefon', p.telefon);
+        drawRow('E-Posta', p.email);
+        // Adres uzun olabilir, tek satıra sığmazsa diye biraz boşluk bırakalım
+        drawRow('Adres', p.adres ? p.adres.substring(0, 45) : '-'); 
+        
+        y += 10; // Boşluk
+
+        // BÖLÜM 2: KURUMSAL BİLGİLER
+        doc.fillColor('#cc0000').fontSize(11).text('KURUMSAL BİLGİLER', labelX, y - 5);
+        y += 10;
+
+        drawRow('Birim', p.birim_adi);
+        drawRow('Hareket Merkezi', p.hareket_merkezi);
+        drawRow('Görevi', p.gorev);
+        drawRow('Kadro Tipi', p.kadro_tipi);
+        drawRow('Sistem Rolü', p.rol_adi ? p.rol_adi.toUpperCase() : '-');
+        drawRow('İşe Giriş Tarihi', p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-');
+        drawRow('ASİS Kart No', p.asis_kart_no);
+        drawRow('Çalışma Durumu', p.calisma_durumu);
+
+        y += 10;
+
+        // BÖLÜM 3: EHLİYET VE BELGELER
+        // Artık fotoğrafın altını geçtiğimiz için genişliği artırabiliriz
+        const fullWidth = 535;
+        
+        doc.fillColor('#cc0000').fontSize(11).text('EHLİYET VE BELGELER', labelX, y - 5);
+        y += 10;
+
+        // Yan yana bilgi göstermek için koordinatları manuel ayarlayalım
+        const col2X = 300;
+        
+        // Satır 1
+        doc.rect(labelX, y - 2, fullWidth, rowH).fillColor('#f0f0f0').fill();
+        doc.fillColor('#333').text('Ehliyet No:', labelX + 5, y + 4);
+        doc.fillColor('#000').text(p.ehliyet_no || '-', valueX, y + 4);
+        doc.fillColor('#333').text('Sınıfı:', col2X, y + 4);
+        doc.fillColor('#000').text(p.ehliyet_sinifi || '-', col2X + 50, y + 4);
+        y += rowH;
+
+        // Satır 2
+        doc.rect(labelX, y - 2, fullWidth, rowH).fillColor('#fff').fill();
+        doc.fillColor('#333').text('SRC Belge No:', labelX + 5, y + 4);
+        doc.fillColor('#000').text(p.src_belge_no || '-', valueX, y + 4);
+        doc.fillColor('#333').text('Psikoteknik:', col2X, y + 4);
+        doc.fillColor('#000').text(p.psikoteknik_tarihi ? new Date(p.psikoteknik_tarihi).toLocaleDateString('tr-TR') : '-', col2X + 50, y + 4);
+        y += rowH;
+
+        y += 10;
+
+        // BÖLÜM 4: BEDEN BİLGİLERİ (KIYAFET)
+        doc.fillColor('#cc0000').fontSize(11).text('LOJİSTİK - BEDEN ÖLÇÜLERİ', labelX, y - 5);
+        y += 10;
+
+        // Kutu kutu beden bilgileri
+        const sizes = [
+            { l: 'Ayakkabı', v: p.ayakkabi_no },
+            { l: 'Tişört', v: p.tisort_beden },
+            { l: 'Gömlek', v: p.gomlek_beden },
+            { l: 'Mont', v: p.mont_beden },
+            { l: 'Süveter', v: p.suveter_beden },
+        ];
+
+        let xOffset = labelX;
+        sizes.forEach(s => {
+            doc.rect(xOffset, y, 90, 35).fillColor('#eef2f3').strokeColor('#ccc').fillAndStroke();
+            doc.fillColor('#666').fontSize(8).text(s.l, xOffset, y + 5, { width: 90, align: 'center' });
+            doc.fillColor('#000').fontSize(12).text(s.v || '-', xOffset, y + 18, { width: 90, align: 'center' });
+            xOffset += 100;
+        });
+        
+        y += 50;
+
+        // --- SAYFA 2: İZİN GEÇMİŞİ TABLOSU ---
+        // Eğer yer kaldıysa alta, kalmadıysa yeni sayfaya
+        if (y > 650) {
+            doc.addPage();
+            y = 50;
+        } else {
+            y += 20;
+        }
+
+        doc.fillColor('#000').fontSize(14).text('SON ONAYLANAN İZİN HAREKETLERİ', labelX, y);
+        doc.rect(labelX, y + 20, fullWidth, 2).fill('#333');
+        y += 30;
+
+        // Tablo Başlığı
+        doc.rect(labelX, y, fullWidth, 20).fillColor('#333').fill();
+        doc.fillColor('#fff').fontSize(9);
+        doc.text('İzin Türü', labelX + 10, y + 5);
+        doc.text('Başlangıç', labelX + 150, y + 5);
+        doc.text('Bitiş', labelX + 250, y + 5);
+        doc.text('Gün', labelX + 350, y + 5);
+        doc.text('Durum', labelX + 420, y + 5);
+        y += 20;
+
+        // Tablo Verileri
+        if (izinRes.rows.length > 0) {
+            izinRes.rows.forEach((izin, i) => {
+                const bg = i % 2 === 0 ? '#fff' : '#f9f9f9';
+                doc.rect(labelX, y, fullWidth, 20).fillColor(bg).fill();
+                doc.fillColor('#000');
+                
+                doc.text(izin.izin_turu, labelX + 10, y + 5);
+                doc.text(new Date(izin.baslangic_tarihi).toLocaleDateString('tr-TR'), labelX + 150, y + 5);
+                doc.text(new Date(izin.bitis_tarihi).toLocaleDateString('tr-TR'), labelX + 250, y + 5);
+                doc.text(izin.kac_gun + ' Gün', labelX + 350, y + 5);
+                doc.text('ONAYLI', labelX + 420, y + 5);
+                
+                y += 20;
+            });
+        } else {
+            doc.rect(labelX, y, fullWidth, 20).fillColor('#fff').fill();
+            doc.fillColor('#999').text('Kayıtlı izin geçmişi bulunmamaktadır.', labelX + 10, y + 5);
+        }
+
+        // Footer
+        const pageHeight = 841.89;
+        doc.fontSize(8).fillColor('#888').text('Mersin Büyükşehir Belediyesi - Bilgi İşlem Dairesi Başkanlığı © 2025', 30, pageHeight - 30, { align: 'center', width: 535 });
 
         doc.end();
-    } catch (err) { res.status(500).send('Hata'); }
+
+    } catch (err) {
+        console.error('PDF Hatası:', err);
+        res.status(500).send('PDF Oluşturulamadı');
+    }
 };
 
 // 5. DİĞER İŞLEMLER
