@@ -335,3 +335,46 @@ exports.getPersonelGecmis = async (req, res) => {
         res.json(result.rows);
     } catch(e) { res.status(500).send('Hata'); }
 };
+
+// 7. PERSONEL DETAYLI İZİN BİLGİSİ (Modal ve Rapor İçin)
+exports.getPersonelIzinDetay = async (req, res) => {
+    const { id } = req.params; // Personel ID
+    try {
+        // A. Personel Temel Bilgileri
+        const pRes = await pool.query(`
+            SELECT p.*, b.birim_adi, r.rol_adi 
+            FROM personellers p 
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id 
+            LEFT JOIN roller r ON p.rol_id = r.rol_id
+            WHERE p.personel_id = $1
+        `, [id]);
+
+        if (pRes.rows.length === 0) return res.status(404).json({ mesaj: 'Personel bulunamadı' });
+
+        // B. Manuel Girilen Geçmiş Yıl Bakiyeleri (Sıralı: En eskiden yeniye)
+        const gecmisRes = await pool.query(`
+            SELECT * FROM izin_gecmis_bakiyeler 
+            WHERE personel_id = $1 
+            ORDER BY yil ASC
+        `, [id]);
+
+        // C. Onaylanmış Yıllık İzin Talepleri (Eskiden yeniye)
+        // Hesaplama yapabilmek için tarih sırasına göre çekiyoruz
+        const izinRes = await pool.query(`
+            SELECT * FROM izin_talepleri 
+            WHERE personel_id = $1 
+            AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI')
+            ORDER BY baslangic_tarihi ASC
+        `, [id]);
+
+        res.json({
+            personel: pRes.rows[0],
+            gecmisBakiyeler: gecmisRes.rows,
+            izinler: izinRes.rows
+        });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ mesaj: 'Veri çekilemedi.' });
+    }
+};

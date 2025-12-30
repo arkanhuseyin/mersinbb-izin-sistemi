@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Download, AlertTriangle, Search, FileBarChart, CheckCircle } from 'lucide-react';
+import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, User, X, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
 
 export default function LeaveReports() {
@@ -8,7 +8,16 @@ export default function LeaveReports() {
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
 
+    // Modal ve Detay State'leri
+    const [secilenPersonel, setSecilenPersonel] = useState(null);
+    const [detayYukleniyor, setDetayYukleniyor] = useState(false);
+    const [personelDetay, setPersonelDetay] = useState(null);
+
     useEffect(() => {
+        verileriGetir();
+    }, []);
+
+    const verileriGetir = () => {
         const token = localStorage.getItem('token');
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { 
             headers: { Authorization: `Bearer ${token}` } 
@@ -21,26 +30,142 @@ export default function LeaveReports() {
             console.error(err);
             setYukleniyor(false);
         });
-    }, []);
+    };
 
-    // Excel İndirme
-    const exportExcel = () => {
+    // Personel Satırına Tıklanınca
+    const handlePersonelClick = async (personel) => {
+        setSecilenPersonel(personel);
+        setDetayYukleniyor(true);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/izin/personel-detay/${personel.personel_id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setPersonelDetay(res.data);
+        } catch (e) {
+            alert("Detaylar çekilemedi.");
+        }
+        setDetayYukleniyor(false);
+    };
+
+    // --- 🚀 AKILLI EXCEL RAPORU OLUŞTURMA (FIFO MANTIĞI) ---
+    const generateDetailExcel = () => {
+        if (!personelDetay) return;
+
+        const p = personelDetay.personel;
+        const gecmis = [...personelDetay.gecmisBakiyeler]; // Kopya al (mutate etmemek için)
+        const izinler = personelDetay.izinler;
+
+        // 1. Havuz Oluştur (Hangi yıldan ne kadar hak var?)
+        let izinHavuzu = [];
+        
+        // A. Geçmiş Yılları Ekle
+        gecmis.forEach(g => {
+            izinHavuzu.push({ yil: g.yil, hak: g.gun_sayisi, kalan: g.gun_sayisi });
+        });
+
+        // B. Bu Yılı Hesapla ve Ekle
+        const giris = new Date(p.ise_giris_tarihi);
+        const bugun = new Date();
+        const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
+        let buYilHak = 0;
+        if (kidemYili >= 1) {
+            if (kidemYili <= 5) buYilHak = 14;
+            else if (kidemYili < 15) buYilHak = 20;
+            else buYilHak = 26;
+        }
+        const buYil = new Date().getFullYear();
+        izinHavuzu.push({ yil: buYil, hak: buYilHak, kalan: buYilHak });
+
+        // 2. İzinleri Tek Tek Düş ve Açıklama Yaz
+        const islenenIzinler = izinler.map(izin => {
+            if (izin.izin_turu !== 'YILLIK İZİN') {
+                return { ...izin, dusumAciklamasi: 'Yıllık izin bakiyesinden düşülmez.' };
+            }
+
+            let dusulecekGun = izin.kac_gun;
+            let dusumKaydi = [];
+
+            // Havuzdaki en eski yıldan başlayarak düş
+            for (let h of izinHavuzu) {
+                if (dusulecekGun <= 0) break;
+                if (h.kalan > 0) {
+                    let alinan = Math.min(h.kalan, dusulecekGun);
+                    h.kalan -= alinan;
+                    dusulecekGun -= alinan;
+                    dusumKaydi.push(`${h.yil} yılı bakiyesinden ${alinan} gün`);
+                }
+            }
+
+            let sonucYazisi = dusumKaydi.length > 0 
+                ? `${dusumKaydi.join(', ')} kullanıldı.` 
+                : 'Yetersiz bakiye veya eksiye düşüldü.';
+            
+            return { ...izin, dusumAciklamasi: sonucYazisi };
+        });
+
+        // --- 3. EXCEL TASARIMI (AoA - Array of Arrays) ---
         const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(rapor.map(p => ({
-            "Ad Soyad": `${p.ad} ${p.soyad}`,
-            "TC No": p.tc_no,
-            "Birim": p.birim_adi,
-            "İşe Giriş": new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'),
-            "Devreden (Eski)": p.devreden_izin,
-            "Bu Yıl Hakediş": p.bu_yil_hakedis,
-            "Toplam Havuz": p.toplam_havuz,
-            "Kullanılan": p.kullanilan,
-            "Kalan İzin": p.kalan,
-            "Durum": p.uyari ? "KRİTİK (50+)" : "Normal"
-        })));
+        
+        // Kurumsal Başlık Yapısı
+        const wsData = [
+            ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - ULAŞIM DAİRESİ BAŞKANLIĞI"], // A1
+            ["PERSONEL DETAYLI İZİN HAREKET VE BAKİYE RAPORU"], // A2
+            [""], // Boşluk
+            ["PERSONEL BİLGİLERİ", "", "", ""], // Başlık
+            ["TC Kimlik No", p.tc_no, "Adı Soyadı", `${p.ad} ${p.soyad}`],
+            ["Sicil No", p.sicil_no || '-', "Birim", p.birim_adi],
+            ["İşe Giriş Tarihi", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), "Kadro", p.kadro_tipi],
+            [""], // Boşluk
+            ["İZİN HAKEDİŞ DURUMU (YILLARA GÖRE)", "", "", ""],
+            ["Yıl", "Hakediş Miktarı", "Kalan Bakiye", "Durum"]
+        ];
 
-        XLSX.utils.book_append_sheet(wb, ws, "İzin Raporu");
-        XLSX.writeFile(wb, `Izin_Raporu_${new Date().toISOString().split('T')[0]}.xlsx`);
+        // Havuz Durumunu Ekle
+        izinHavuzu.forEach(h => {
+            wsData.push([h.yil, `${h.hak} Gün`, `${h.kalan} Gün`, h.kalan === 0 ? "Tükendi" : "Mevcut"]);
+        });
+
+        wsData.push([""]); // Boşluk
+        wsData.push(["KULLANILAN İZİN GEÇMİŞİ VE DÜŞÜM DETAYLARI"]);
+        wsData.push(["İzin Türü", "Başlangıç", "Bitiş", "Gün", "Hakedişten Düşüm Açıklaması (Sistem Analizi)"]);
+
+        // İşlenmiş İzinleri Ekle
+        islenenIzinler.forEach(iz => {
+            wsData.push([
+                iz.izin_turu,
+                new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR'),
+                new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR'),
+                iz.kac_gun,
+                iz.dusumAciklamasi // Örn: "2023 yılı bakiyesinden 3 gün kullanıldı."
+            ]);
+        });
+        
+        wsData.push([""]);
+        wsData.push(["Not: Bu rapor sistem verilerine dayanarak otomatik oluşturulmuştur."]);
+
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+        // Sütun Genişlikleri (Görsel Düzen)
+        ws['!cols'] = [
+            { wch: 20 }, // A
+            { wch: 20 }, // B
+            { wch: 20 }, // C
+            { wch: 10 }, // D
+            { wch: 60 }  // E (Açıklama kısmı geniş olsun)
+        ];
+
+        // Hücre Birleştirme (Başlıklar için)
+        ws['!merges'] = [
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // Kurum Adı
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, // Rapor Adı
+            { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } }, // Personel Başlık
+            { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } }, // Havuz Başlık
+            { s: { r: 10 + izinHavuzu.length + 1, c: 0 }, e: { r: 10 + izinHavuzu.length + 1, c: 4 } } // İzin Geçmişi Başlık
+        ];
+
+        XLSX.utils.book_append_sheet(wb, ws, "Detaylı Rapor");
+        XLSX.writeFile(wb, `${p.ad}_${p.soyad}_Detayli_Izin_Raporu.xlsx`);
     };
 
     // Arama Filtresi
@@ -58,11 +183,8 @@ export default function LeaveReports() {
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
                         <FileBarChart size={28} className="text-primary"/> İzin Takip Raporu
                     </h2>
-                    <p className="text-muted m-0">Personel izin hakedişleri, devreden bakiyeler ve kalan gün durumları.</p>
+                    <p className="text-muted m-0">Personele tıklayarak detaylı geçmiş ve bakiye analizi yapabilirsiniz.</p>
                 </div>
-                <button className="btn btn-success fw-bold shadow-sm px-4" onClick={exportExcel}>
-                    <Download size={18} className="me-2"/> Excel Olarak İndir
-                </button>
             </div>
             
             <div className="card border-0 shadow-sm mb-4 rounded-4">
@@ -101,7 +223,7 @@ export default function LeaveReports() {
                                 {yukleniyor ? (
                                     <tr><td colSpan="9" className="text-center py-5">Yükleniyor...</td></tr>
                                 ) : filtered.map((p, i) => (
-                                    <tr key={i} className={p.uyari ? 'table-danger' : ''}>
+                                    <tr key={i} className={p.uyari ? 'table-danger cursor-pointer' : 'cursor-pointer'} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer'}}>
                                         <td className="ps-4">
                                             <div className="fw-bold text-dark">{p.ad} {p.soyad}</div>
                                             <small className="text-muted font-monospace">{p.tc_no}</small>
@@ -130,11 +252,7 @@ export default function LeaveReports() {
                                         <td className="text-end pe-4">
                                             {p.uyari ? (
                                                 <span className="badge bg-danger text-white px-3 py-2 rounded-pill">
-                                                    <AlertTriangle size={14} className="me-1"/> BİRİKEN (50+)
-                                                </span>
-                                            ) : p.kullanilan === 0 ? (
-                                                <span className="badge bg-warning text-dark px-3 py-2 rounded-pill">
-                                                    HİÇ KULLANMADI
+                                                    <AlertTriangle size={14} className="me-1"/> BİRİKEN
                                                 </span>
                                             ) : (
                                                 <span className="badge bg-success-subtle text-success px-3 py-2 rounded-pill">
@@ -144,14 +262,117 @@ export default function LeaveReports() {
                                         </td>
                                     </tr>
                                 ))}
-                                {!yukleniyor && filtered.length === 0 && (
-                                    <tr><td colSpan="9" className="text-center py-5 text-muted">Kayıt bulunamadı.</td></tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
+
+            {/* DETAY MODALI */}
+            {secilenPersonel && (
+                <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+                    <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                        <div className="modal-content shadow-lg border-0 rounded-4">
+                            <div className="modal-header bg-primary text-white">
+                                <h5 className="modal-title fw-bold d-flex align-items-center gap-2">
+                                    <User size={20}/> {secilenPersonel.ad} {secilenPersonel.soyad} - İzin Detayları
+                                </h5>
+                                <button className="btn-close btn-close-white" onClick={() => setSecilenPersonel(null)}></button>
+                            </div>
+                            <div className="modal-body bg-light">
+                                {detayYukleniyor ? (
+                                    <div className="text-center py-5"><div className="spinner-border text-primary"></div><p className="mt-2">Hesaplamalar yapılıyor...</p></div>
+                                ) : personelDetay && (
+                                    <div className="row g-4">
+                                        {/* Sol Taraf: Özet Kartları */}
+                                        <div className="col-md-4">
+                                            <div className="card border-0 shadow-sm mb-3">
+                                                <div className="card-body">
+                                                    <h6 className="text-muted small fw-bold mb-3">BAKİYE DURUMU</h6>
+                                                    <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                                        <span>Geçmişten Devreden:</span>
+                                                        <span className="fw-bold text-warning">+{secilenPersonel.devreden_izin}</span>
+                                                    </div>
+                                                    <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                                        <span>Bu Yıl Hakediş:</span>
+                                                        <span className="fw-bold text-info">+{secilenPersonel.bu_yil_hakedis}</span>
+                                                    </div>
+                                                    <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                                                        <span>Toplam Kullanılan:</span>
+                                                        <span className="fw-bold text-danger">-{secilenPersonel.kullanilan}</span>
+                                                    </div>
+                                                    <div className="alert alert-primary mb-0 text-center fw-bold fs-5">
+                                                        Net Kalan: {secilenPersonel.kalan} Gün
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Geçmiş Yıl Dökümü */}
+                                            <div className="card border-0 shadow-sm">
+                                                <div className="card-body">
+                                                    <h6 className="text-muted small fw-bold mb-3">GEÇMİŞ YIL KAYITLARI</h6>
+                                                    {personelDetay.gecmisBakiyeler.length > 0 ? (
+                                                        <ul className="list-group list-group-flush small">
+                                                            {personelDetay.gecmisBakiyeler.map((g, i) => (
+                                                                <li key={i} className="list-group-item d-flex justify-content-between px-0">
+                                                                    <span>{g.yil} Yılından:</span>
+                                                                    <strong>{g.gun_sayisi} Gün</strong>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    ) : (
+                                                        <p className="text-muted small">Geçmiş yıl kaydı bulunamadı.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Sağ Taraf: Hareket Listesi */}
+                                        <div className="col-md-8">
+                                            <div className="card border-0 shadow-sm h-100">
+                                                <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                                                    <h6 className="m-0 fw-bold text-primary">Onaylı İzin Hareketleri</h6>
+                                                    <button className="btn btn-sm btn-success fw-bold" onClick={generateDetailExcel}>
+                                                        <FileText size={16} className="me-2"/> Detaylı Rapor İndir (.xlsx)
+                                                    </button>
+                                                </div>
+                                                <div className="table-responsive">
+                                                    <table className="table table-hover align-middle mb-0 small">
+                                                        <thead className="table-light">
+                                                            <tr>
+                                                                <th>Tür</th>
+                                                                <th>Başlangıç</th>
+                                                                <th>Bitiş</th>
+                                                                <th>Gün</th>
+                                                                <th>Durum</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {personelDetay.izinler.length > 0 ? (
+                                                                personelDetay.izinler.map((iz, idx) => (
+                                                                    <tr key={idx}>
+                                                                        <td>{iz.izin_turu}</td>
+                                                                        <td>{new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR')}</td>
+                                                                        <td>{new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR')}</td>
+                                                                        <td className="fw-bold">{iz.kac_gun}</td>
+                                                                        <td><span className="badge bg-success">Onaylı</span></td>
+                                                                    </tr>
+                                                                ))
+                                                            ) : (
+                                                                <tr><td colSpan="5" className="text-center py-4 text-muted">Kayıt yok.</td></tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

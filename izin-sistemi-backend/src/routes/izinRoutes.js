@@ -95,6 +95,7 @@ router.get('/gecmis-bakiyeler/:id', auth, izinController.gecmisBakiyeleriGetir);
 router.delete('/gecmis-bakiye-sil/:id', auth, izinController.gecmisBakiyeSil);
 
 
+
 // ============================================================
 // 🛠️ YARDIMCI VE RAPORLAMA
 // ============================================================
@@ -133,5 +134,8 @@ router.get('/system-logs', auth, izinController.getSystemLogs);
 
 // 14. Islak İmza Durumu (Geldi / Gelmedi)
 router.post('/islak-imza-durumu', auth, izinController.islakImzaDurumu);
+
+// 15. Profil + Geçmiş Bakiyeler + İzin Talepleri
+router.get('/personel-detay/:id', auth, izinController.getPersonelIzinDetay);
 
 module.exports = router;
