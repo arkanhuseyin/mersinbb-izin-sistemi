@@ -25,38 +25,77 @@ const getYillikHakedis = (kidemYili) => {
     return 26;                         // 15 yıl ve üzeri
 };
 
-// 3. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM)
+// 3. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM - YENİ)
 const hesaplaBakiye = async (personel_id) => {
     // A. Personel bilgilerini çek
-    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personeller WHERE personel_id = $1", [personel_id]);
+    const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
     const giris = new Date(pRes.rows[0].ise_giris_tarihi || '2024-01-01');
-    const devreden = parseInt(pRes.rows[0].devreden_izin) || 0; 
     const bugun = new Date();
     
-    // B. Kıdem (Çalışılan Yıl) Hesabı
+    // B. Manuel Eklenen Geçmiş Yılların Toplamını Çek
+    const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
+    const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis);
+
+    // C. Kıdem (Çalışılan Yıl) Hesabı
     const diffTime = Math.abs(bugun - giris);
     const kidemYili = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25)); 
     
-    // C. Bu Yıl Hakedişi
+    // D. Bu Yıl Hakedişi
     const buYilHakedis = getYillikHakedis(kidemYili);
 
-    // D. Bu Yıl Kullanılan (Onaylı) İzinler
+    // E. Bu Yıl Kullanılan (Onaylı) İzinler
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
         WHERE personel_id = $1 
         AND izin_turu = 'YILLIK İZİN' 
         AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
-        AND baslangic_tarihi >= date_trunc('year', CURRENT_DATE)
-    `, [personel_id]);
+    `, [personel_id]); // Not: Artık tüm zamanların kullanılanını düşüyoruz çünkü devredenToplam kümülatif geliyor.
 
-    const usedThisYear = parseInt(uRes.rows[0].used);
+    const toplamKullanilan = parseInt(uRes.rows[0].used);
     
-    // E. Sonuç: (Devreden + Bu Yıl Hakediş) - Kullanılan
-    const totalBalance = (devreden + buYilHakedis) - usedThisYear;
+    // F. Sonuç: (Manuel Geçmişler + Bu Yıl Hakediş) - (Toplam Kullanılan)
+    const totalBalance = (devredenToplam + buYilHakedis) - toplamKullanilan;
     return totalBalance;
+};
+
+// ============================================================
+// 🚀 GEÇMİŞ BAKİYE YÖNETİMİ (YENİ EKLENENLER)
+// ============================================================
+
+// A. Geçmiş Bakiye Ekle
+exports.gecmisBakiyeEkle = async (req, res) => {
+    const { personel_id, yil, gun_sayisi } = req.body;
+    try {
+        await pool.query(
+            "INSERT INTO izin_gecmis_bakiyeler (personel_id, yil, gun_sayisi) VALUES ($1, $2, $3)",
+            [personel_id, yil, gun_sayisi]
+        );
+        res.json({ mesaj: 'Geçmiş bakiye başarıyla eklendi.' });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ mesaj: 'Hata oluştu.' });
+    }
+};
+
+// B. Geçmiş Bakiyeleri Listele
+exports.gecmisBakiyeleriGetir = async (req, res) => {
+    const { id } = req.params;
+    try {
+        const result = await pool.query("SELECT * FROM izin_gecmis_bakiyeler WHERE personel_id = $1 ORDER BY yil ASC", [id]);
+        res.json(result.rows);
+    } catch (e) { res.status(500).json({ mesaj: 'Hata.' }); }
+};
+
+// C. Geçmiş Bakiye Sil
+exports.gecmisBakiyeSil = async (req, res) => {
+    const { id } = req.params;
+    try {
+        await pool.query("DELETE FROM izin_gecmis_bakiyeler WHERE id = $1", [id]);
+        res.json({ mesaj: 'Silindi.' });
+    } catch (e) { res.status(500).json({ mesaj: 'Hata.' }); }
 };
 
 // ============================================================
@@ -74,7 +113,7 @@ exports.talepOlustur = async (req, res) => {
     const personel_id = req.user.id; 
     
     // Rol ve Görev Bilgisi
-    const pRes = await pool.query("SELECT rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
+    const pRes = await pool.query("SELECT rol_id, gorev FROM personellers WHERE personel_id = $1", [personel_id]);
     const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [pRes.rows[0].rol_id]);
     
     const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
@@ -211,7 +250,7 @@ exports.talepOnayla = async (req, res) => {
     } finally { client.release(); }
 };
 
-// 4. RAPORLAMA (GÜNCELLENEN KISIM)
+// 4. RAPORLAMA (GÜNCELLENDİ: Yeni Hesaplama Motoruyla)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
 
@@ -233,42 +272,30 @@ exports.izinDurumRaporu = async (req, res) => {
         
         const result = await pool.query(query);
         const rapor = await Promise.all(result.rows.map(async (p) => {
-            const giris = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi) : new Date('2024-01-01');
-            const bugun = new Date();
+            const netKalan = await hesaplaBakiye(p.personel_id);
             
-            // Kıdem Hesabı (Güncel)
-            const diffTime = Math.abs(bugun - giris);
-            const workedYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25));
-            
-            // Hakediş Hesabı (Standart Fonksiyon)
-            const buYilHakedis = getYillikHakedis(workedYears);
+            const giris = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi) : new Date();
+            const kidem = Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
+            const buYilHak = getYillikHakedis(kidem);
 
-            const devreden = parseInt(p.devreden_izin) || 0;
-            const kullanilan = parseInt(p.bu_yil_kullanilan) || 0;
-            
-            // Toplam Havuz
-            const toplamHavuz = devreden + buYilHakedis;
-            
-            // Kalan
-            const kalanNet = toplamHavuz - kullanilan;
+            // Rapor tablosunda "Devreden" sütununda görünmesi için geçmiş toplamı çek
+            const gRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as top FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [p.personel_id]);
+            const devreden = parseInt(gRes.rows[0].top);
 
             return { 
                 ...p, 
-                devreden_izin: devreden, 
-                bu_yil_hakedis: buYilHakedis, 
-                toplam_havuz: toplamHavuz, 
-                kullanilan: kullanilan, 
-                kalan: kalanNet, 
-                uyari: kalanNet > 40 
+                devreden_izin: devreden, // Veritabanındaki eski sütun yerine artık toplam geçmiş geliyor
+                bu_yil_hakedis: buYilHak, 
+                kalan: netKalan, 
+                uyari: netKalan > 40 
             };
         }));
         res.json(rapor);
     } catch (err) { res.status(500).send('Rapor hatası'); }
 };
 
-// 5. ISLAK İMZA
+// 5. ISLAK İMZA DURUMU
 exports.islakImzaDurumu = async (req, res) => {
-    // ... (Mevcut kod aynı)
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     const { talep_id, durum } = req.body; 
     try {

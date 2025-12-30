@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const izinController = require('../controllers/izinController');
-const pdfController = require('../controllers/pdfController'); // PDF Motoru
+const pdfController = require('../controllers/pdfController'); // PDF Motoru (Varsa)
 const auth = require('../middleware/auth'); // Güvenlik
 const pool = require('../config/db'); 
 const multer = require('multer');
@@ -82,14 +82,31 @@ router.delete('/iptal/:id', auth, async (req, res) => {
 
 
 // ============================================================
+// 🟢 GEÇMİŞ BAKİYE YÖNETİMİ (YENİ EKLENEN KISIM)
+// ============================================================
+
+// 5. Geçmiş Bakiye Ekle (Manuel Giriş)
+router.post('/gecmis-bakiye-ekle', auth, izinController.gecmisBakiyeEkle);
+
+// 6. Geçmiş Bakiyeleri Listele
+router.get('/gecmis-bakiyeler/:id', auth, izinController.gecmisBakiyeleriGetir);
+
+// 7. Geçmiş Bakiye Sil
+router.delete('/gecmis-bakiye-sil/:id', auth, izinController.gecmisBakiyeSil);
+
+
+// ============================================================
 // 🛠️ YARDIMCI VE RAPORLAMA
 // ============================================================
 
-// 5. PDF İNDİRME (Form 1 / Form 2)
+// 8. PDF İNDİRME (Form 1 / Form 2)
 // :form_tipi -> form1 veya form2
-router.get('/pdf/:form_tipi/:talep_id', pdfController.pdfOlustur);
+// Eğer pdfController tanımlıysa kullan, yoksa hata vermemesi için kontrol et veya yorum satırı yap.
+if (pdfController && pdfController.pdfOlustur) {
+    router.get('/pdf/:form_tipi/:talep_id', pdfController.pdfOlustur);
+}
 
-// 6. Bildirimleri Listele
+// 9. Bildirimleri Listele
 router.get('/bildirim/listele', auth, async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM bildirimler WHERE personel_id = $1 ORDER BY tarih DESC', [req.user.id]);
@@ -97,7 +114,7 @@ router.get('/bildirim/listele', auth, async (req, res) => {
     } catch (err) { res.status(500).send('Hata'); }
 });
 
-// 7. Resmi Tatilleri Getir
+// 10. Resmi Tatilleri Getir
 router.get('/resmi-tatiller', auth, async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM resmi_tatiller');
@@ -105,16 +122,16 @@ router.get('/resmi-tatiller', auth, async (req, res) => {
     } catch (err) { res.status(500).send('Hata'); }
 });
 
-// 8. Yıllık İzin Durum Raporu (Admin/İK İçin Excel Verisi)
+// 11. Yıllık İzin Durum Raporu (Admin/İK İçin Excel Verisi)
 router.get('/rapor/durum', auth, izinController.izinDurumRaporu);
 
-// 9. İzin Hareketlerini Getir (Timeline)
+// 12. İzin Hareketlerini Getir (Timeline)
 router.get('/timeline/:talep_id', auth, izinController.getTimeline);
 
-// 10. Sistem Loglarını Getir (Admin)
+// 13. Sistem Loglarını Getir (Admin)
 router.get('/system-logs', auth, izinController.getSystemLogs);
 
-// 11. Islak İmza Durumu (Geldi / Gelmedi)
+// 14. Islak İmza Durumu (Geldi / Gelmedi)
 router.post('/islak-imza-durumu', auth, izinController.islakImzaDurumu);
 
 module.exports = router;
