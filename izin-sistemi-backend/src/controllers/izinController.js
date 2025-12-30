@@ -343,7 +343,7 @@ exports.getPersonelIzinDetay = async (req, res) => {
         // A. Personel Temel Bilgileri
         const pRes = await pool.query(`
             SELECT p.*, b.birim_adi, r.rol_adi 
-            FROM personellers p 
+            FROM personeller p 
             LEFT JOIN birimler b ON p.birim_id = b.birim_id 
             LEFT JOIN roller r ON p.rol_id = r.rol_id
             WHERE p.personel_id = $1
