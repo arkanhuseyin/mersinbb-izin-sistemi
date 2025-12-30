@@ -17,9 +17,9 @@ exports.pdfOlustur = async (req, res) => {
     const query = req.query || {};
 
     try {
-        // 1. Verileri Çek
+        // 1. Verileri Çek (GÜNCELLENDİ: p.ise_giris_tarihi eklendi)
         const result = await pool.query(`
-            SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.adres, p.telefon, b.birim_adi
+            SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.adres, p.telefon, p.ise_giris_tarihi, b.birim_adi
             FROM izin_talepleri t
             JOIN personeller p ON t.personel_id = p.personel_id
             LEFT JOIN birimler b ON p.birim_id = b.birim_id
@@ -119,7 +119,7 @@ exports.pdfOlustur = async (req, res) => {
                     <div class="section-title">II. İZİN TALEP BEYANI</div>
                     <table>
                         <tr>
-                            <td colspan="2" class="label">İşe Giriş Tarihi: -</td>
+                            <td colspan="2" class="label">İşe Giriş Tarihi: ${fmt(veri.ise_giris_tarihi)}</td>
                             <td colspan="2" class="center bold" style="height:50px; vertical-align:bottom;">
                                 İMZA<br>${personelImza ? `<img src="${personelImza}" class="imza-img">` : ''}
                             </td>
@@ -135,7 +135,7 @@ exports.pdfOlustur = async (req, res) => {
                                         <td style="border:none">Mazeret [<span class="check-box">${isType('MAZERET İZNİ')}</span>]</td>
                                         <td style="border:none">Ücretsiz [<span class="check-box">${isType('ÜCRETSİZ İZİN')}</span>]</td>
                                     </tr>
-									<tr>
+                                    <tr>
                                         <td style="border:none">Rapor [<span class="check-box">${isType('RAPOR')}</span>]</td>
                                         <td style="border:none">Evlilik [<span class="check-box">${isType('EVLİLİK İZNİ')}</span>]</td>
                                         <td style="border:none">Ölüm [<span class="check-box">${isType('ÖLÜM İZNİ')}</span>]</td>
@@ -173,7 +173,7 @@ exports.pdfOlustur = async (req, res) => {
             </html>`;
 
         } else {
-            // ================= FORM 2 (İK - ISLAK İMZA - SENİN İSTEDİĞİN TASARIM) =================
+            // ================= FORM 2 (İK - ISLAK İMZA - DÜZELTİLDİ: İşe Giriş Tarihi) =================
             htmlContent = `
             <html>
             <head>
@@ -222,7 +222,7 @@ exports.pdfOlustur = async (req, res) => {
                     <table class="f2-table">
                         <tr><td class="f2-label">ADI SOYADI</td><td class="f2-val">: ${veri.ad} ${veri.soyad}</td></tr>
                         <tr><td class="f2-label">T.C. NO</td><td class="f2-val">: ${veri.tc_no}</td></tr>
-                        <tr><td class="f2-label">İŞE GİRİŞ TARİHİ</td><td class="f2-val">: -</td></tr>
+                        <tr><td class="f2-label">İŞE GİRİŞ TARİHİ</td><td class="f2-val">: ${fmt(veri.ise_giris_tarihi)}</td></tr>
                         <tr><td class="f2-label">POZİSYONU</td><td class="f2-val">: ŞOFÖR / İŞÇİ</td></tr>
                         <tr><td class="f2-label">FİİLEN YAPTIĞI GÖREV</td><td class="f2-val">: ŞOFÖR</td></tr>
                         <tr><td class="f2-label">BAĞLI OLDUĞU BİRİM</td><td class="f2-val">: ${veri.birim_adi}</td></tr>
