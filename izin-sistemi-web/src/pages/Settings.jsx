@@ -4,6 +4,34 @@ import {
     User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History
 } from 'lucide-react';
 
+// ============================================================
+// 📋 HAKEDİŞ MATRİSİ (FRONTEND TARAFI İÇİN)
+// ============================================================
+const HAKEDIS_MATRISI = {
+    // --- GRUP 1: 2007 - 2015 ARASI VE ÖNCESİ ---
+    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
+    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
+    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
+    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
+    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+
+    // --- GRUP 2: 2016 VE SONRASI ---
+    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2021": { 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2022": { 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2023": { 2023: 25, 2024: 27, 2025: 27 },
+    "2024": { 2024: 27, 2025: 27 },
+    "2025": { 2025: 27 }
+};
+
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('profile');
     const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } });
@@ -92,6 +120,7 @@ export default function Settings() {
         setFormData({ ...formData, gorev: secilenGorev, rol: onerilenRol });
     };
 
+    // --- 🟢 GÜNCELLENEN HESAPLAMA MANTIĞI ---
     useEffect(() => {
         if (formData.ise_giris_tarihi) {
             const giris = new Date(formData.ise_giris_tarihi);
@@ -100,12 +129,23 @@ export default function Settings() {
             const yil = Math.floor(fark / (1000 * 60 * 60 * 24 * 365.25));
             setKidemYili(yil < 0 ? 0 : yil);
 
+            // --- YENİ MATRİS SİSTEMİ İLE HAKEDİŞ ---
+            const girisYili = giris.getFullYear();
+            const buYil = bugun.getFullYear();
+            let arananGirisYili = girisYili;
+            if (girisYili < 2007) arananGirisYili = 2007;
+
             let toplamHak = 0;
-            if (yil >= 1) {
-                for (let i = 1; i <= yil; i++) {
-                    if (i <= 5) toplamHak += 14;
-                    else if (i < 15) toplamHak += 20;
-                    else toplamHak += 26;
+
+            // 1. Tabloda var mı kontrol et
+            if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
+                toplamHak = HAKEDIS_MATRISI[arananGirisYili][buYil];
+            } else {
+                // 2. Yoksa Eski Sistem (Yedek)
+                if (yil >= 1) {
+                    if (yil <= 5) toplamHak = 14;
+                    else if (yil < 15) toplamHak = 20;
+                    else toplamHak = 26;
                 }
             }
             setIzinHakki(toplamHak);

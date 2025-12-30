@@ -3,6 +3,34 @@ import axios from 'axios';
 import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, User, X, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
 
+// ============================================================
+// 📋 HAKEDİŞ MATRİSİ (FRONTEND TARAFI İÇİN - Rapor Hesaplaması)
+// ============================================================
+const HAKEDIS_MATRISI = {
+    // --- GRUP 1: 2007 - 2015 ARASI VE ÖNCESİ ---
+    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
+    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
+    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
+    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
+    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+
+    // --- GRUP 2: 2016 VE SONRASI ---
+    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2021": { 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2022": { 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2023": { 2023: 25, 2024: 27, 2025: 27 },
+    "2024": { 2024: 27, 2025: 27 },
+    "2025": { 2025: 27 }
+};
+
 export default function LeaveReports() {
     const [rapor, setRapor] = useState([]);
     const [arama, setArama] = useState('');
@@ -49,6 +77,7 @@ export default function LeaveReports() {
     };
 
     // --- 🚀 AKILLI EXCEL RAPORU OLUŞTURMA (TEK KİŞİ - FIFO MANTIĞI) ---
+    // (Burası sadece döküm almak için, hesaplamayı zaten Backend yaptı, buradaki sadece liste oluşturuyor)
     const generateDetailExcel = () => {
         if (!personelDetay) return;
 
@@ -65,13 +94,24 @@ export default function LeaveReports() {
         const giris = new Date(p.ise_giris_tarihi);
         const bugun = new Date();
         const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
+        
+        // --- BURADA DA TABLO MANTIĞINA GEÇELİM (Tutarlılık İçin) ---
+        const girisYili = giris.getFullYear();
+        const buYil = bugun.getFullYear();
+        let arananGirisYili = girisYili;
+        if (girisYili < 2007) arananGirisYili = 2007;
+
         let buYilHak = 0;
-        if (kidemYili >= 1) {
-            if (kidemYili <= 5) buYilHak = 14;
-            else if (kidemYili < 15) buYilHak = 20;
-            else buYilHak = 26;
+        if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
+            buYilHak = HAKEDIS_MATRISI[arananGirisYili][buYil];
+        } else {
+            if (kidemYili >= 1) {
+                if (kidemYili <= 5) buYilHak = 14;
+                else if (kidemYili < 15) buYilHak = 20;
+                else buYilHak = 26;
+            }
         }
-        const buYil = new Date().getFullYear();
+
         izinHavuzu.push({ yil: buYil, hak: buYilHak, kalan: buYilHak });
 
         // 2. İzinleri Düş
@@ -150,7 +190,7 @@ export default function LeaveReports() {
         XLSX.writeFile(wb, `${p.ad}_${p.soyad}_Detayli_Izin_Raporu.xlsx`);
     };
 
-    // --- 🌍 TOPLU EXCEL RAPORU (TÜM PERSONEL - YENİ EKLENDİ) ---
+    // --- 🌍 TOPLU EXCEL RAPORU (TÜM PERSONEL - GÜNCELLENMİŞ HESAPLAMA) ---
     const downloadBulkExcel = async () => {
         const confirm = window.confirm("Tüm aktif personelin detaylı raporu oluşturulacak. Bu işlem birkaç saniye sürebilir. Onaylıyor musunuz?");
         if (!confirm) return;
@@ -191,11 +231,22 @@ export default function LeaveReports() {
                 const bugun = new Date();
                 const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
                 
+                // --- MATRİS HESAPLAMA (YENİ SİSTEM) ---
+                const girisYili = giris.getFullYear();
+                const buYil = bugun.getFullYear();
+                let arananGirisYili = girisYili;
+                if (girisYili < 2007) arananGirisYili = 2007;
+
                 let buYilHak = 0;
-                if (kidemYili >= 1) {
-                    if (kidemYili <= 5) buYilHak = 14;
-                    else if (kidemYili < 15) buYilHak = 20;
-                    else buYilHak = 26;
+                if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
+                    buYilHak = HAKEDIS_MATRISI[arananGirisYili][buYil];
+                } else {
+                    // Tabloda yoksa standart hesap
+                    if (kidemYili >= 1) {
+                        if (kidemYili <= 5) buYilHak = 14;
+                        else if (kidemYili < 15) buYilHak = 20;
+                        else buYilHak = 26;
+                    }
                 }
 
                 const toplamHavuz = toplamGecmis + buYilHak;
