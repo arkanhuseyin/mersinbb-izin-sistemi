@@ -199,7 +199,7 @@ exports.personelKartiPdf = async (req, res) => {
         // 1. Personel Detaylı Bilgisi
         const pRes = await client.query(`
             SELECT p.*, b.birim_adi, r.rol_adi 
-            FROM personellers p 
+            FROM personeller p 
             LEFT JOIN birimler b ON p.birim_id = b.birim_id 
             LEFT JOIN roller r ON p.rol_id = r.rol_id
             WHERE p.personel_id = $1
