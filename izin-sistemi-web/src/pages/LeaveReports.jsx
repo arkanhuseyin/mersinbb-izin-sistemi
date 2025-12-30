@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, Info } from 'lucide-react';
+import { Download, AlertTriangle, Search, FileBarChart, CheckCircle } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
 
 export default function LeaveReports() {
@@ -23,18 +23,17 @@ export default function LeaveReports() {
         });
     }, []);
 
-    // --- GÜNCELLENMİŞ EXCEL İNDİRME FONKSİYONU ---
+    // Excel İndirme
     const exportExcel = () => {
         const wb = XLSX.utils.book_new();
-        // Yeni backend verilerine göre sütunları ayırdık
         const ws = XLSX.utils.json_to_sheet(rapor.map(p => ({
             "Ad Soyad": `${p.ad} ${p.soyad}`,
             "TC No": p.tc_no,
             "Birim": p.birim_adi,
             "İşe Giriş": new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'),
-            "Devreden (Eski)": p.devreden_izin,   // YENİ
-            "Bu Yıl Hakediş": p.bu_yil_hakedis,   // YENİ
-            "Toplam Havuz": p.toplam_havuz,       // YENİ
+            "Devreden (Eski)": p.devreden_izin,
+            "Bu Yıl Hakediş": p.bu_yil_hakedis,
+            "Toplam Havuz": p.toplam_havuz,
             "Kullanılan": p.kullanilan,
             "Kalan İzin": p.kalan,
             "Durum": p.uyari ? "KRİTİK (40+)" : "Normal"
@@ -90,7 +89,6 @@ export default function LeaveReports() {
                                     <th className="ps-4 py-3">Personel</th>
                                     <th>Birim</th>
                                     <th>İşe Giriş</th>
-                                    {/* YENİ SÜTUNLAR */}
                                     <th className="text-center bg-warning-subtle text-warning-emphasis">Devreden</th>
                                     <th className="text-center bg-info-subtle text-info-emphasis">Bu Yıl</th>
                                     <th className="text-center fw-bold">Toplam Havuz</th>
@@ -111,7 +109,6 @@ export default function LeaveReports() {
                                         <td><span className="badge bg-light text-dark border fw-normal">{p.birim_adi}</span></td>
                                         <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                         
-                                        {/* YENİ VERİLER */}
                                         <td className="text-center bg-warning-subtle text-dark font-monospace">
                                             {p.devreden_izin > 0 ? `+${p.devreden_izin}` : '-'}
                                         </td>

@@ -16,31 +16,33 @@ const tarihFormatla = (tarihStr) => {
     return tarihStr;
 };
 
-// 2. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM)
+// 2. Yıllık İzin Hakediş Hesaplama (STANDART KURALLAR)
+// 1-5 Yıl: 14 Gün | 6-14 Yıl: 20 Gün | 15 Yıl ve Üzeri: 26 Gün
+const getYillikHakedis = (kidemYili) => {
+    if (kidemYili < 1) return 0;       // 1 yıldan az
+    if (kidemYili <= 5) return 14;     // 1-5 yıl arası
+    if (kidemYili < 15) return 20;     // 6-14 yıl arası
+    return 26;                         // 15 yıl ve üzeri
+};
+
+// 3. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM)
 const hesaplaBakiye = async (personel_id) => {
-    // Personelin giriş tarihini ve devreden iznini çek
-    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personeller WHERE personel_id = $1", [personel_id]);
+    // A. Personel bilgilerini çek
+    const pRes = await pool.query("SELECT ise_giris_tarihi, devreden_izin FROM personellers WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
     const giris = new Date(pRes.rows[0].ise_giris_tarihi || '2024-01-01');
-    const devreden = pRes.rows[0].devreden_izin || 0; 
+    const devreden = parseInt(pRes.rows[0].devreden_izin) || 0; 
     const bugun = new Date();
     
-    // Kıdem Hesabı
-    const workedYears = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365));
-    const startYear = giris.getFullYear();
+    // B. Kıdem (Çalışılan Yıl) Hesabı
+    const diffTime = Math.abs(bugun - giris);
+    const kidemYili = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25)); 
     
-    // Hakediş Hesabı (Mevzuat Kuralları)
-    let buYilHakedis = 0;
-    if (startYear < 2018) {
-        if (workedYears < 1) buYilHakedis = 0; else if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25;
-    } else if (startYear < 2024) {
-        if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2019) { if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25; } else { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; }
-    } else { 
-        if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2025) { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; } else { if (workedYears <= 3) buYilHakedis = 18; else if (workedYears <= 5) buYilHakedis = 20; else if (workedYears <= 15) buYilHakedis = 27; else buYilHakedis = 32; }
-    }
+    // C. Bu Yıl Hakedişi
+    const buYilHakedis = getYillikHakedis(kidemYili);
 
-    // Bu Yıl Kullanılan İzinleri Çek
+    // D. Bu Yıl Kullanılan (Onaylı) İzinler
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -52,17 +54,16 @@ const hesaplaBakiye = async (personel_id) => {
 
     const usedThisYear = parseInt(uRes.rows[0].used);
     
-    // Toplam Bakiye = (Devreden + Hakediş) - Kullanılan
-    const totalBalance = devreden + buYilHakedis;
-    return totalBalance - usedThisYear;
+    // E. Sonuç: (Devreden + Bu Yıl Hakediş) - Kullanılan
+    const totalBalance = (devreden + buYilHakedis) - usedThisYear;
+    return totalBalance;
 };
-
 
 // ============================================================
 // 🚀 TEMEL İŞLEVLER
 // ============================================================
 
-// 1. YENİ İZİN TALEBİ OLUŞTUR (Hiyerarşik Onay Mantığı)
+// 1. YENİ İZİN TALEBİ OLUŞTUR
 exports.talepOlustur = async (req, res) => {
     let { 
         baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, 
@@ -72,8 +73,8 @@ exports.talepOlustur = async (req, res) => {
     const belge_yolu = req.file ? req.file.path : null;
     const personel_id = req.user.id; 
     
-    // Kullanıcı bilgilerini taze çek
-    const pRes = await pool.query("SELECT rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
+    // Rol ve Görev Bilgisi
+    const pRes = await pool.query("SELECT rol_id, gorev FROM personellers WHERE personel_id = $1", [personel_id]);
     const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [pRes.rows[0].rol_id]);
     
     const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
@@ -94,22 +95,16 @@ exports.talepOlustur = async (req, res) => {
         bitis_tarihi = tarihFormatla(bitis_tarihi);
         ise_baslama = tarihFormatla(ise_baslama);
 
-        // --- HİYERARŞİK ONAY BAŞLANGIÇ DURUMU ---
-        
-        let baslangicDurumu = 'ONAY_BEKLIYOR'; // Varsayılan: En alt kademe (Amir onayı bekler)
+        // --- ONAY MEKANİZMASI ---
+        let baslangicDurumu = 'ONAY_BEKLIYOR'; 
 
-        // 1. SENARYO: Saha Amirleri (Baş Şoför vb.) -> Yazıcıya düşer
         if (userRole === 'amir') {
             baslangicDurumu = 'AMIR_ONAYLADI';
-        }
-        
-        // 2. SENARYO: Yazıcılar -> İK'ya düşer
-        else if (userRole === 'yazici') {
+        } else if (userRole === 'yazici') {
             baslangicDurumu = 'YAZICI_ONAYLADI';
         }
 
-        // 3. SENARYO: Ofis, Teknik, Şef, Müdür -> Direkt İK'ya düşer
-        // Bu kişiler operasyonel amire (Baş Şoför) bağlı değildir.
+        // Ofis ve Üst Düzey Personel (Direkt İK)
         const ofisGorevleri = [
             'Memur', 'Büro Personeli', 'Genel Evrak', 'Muhasebe', 'Bilgisayar Mühendisi', 
             'Makine Mühendisi', 'Ulaştırma Mühendisi', 'Bilgisayar Teknikeri', 'Harita Teknikeri', 
@@ -121,10 +116,9 @@ exports.talepOlustur = async (req, res) => {
         ];
         
         if (ofisGorevleri.some(g => userGorev.includes(g)) || userGorev.includes('Şef') || userGorev.includes('Şube Müdürü')) {
-            baslangicDurumu = 'YAZICI_ONAYLADI'; // 'YAZICI_ONAYLADI' statüsü, sistemde "Sıra İK'da" demektir.
+            baslangicDurumu = 'YAZICI_ONAYLADI'; 
         }
-
-        // 4. SENARYO: İK Personeli -> Kendi havuzuna düşer
+        
         if (userRole === 'ik') {
             baslangicDurumu = 'YAZICI_ONAYLADI';
         }
@@ -157,15 +151,12 @@ exports.izinleriGetir = async (req, res) => {
         let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.gorev FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
         let params = [];
 
-        // Rol bazlı filtreleme
         if (['admin', 'ik', 'filo'].includes(req.user.rol)) { 
             // Hepsini gör
         } else if (['amir', 'yazici'].includes(req.user.rol)) {
-            // Sadece kendi birimindekileri gör
             query += ` WHERE p.birim_id = $1`;
             params.push(req.user.birim);
         } else {
-            // Sadece kendini gör
             query += ` WHERE t.personel_id = $1`;
             params.push(req.user.id);
         }
@@ -176,7 +167,7 @@ exports.izinleriGetir = async (req, res) => {
     } catch (err) { res.status(500).json({ mesaj: 'Veri çekilemedi' }); }
 };
 
-// 3. TALEBİ ONAYLA / REDDET
+// 3. TALEBİ ONAYLA
 exports.talepOnayla = async (req, res) => {
     const { talep_id, imza_data, yeni_durum } = req.body;
     const onaylayan_id = req.user.id;
@@ -191,28 +182,24 @@ exports.talepOnayla = async (req, res) => {
 
         await client.query(`UPDATE izin_talepleri SET durum = $1 WHERE talep_id = $2`, [yeni_durum, talep_id]);
 
-        let islemBaslik = '';
-        let aciklama = '';
-        if (yeni_durum === 'AMIR_ONAYLADI') { islemBaslik = 'AMİR ONAYI'; aciklama = 'Amir tarafından onaylandı.'; }
-        else if (yeni_durum === 'YAZICI_ONAYLADI') { islemBaslik = 'YAZICI ONAYI'; aciklama = 'Yazıcı tarafından onaylandı edildi.'; }
-        else if (yeni_durum === 'IK_ONAYLADI') { islemBaslik = 'İK ONAYI'; aciklama = 'İK tarafından onaylandı (Süreç Tamamlandı).'; }
-        else if (yeni_durum === 'REDDEDILDI') { islemBaslik = 'RED'; aciklama = 'Talep reddedildi.'; }
+        // Hareket Kaydı
+        let islemBaslik = 'İŞLEM';
+        if (yeni_durum === 'AMIR_ONAYLADI') islemBaslik = 'AMİR ONAYI';
+        else if (yeni_durum === 'YAZICI_ONAYLADI') islemBaslik = 'YAZICI ONAYI';
+        else if (yeni_durum === 'IK_ONAYLADI') islemBaslik = 'İK ONAYI';
+        else if (yeni_durum === 'REDDEDILDI') islemBaslik = 'RED';
 
-        await hareketKaydet(talep_id, onaylayan_id, islemBaslik, aciklama);
+        await hareketKaydet(talep_id, onaylayan_id, islemBaslik, `Durum: ${yeni_durum}`);
         await logKaydet(onaylayan_id, 'İZİN_İŞLEMİ', `Talep ${talep_id} durumu: ${yeni_durum}`, req);
 
         // Bildirim
         if (yeni_durum === 'IK_ONAYLADI') {
-            const talepSonuc = await client.query('SELECT t.personel_id, t.baslangic_tarihi, p.ad, p.soyad FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE t.talep_id = $1', [talep_id]);
-            const pid = talepSonuc.rows[0].personel_id;
-            const adSoyad = `${talepSonuc.rows[0].ad} ${talepSonuc.rows[0].soyad}`;
-            const tarih = new Date(talepSonuc.rows[0].baslangic_tarihi).toLocaleDateString('tr-TR');
-            const ozelMesaj = `Sayın ${adSoyad}, ${tarih} tarihli izniniz onaylanmıştır. İzninizden 1 gün önce İK'ya gelip ıslak imza atmanız gerekmektedir.`;
-            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [pid, '🚨 Onay ve Islak İmza Çağrısı', ozelMesaj]);
+            const tRes = await client.query('SELECT personel_id FROM izin_talepleri WHERE talep_id = $1', [talep_id]);
+            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [tRes.rows[0].personel_id, '🚨 Onaylandı', 'Islak imza için İK\'ya geliniz.']);
         }
         else if (yeni_durum === 'REDDEDILDI') {
             const tRes = await client.query('SELECT personel_id FROM izin_talepleri WHERE talep_id = $1', [talep_id]);
-            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [tRes.rows[0].personel_id, '❌ İzin Reddedildi', 'İzin talebiniz reddedilmiştir.']);
+            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [tRes.rows[0].personel_id, '❌ Reddedildi', 'İzin talebiniz reddedildi.']);
         }
 
         await client.query('COMMIT');
@@ -224,7 +211,7 @@ exports.talepOnayla = async (req, res) => {
     } finally { client.release(); }
 };
 
-// 4. RAPORLAMA
+// 4. RAPORLAMA (GÜNCELLENEN KISIM)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
 
@@ -248,30 +235,40 @@ exports.izinDurumRaporu = async (req, res) => {
         const rapor = await Promise.all(result.rows.map(async (p) => {
             const giris = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi) : new Date('2024-01-01');
             const bugun = new Date();
-            const workedYears = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365));
-            const startYear = giris.getFullYear();
             
-            let buYilHakedis = 0;
-            // (Hakediş hesaplama mantığı aynı kalır)
-            if (startYear < 2018) {
-                if (workedYears < 1) buYilHakedis = 0; else if (workedYears <= 5) buYilHakedis = 14; else if (workedYears <= 15) buYilHakedis = 19; else buYilHakedis = 25;
-            } else { 
-                if (workedYears < 1) buYilHakedis = 0; else if (startYear < 2025) { if (workedYears <= 3) buYilHakedis = 16; else if (workedYears <= 5) buYilHakedis = 18; else if (workedYears <= 15) buYilHakedis = 25; else buYilHakedis = 30; } else { if (workedYears <= 3) buYilHakedis = 18; else if (workedYears <= 5) buYilHakedis = 20; else if (workedYears <= 15) buYilHakedis = 27; else buYilHakedis = 32; }
-            }
+            // Kıdem Hesabı (Güncel)
+            const diffTime = Math.abs(bugun - giris);
+            const workedYears = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25));
+            
+            // Hakediş Hesabı (Standart Fonksiyon)
+            const buYilHakedis = getYillikHakedis(workedYears);
 
             const devreden = parseInt(p.devreden_izin) || 0;
             const kullanilan = parseInt(p.bu_yil_kullanilan) || 0;
+            
+            // Toplam Havuz
             const toplamHavuz = devreden + buYilHakedis;
+            
+            // Kalan
             const kalanNet = toplamHavuz - kullanilan;
 
-            return { ...p, devreden_izin: devreden, bu_yil_hakedis: buYilHakedis, toplam_havuz: toplamHavuz, kullanilan: kullanilan, kalan: kalanNet, uyari: kalanNet > 40 };
+            return { 
+                ...p, 
+                devreden_izin: devreden, 
+                bu_yil_hakedis: buYilHakedis, 
+                toplam_havuz: toplamHavuz, 
+                kullanilan: kullanilan, 
+                kalan: kalanNet, 
+                uyari: kalanNet > 40 
+            };
         }));
         res.json(rapor);
     } catch (err) { res.status(500).send('Rapor hatası'); }
 };
 
-// 5. ISLAK İMZA DURUMU
+// 5. ISLAK İMZA
 exports.islakImzaDurumu = async (req, res) => {
+    // ... (Mevcut kod aynı)
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     const { talep_id, durum } = req.body; 
     try {
@@ -291,21 +288,19 @@ exports.islakImzaDurumu = async (req, res) => {
     } catch (e) { res.status(500).send('Hata'); }
 };
 
-// 6. TIMELINE ve LOGLAR
+// 6. LOG & TIMELINE
 exports.getTimeline = async (req, res) => {
     try {
         const result = await pool.query(`SELECT h.*, p.ad, p.soyad, r.rol_adi FROM izin_hareketleri h JOIN personeller p ON h.islem_yapan_id = p.personel_id JOIN roller r ON p.rol_id = r.rol_id WHERE h.talep_id = $1 ORDER BY h.tarih ASC`, [req.params.talep_id]);
         res.json(result.rows);
     } catch (e) { res.status(500).send('Hata'); }
 };
-
 exports.getSystemLogs = async (req, res) => {
     try {
         const result = await pool.query(`SELECT l.*, p.ad, p.soyad, p.tc_no FROM sistem_loglari l LEFT JOIN personeller p ON l.personel_id = p.personel_id ORDER BY l.tarih DESC LIMIT 100`);
         res.json(result.rows);
     } catch (e) { res.status(500).send('Hata'); }
 };
-
 exports.getPersonelGecmis = async (req, res) => {
     const { tc_no } = req.query;
     try {
