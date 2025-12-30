@@ -36,7 +36,7 @@ export default function LeaveReports() {
             "Toplam Havuz": p.toplam_havuz,
             "Kullanılan": p.kullanilan,
             "Kalan İzin": p.kalan,
-            "Durum": p.uyari ? "KRİTİK (40+)" : "Normal"
+            "Durum": p.uyari ? "KRİTİK (50+)" : "Normal"
         })));
 
         XLSX.utils.book_append_sheet(wb, ws, "İzin Raporu");
@@ -130,7 +130,7 @@ export default function LeaveReports() {
                                         <td className="text-end pe-4">
                                             {p.uyari ? (
                                                 <span className="badge bg-danger text-white px-3 py-2 rounded-pill">
-                                                    <AlertTriangle size={14} className="me-1"/> BİRİKEN (40+)
+                                                    <AlertTriangle size={14} className="me-1"/> BİRİKEN (50+)
                                                 </span>
                                             ) : p.kullanilan === 0 ? (
                                                 <span className="badge bg-warning text-dark px-3 py-2 rounded-pill">
