@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle
+    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield
 } from 'lucide-react';
 
 export default function Settings() {
@@ -27,7 +27,7 @@ export default function Settings() {
     const [kullanilanIzin, setKullanilanIzin] = useState(0);
     const [kidemYili, setKidemYili] = useState(0);
 
-    // --- GÖREV LİSTELERİ ---
+    // --- SABİT LİSTELER ---
     const sabitListeler = {
         gorevler: [
             "Şoför", "Baş Şoför", "Şef", "Yıkama", "Sefer Çıkış Kontrol", "Araç Bakım Onarım", "Yardımcı Hizmetler", 
@@ -43,6 +43,10 @@ export default function Settings() {
         ],
         kadroTipleri: [
             "Sürekli İşçi", "Kadrolu İşçi", "Memur", "Sözleşmeli Personel", "Şirket Personeli", "Geçici İşçi", "Düz İşçi (KHK)"
+        ],
+        // Rolleri elle değiştirebilmek için liste
+        roller: [
+            "personel", "amir", "yazici", "ik", "admin"
         ]
     };
 
@@ -53,7 +57,7 @@ export default function Settings() {
         gorev: '',          
         kadro_tipi: '',     
         gorev_yeri: '', calisma_durumu: 'Çalışıyor', 
-        rol: 'personel',    // OTOMATİK BELİRLENECEK
+        rol: 'personel',    
         ehliyet_no: '', ehliyet_sinifi: '', ehliyet_bitis_tarihi: '', src_belge_no: '', psikoteknik_tarihi: '', surucu_no: '',
         ayakkabi_no: '', tisort_beden: '', gomlek_beden: '', suveter_beden: '', mont_beden: '',
         sicil_no: '', asis_kart_no: '', hareket_merkezi: '', ise_giris_tarihi: '', ayrilma_tarihi: ''
@@ -66,28 +70,24 @@ export default function Settings() {
         if (activeTab === 'users' && isYetkili) { fetchUsers(); fetchBirimler(); }
     }, [activeTab]);
 
-    // --- OTOMATİK ROL ATAMA MANTIĞI ---
+    // --- OTOMATİK ROL ÖNERİSİ ---
     const handleGorevChange = (e) => {
         const secilenGorev = e.target.value;
-        let otomatikRol = 'personel'; // Varsayılan: Şoför, Yıkamacı, Memur vb.
+        let onerilenRol = 'personel'; 
 
-        // AMİR GRUBU (Birim Amiri)
+        // Göreve göre varsayılan rolü belirle ama kullanıcı değiştirebilsin
         if (['Baş Şoför', 'Günlük Görevlendirmeci', 'Puantör'].includes(secilenGorev)) {
-            otomatikRol = 'amir';
+            onerilenRol = 'amir';
         } 
-        // YAZICI GRUBU (Birim Yazıcısı)
         else if (['Yazıcı'].includes(secilenGorev)) {
-            otomatikRol = 'yazici';
+            onerilenRol = 'yazici';
         } 
-        // İK GRUBU (En Üst Onaycı)
         else if (['Personel İşleri'].includes(secilenGorev)) {
-            otomatikRol = 'ik'; 
+            onerilenRol = 'ik'; 
         }
-        // ŞEF ve MÜDÜR (Özel Statü - Direkt İK onayı ama yetkili olabilirler)
-        // Eğer Şeflerin de sisteme girip onay yapmasını istersen 'sef' rolü eklenebilir. 
-        // Şimdilik standart personel gibi ama izin akışı farklı olacak.
 
-        setFormData({ ...formData, gorev: secilenGorev, rol: otomatikRol });
+        // Hem görevi hem de önerilen rolü set et (Kullanıcı sonra değiştirebilir)
+        setFormData({ ...formData, gorev: secilenGorev, rol: onerilenRol });
     };
 
     useEffect(() => {
@@ -329,10 +329,10 @@ export default function Settings() {
                             <div className="table-responsive">
                                 <table className="table table-hover align-middle">
                                     <thead className="bg-light text-muted small text-uppercase">
-                                        <tr><th>TC / Ad Soyad</th><th>Birim / Görev</th><th>Giriş Tarihi</th><th className="text-center">Durum</th><th className="text-end">İşlemler</th></tr>
+                                        <tr><th>TC / Ad Soyad</th><th>Birim / Görev</th><th>Rol</th><th>Giriş Tarihi</th><th className="text-center">Durum</th><th className="text-end">İşlemler</th></tr>
                                     </thead>
                                     <tbody>
-                                        {yukleniyor ? <tr><td colSpan="5" className="text-center py-4">Yükleniyor...</td></tr> : 
+                                        {yukleniyor ? <tr><td colSpan="6" className="text-center py-4">Yükleniyor...</td></tr> : 
                                          filteredUsers.map(u => {
                                             const isActive = u.aktif === true || u.aktif === 'true' || u.aktif === 1;
                                             return (
@@ -340,8 +340,9 @@ export default function Settings() {
                                                     <td><div className="fw-bold">{u.ad} {u.soyad}</div><small className="text-muted font-monospace">{u.tc_no}</small></td>
                                                     <td>
                                                         <span className="badge bg-light text-dark border fw-normal me-1">{u.birim_adi}</span>
-                                                        <span className="badge bg-primary bg-opacity-10 text-primary border fw-normal">{u.rol_adi}</span>
+                                                        <span className="text-muted small">{u.gorev}</span>
                                                     </td>
+                                                    <td><span className="badge bg-primary bg-opacity-10 text-primary border fw-normal">{u.rol_adi?.toUpperCase()}</span></td>
                                                     <td className="small">{new Date(u.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                                     <td className="text-center">{!isActive ? <span className="badge bg-secondary">Pasif ({u.calisma_durumu})</span> : <span className="badge bg-success">Aktif</span>}</td>
                                                     <td className="text-end">
@@ -368,7 +369,7 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* --- DETAYLI PERSONEL MODALI (2 SEKME) --- */}
+            {/* --- DETAYLI PERSONEL MODALI --- */}
             {showModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-xl modal-dialog-centered my-4">
@@ -434,16 +435,24 @@ export default function Settings() {
 
                                                         <div className="col-md-4"><label className="small fw-bold">Birim</label><select className="form-select form-select-sm" value={formData.birim_id} onChange={e=>setFormData({...formData, birim_id:e.target.value})}>{birimler.map(b=><option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>)}</select></div>
                                                         
-                                                        {/* --- GÜNCELLENEN ALAN: GÖREV SEÇİMİ (ROLÜ OTOMATİK AYARLAR) --- */}
+                                                        {/* --- GÖREV LİSTESİ --- */}
                                                         <div className="col-md-4">
-                                                            <label className="small fw-bold text-primary">Görevi (Rol Otomatik)</label>
+                                                            <label className="small fw-bold text-primary">Görevi (Rol Önerisi)</label>
                                                             <select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange}>
                                                                 <option value="">Seçiniz...</option>
                                                                 {sabitListeler.gorevler.sort().map(g => <option key={g} value={g}>{g}</option>)}
                                                             </select>
                                                         </div>
 
-                                                        {/* --- GÜNCELLENEN ALAN: KADRO TİPİ --- */}
+                                                        {/* --- YENİ EKLENEN: SİSTEM ROLÜ (ELLE DEĞİŞTİRİLEBİLİR) --- */}
+                                                        <div className="col-md-4">
+                                                            <label className="small fw-bold text-danger d-flex align-items-center gap-1"><Shield size={14}/> Sistem Rolü (Yetki)</label>
+                                                            <select className="form-select form-select-sm border-danger" value={formData.rol} onChange={e=>setFormData({...formData, rol: e.target.value})}>
+                                                                {sabitListeler.roller.map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
+                                                            </select>
+                                                        </div>
+
+                                                        {/* --- KADRO LİSTESİ --- */}
                                                         <div className="col-md-4">
                                                             <label className="small fw-bold">Kadro Tipi</label>
                                                             <select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})}>
