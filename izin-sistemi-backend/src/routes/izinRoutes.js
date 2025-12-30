@@ -138,4 +138,7 @@ router.post('/islak-imza-durumu', auth, izinController.islakImzaDurumu);
 // 15. Profil + Geçmiş Bakiyeler + İzin Talepleri
 router.get('/personel-detay/:id', auth, izinController.getPersonelIzinDetay);
 
+// 16. Toplu Excel Raporu İçin Veri
+router.get('/rapor/tum-personel-detay', auth, izinController.tumPersonelDetayliVeri);
+
 module.exports = router;

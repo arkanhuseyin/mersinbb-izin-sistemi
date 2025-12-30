@@ -397,3 +397,43 @@ exports.getPersonelIzinDetay = async (req, res) => {
         res.status(500).json({ mesaj: 'Veri çekilemedi.' });
     }
 };
+
+// 8. TÜM PERSONEL İÇİN DETAYLI VERİ (Toplu Excel Raporu İçin)
+exports.tumPersonelDetayliVeri = async (req, res) => {
+    // Sadece yetkili roller
+    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
+    }
+
+    try {
+        // 1. Tüm Aktif Personeller
+        const pRes = await pool.query(`
+            SELECT p.personel_id, p.tc_no, p.ad, p.soyad, p.sicil_no, p.ise_giris_tarihi, p.kadro_tipi, b.birim_adi
+            FROM personeller p
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id
+            WHERE p.aktif = TRUE
+            ORDER BY p.ad ASC
+        `);
+
+        // 2. Tüm Geçmiş Bakiyeler
+        const gRes = await pool.query(`SELECT * FROM izin_gecmis_bakiyeler ORDER BY yil ASC`);
+
+        // 3. Tüm Onaylı Yıllık İzinler
+        const iRes = await pool.query(`
+            SELECT * FROM izin_talepleri 
+            WHERE durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
+            AND izin_turu = 'YILLIK İZİN'
+        `);
+
+        // Veriyi Frontend'in işlemesi için yapılandırıp gönderiyoruz
+        res.json({
+            personeller: pRes.rows,
+            gecmisBakiyeler: gRes.rows,
+            izinler: iRes.rows
+        });
+
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ mesaj: 'Toplu veri çekilemedi.' });
+    }
+};

@@ -48,23 +48,20 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 🚀 AKILLI EXCEL RAPORU OLUŞTURMA (FIFO MANTIĞI) ---
+    // --- 🚀 AKILLI EXCEL RAPORU OLUŞTURMA (TEK KİŞİ - FIFO MANTIĞI) ---
     const generateDetailExcel = () => {
         if (!personelDetay) return;
 
         const p = personelDetay.personel;
-        const gecmis = [...personelDetay.gecmisBakiyeler]; // Kopya al (mutate etmemek için)
+        const gecmis = [...personelDetay.gecmisBakiyeler]; // Kopya al
         const izinler = personelDetay.izinler;
 
-        // 1. Havuz Oluştur (Hangi yıldan ne kadar hak var?)
+        // 1. Havuz Oluştur
         let izinHavuzu = [];
-        
-        // A. Geçmiş Yılları Ekle
         gecmis.forEach(g => {
             izinHavuzu.push({ yil: g.yil, hak: g.gun_sayisi, kalan: g.gun_sayisi });
         });
 
-        // B. Bu Yılı Hesapla ve Ekle
         const giris = new Date(p.ise_giris_tarihi);
         const bugun = new Date();
         const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
@@ -77,7 +74,7 @@ export default function LeaveReports() {
         const buYil = new Date().getFullYear();
         izinHavuzu.push({ yil: buYil, hak: buYilHak, kalan: buYilHak });
 
-        // 2. İzinleri Tek Tek Düş ve Açıklama Yaz
+        // 2. İzinleri Düş
         const islenenIzinler = izinler.map(izin => {
             if (izin.izin_turu !== 'YILLIK İZİN') {
                 return { ...izin, dusumAciklamasi: 'Yıllık izin bakiyesinden düşülmez.' };
@@ -86,7 +83,6 @@ export default function LeaveReports() {
             let dusulecekGun = izin.kac_gun;
             let dusumKaydi = [];
 
-            // Havuzdaki en eski yıldan başlayarak düş
             for (let h of izinHavuzu) {
                 if (dusulecekGun <= 0) break;
                 if (h.kalan > 0) {
@@ -104,40 +100,36 @@ export default function LeaveReports() {
             return { ...izin, dusumAciklamasi: sonucYazisi };
         });
 
-        // --- 3. EXCEL TASARIMI (AoA - Array of Arrays) ---
+        // 3. Excel Oluştur
         const wb = XLSX.utils.book_new();
-        
-        // Kurumsal Başlık Yapısı
         const wsData = [
-            ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - ULAŞIM DAİRESİ BAŞKANLIĞI"], // A1
-            ["PERSONEL DETAYLI İZİN HAREKET VE BAKİYE RAPORU"], // A2
-            [""], // Boşluk
-            ["PERSONEL BİLGİLERİ", "", "", ""], // Başlık
+            ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - ULAŞIM DAİRESİ BAŞKANLIĞI"],
+            ["PERSONEL DETAYLI İZİN HAREKET VE BAKİYE RAPORU"],
+            [""],
+            ["PERSONEL BİLGİLERİ", "", "", ""],
             ["TC Kimlik No", p.tc_no, "Adı Soyadı", `${p.ad} ${p.soyad}`],
             ["Sicil No", p.sicil_no || '-', "Birim", p.birim_adi],
             ["İşe Giriş Tarihi", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), "Kadro", p.kadro_tipi],
-            [""], // Boşluk
+            [""],
             ["İZİN HAKEDİŞ DURUMU (YILLARA GÖRE)", "", "", ""],
             ["Yıl", "Hakediş Miktarı", "Kalan Bakiye", "Durum"]
         ];
 
-        // Havuz Durumunu Ekle
         izinHavuzu.forEach(h => {
             wsData.push([h.yil, `${h.hak} Gün`, `${h.kalan} Gün`, h.kalan === 0 ? "Tükendi" : "Mevcut"]);
         });
 
-        wsData.push([""]); // Boşluk
+        wsData.push([""]);
         wsData.push(["KULLANILAN İZİN GEÇMİŞİ VE DÜŞÜM DETAYLARI"]);
         wsData.push(["İzin Türü", "Başlangıç", "Bitiş", "Gün", "Hakedişten Düşüm Açıklaması (Sistem Analizi)"]);
 
-        // İşlenmiş İzinleri Ekle
         islenenIzinler.forEach(iz => {
             wsData.push([
                 iz.izin_turu,
                 new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR'),
                 new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR'),
                 iz.kac_gun,
-                iz.dusumAciklamasi // Örn: "2023 yılı bakiyesinden 3 gün kullanıldı."
+                iz.dusumAciklamasi
             ]);
         });
         
@@ -145,27 +137,117 @@ export default function LeaveReports() {
         wsData.push(["Not: Bu rapor sistem verilerine dayanarak otomatik oluşturulmuştur."]);
 
         const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-        // Sütun Genişlikleri (Görsel Düzen)
-        ws['!cols'] = [
-            { wch: 20 }, // A
-            { wch: 20 }, // B
-            { wch: 20 }, // C
-            { wch: 10 }, // D
-            { wch: 60 }  // E (Açıklama kısmı geniş olsun)
-        ];
-
-        // Hücre Birleştirme (Başlıklar için)
+        ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 60 }];
         ws['!merges'] = [
-            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }, // Kurum Adı
-            { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } }, // Rapor Adı
-            { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } }, // Personel Başlık
-            { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } }, // Havuz Başlık
-            { s: { r: 10 + izinHavuzu.length + 1, c: 0 }, e: { r: 10 + izinHavuzu.length + 1, c: 4 } } // İzin Geçmişi Başlık
+            { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+            { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+            { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } },
+            { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } },
+            { s: { r: 10 + izinHavuzu.length + 1, c: 0 }, e: { r: 10 + izinHavuzu.length + 1, c: 4 } }
         ];
 
         XLSX.utils.book_append_sheet(wb, ws, "Detaylı Rapor");
         XLSX.writeFile(wb, `${p.ad}_${p.soyad}_Detayli_Izin_Raporu.xlsx`);
+    };
+
+    // --- 🌍 TOPLU EXCEL RAPORU (TÜM PERSONEL - YENİ EKLENDİ) ---
+    const downloadBulkExcel = async () => {
+        const confirm = window.confirm("Tüm aktif personelin detaylı raporu oluşturulacak. Bu işlem birkaç saniye sürebilir. Onaylıyor musunuz?");
+        if (!confirm) return;
+
+        setYukleniyor(true); 
+
+        try {
+            const token = localStorage.getItem('token');
+            // Backend'den toplu veriyi çek
+            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/tum-personel-detay', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const { personeller, gecmisBakiyeler, izinler } = res.data;
+            const excelRows = [];
+
+            // Başlık Satırları
+            excelRows.push(["MERSİN BÜYÜKŞEHİR BELEDİYESİ - ULAŞIM DAİRESİ BAŞKANLIĞI"]);
+            excelRows.push(["GENEL İZİN DURUM VE BAKİYE RAPORU (" + new Date().toLocaleDateString('tr-TR') + ")"]);
+            excelRows.push([""]);
+            excelRows.push([
+                "Sıra", "TC No", "Ad Soyad", "Sicil No", "Birim", "Kadro", "İşe Giriş", 
+                "Kıdem (Yıl)", "Devreden (Geçmiş)", "Bu Yıl Hak", "TOPLAM HAVUZ", 
+                "KULLANILAN", "KALAN BAKİYE", "DURUM"
+            ]);
+
+            // Her Personel İçin Hesaplama
+            personeller.forEach((p, index) => {
+                // A. Kişiye ait verileri filtrele
+                const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
+                const pIzinler = izinler.filter(iz => iz.personel_id === p.personel_id);
+
+                // B. Havuz Hesabı
+                let toplamGecmis = 0;
+                pGecmis.forEach(g => toplamGecmis += g.gun_sayisi);
+
+                const giris = new Date(p.ise_giris_tarihi);
+                const bugun = new Date();
+                const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
+                
+                let buYilHak = 0;
+                if (kidemYili >= 1) {
+                    if (kidemYili <= 5) buYilHak = 14;
+                    else if (kidemYili < 15) buYilHak = 20;
+                    else buYilHak = 26;
+                }
+
+                const toplamHavuz = toplamGecmis + buYilHak;
+
+                // C. Kullanılan Hesabı (Sadece Yıllık İzin)
+                let toplamKullanilan = 0;
+                pIzinler.forEach(iz => toplamKullanilan += iz.kac_gun);
+
+                // D. Sonuç
+                const kalan = toplamHavuz - toplamKullanilan;
+                const durum = kalan < 0 ? "EKSİ BAKİYE" : (kalan < 5 ? "KRİTİK" : "NORMAL");
+
+                // E. Excel Satırını Ekle
+                excelRows.push([
+                    index + 1,
+                    p.tc_no,
+                    `${p.ad} ${p.soyad}`,
+                    p.sicil_no || '-',
+                    p.birim_adi,
+                    p.kadro_tipi,
+                    new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'),
+                    kidemYili,
+                    toplamGecmis,     // Devreden
+                    buYilHak,         // Bu Yıl
+                    toplamHavuz,      // Toplam
+                    toplamKullanilan, // Kullanılan
+                    kalan,            // Kalan
+                    durum
+                ]);
+            });
+
+            // Dosyayı Oluştur ve İndir
+            const ws = XLSX.utils.aoa_to_sheet(excelRows);
+            const wb = XLSX.utils.book_new();
+
+            // Sütun Genişlikleri
+            ws['!cols'] = [
+                { wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 10 }, { wch: 20 }, 
+                { wch: 15 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, 
+                { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 15 }
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "Genel Rapor");
+            XLSX.writeFile(wb, `Tum_Personel_Izin_Raporu_${new Date().toISOString().slice(0,10)}.xlsx`);
+
+        } catch (error) {
+            console.error(error);
+            alert("Rapor oluşturulurken hata çıktı.");
+        } finally {
+            // Yükleniyor durumunu kapat, verileri tekrar çek (UI tazelensin)
+            verileriGetir(); 
+        }
     };
 
     // Arama Filtresi
@@ -184,6 +266,17 @@ export default function LeaveReports() {
                         <FileBarChart size={28} className="text-primary"/> İzin Takip Raporu
                     </h2>
                     <p className="text-muted m-0">Personele tıklayarak detaylı geçmiş ve bakiye analizi yapabilirsiniz.</p>
+                </div>
+                {/* YENİ EKLENEN TOPLU İNDİRME BUTONU */}
+                <div>
+                    <button 
+                        className="btn btn-success d-flex align-items-center gap-2 shadow-sm" 
+                        onClick={downloadBulkExcel}
+                        disabled={yukleniyor}
+                    >
+                        <Download size={18} /> 
+                        {yukleniyor ? 'İşleniyor...' : 'Tüm Listeyi İndir (Excel)'}
+                    </button>
                 </div>
             </div>
             
@@ -298,16 +391,16 @@ export default function LeaveReports() {
                                                         <span className="fw-bold text-info">+{secilenPersonel.bu_yil_hakedis}</span>
                                                     </div>
                                                     <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-    <span>Toplam Kullanılan:</span>
-    {/* DÜZELTME: Backend'den gelen taze hesaplamayı okusun */}
-    <span className="fw-bold text-danger">
-    {personelDetay.personel.kullanilan > 0 ? `-${personelDetay.personel.kullanilan}` : '0'}
-</span>
-</div>
-<div className="alert alert-primary mb-0 text-center fw-bold fs-5">
-    {/* DÜZELTME: Backend'den gelen taze hesaplamayı okusun */}
-    Net Kalan: {personelDetay.personel.kalan} Gün
-</div>
+                                                        <span>Toplam Kullanılan:</span>
+                                                        {/* DÜZELTME UYGULANDI */}
+                                                        <span className="fw-bold text-danger">
+                                                            {personelDetay.personel.kullanilan > 0 ? `-${personelDetay.personel.kullanilan}` : '0'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="alert alert-primary mb-0 text-center fw-bold fs-5">
+                                                        {/* DÜZELTME UYGULANDI */}
+                                                        Net Kalan: {personelDetay.personel.kalan} Gün
+                                                    </div>
                                                 </div>
                                             </div>
 
