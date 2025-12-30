@@ -16,53 +16,94 @@ const tarihFormatla = (tarihStr) => {
     return tarihStr;
 };
 
-// 2. Yıllık İzin Hakediş Hesaplama (STANDART KURALLAR)
-// 1-5 Yıl: 14 Gün | 6-14 Yıl: 20 Gün | 15 Yıl ve Üzeri: 26 Gün
-const getYillikHakedis = (kidemYili) => {
-    if (kidemYili < 1) return 0;       // 1 yıldan az
-    if (kidemYili <= 5) return 14;     // 1-5 yıl arası
-    if (kidemYili < 15) return 20;     // 6-14 yıl arası
-    return 26;                         // 15 yıl ve üzeri
+// 2. ÖZEL HAKEDİŞ MATRİSİ (Tablo Verileri)
+// Mantık: "İşe Giriş Yılı": { "Hakediş Yılı": Gün Sayısı }
+const HAKEDIS_MATRISI = {
+    // --- GRUP 1: 2007 - 2015 ARASI VE ÖNCESİ (Tablo 1) ---
+    // Not: 2007 öncesi girişliler de 2007 satırını baz alır.
+    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
+    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
+    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
+    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
+    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+
+    // --- GRUP 2: 2016 VE SONRASI (Tablo 2) ---
+    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2021": { 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2022": { 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2023": { 2023: 25, 2024: 27, 2025: 27 },
+    "2024": { 2024: 27, 2025: 27 },
+    "2025": { 2025: 27 }
 };
 
-// 3. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM - YENİ)
+// 3. Yıllık İzin Hakediş Hesaplama (MATRİS TABANLI)
+const getYillikHakedis = (iseGirisTarihi) => {
+    if (!iseGirisTarihi) return 0;
+
+    const giris = new Date(iseGirisTarihi);
+    const girisYili = giris.getFullYear(); 
+    const buYil = new Date().getFullYear();
+
+    // Kural: Giriş yılı 2007'den küçükse 2007 satırını kullan
+    let arananGirisYili = girisYili;
+    if (girisYili < 2007) arananGirisYili = 2007;
+
+    // A. Özel Tabloda Veri Var mı?
+    if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
+        return HAKEDIS_MATRISI[arananGirisYili][buYil];
+    }
+
+    // B. Tabloda Veri Yoksa Standart Yasal Süre (Yedek Plan)
+    // Tabloda olmayan uç bir yıl veya yeni bir durum için standart kanun devreye girer.
+    const diffTime = Math.abs(new Date() - giris);
+    const kidemYili = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25));
+
+    if (kidemYili < 1) return 0;
+    if (kidemYili <= 5) return 14;
+    if (kidemYili < 15) return 20;
+    return 26;
+};
+
+// 4. Yıllık İzin Bakiyesi Hesapla (HAFIZALI SİSTEM - GÜNCELLENDİ)
 const hesaplaBakiye = async (personel_id) => {
     // A. Personel bilgilerini çek
     const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
-    const giris = new Date(pRes.rows[0].ise_giris_tarihi || '2024-01-01');
-    const bugun = new Date();
-    
     // B. Manuel Eklenen Geçmiş Yılların Toplamını Çek
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis);
 
-    // C. Kıdem (Çalışılan Yıl) Hesabı
-    const diffTime = Math.abs(bugun - giris);
-    const kidemYili = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25)); 
-    
-    // D. Bu Yıl Hakedişi
-    const buYilHakedis = getYillikHakedis(kidemYili);
+    // C. Bu Yıl Hakedişi (ARTIK TARİHE GÖRE TABLODAN ÇEKİLİYOR)
+    const iseGirisTarihi = pRes.rows[0].ise_giris_tarihi;
+    const buYilHakedis = getYillikHakedis(iseGirisTarihi);
 
-    // E. Bu Yıl Kullanılan (Onaylı) İzinler
+    // D. Bu Yıl Kullanılan (Onaylı) İzinler
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
         WHERE personel_id = $1 
         AND izin_turu = 'YILLIK İZİN' 
         AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
-    `, [personel_id]); // Not: Artık tüm zamanların kullanılanını düşüyoruz çünkü devredenToplam kümülatif geliyor.
+    `, [personel_id]); 
 
     const toplamKullanilan = parseInt(uRes.rows[0].used);
     
-    // F. Sonuç: (Manuel Geçmişler + Bu Yıl Hakediş) - (Toplam Kullanılan)
+    // E. Sonuç: (Manuel Geçmişler + Bu Yıl Hakediş) - (Toplam Kullanılan)
     const totalBalance = (devredenToplam + buYilHakedis) - toplamKullanilan;
     return totalBalance;
 };
 
 // ============================================================
-// 🚀 GEÇMİŞ BAKİYE YÖNETİMİ (YENİ EKLENENLER)
+// 🚀 GEÇMİŞ BAKİYE YÖNETİMİ
 // ============================================================
 
 // A. Geçmiş Bakiye Ekle
@@ -276,7 +317,7 @@ exports.izinDurumRaporu = async (req, res) => {
             
             const giris = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi) : new Date();
             const kidem = Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
-            const buYilHak = getYillikHakedis(kidem);
+            const buYilHak = getYillikHakedis(p.ise_giris_tarihi);
 
             // Rapor tablosunda "Devreden" sütununda görünmesi için geçmiş toplamı çek
             const gRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as top FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [p.personel_id]);
@@ -366,7 +407,7 @@ exports.getPersonelIzinDetay = async (req, res) => {
             ORDER BY baslangic_tarihi ASC
         `, [id]);
 
-        // --- HESAPLAMA KISMI (BURASI EKSİKTİ) ---
+        // --- HESAPLAMA KISMI ---
         
         // 1. Kullanılan Toplamı Hesapla (Sadece YILLIK İZİN olanlar)
         let toplamKullanilan = 0;

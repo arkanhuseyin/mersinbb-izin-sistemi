@@ -7,21 +7,71 @@ const path = require('path');
 
 const formatNull = (val) => (val === '' || val === undefined || val === 'null' ? null : val);
 
-// YARDIMCI: İzin Hakediş
-const izinHakedisHesapla = (iseGirisTarihi) => {
-    if (!iseGirisTarihi) return { yil: 0, hak: 0 };
-    const giris = new Date(iseGirisTarihi);
-    const fark = new Date() - giris;
-    const kidemYili = Math.floor(fark / (1000 * 60 * 60 * 24 * 365.25));
-    if (kidemYili < 1) return { yil: kidemYili, hak: 0 };
-    let toplamHak = 0;
-    for (let i = 1; i <= kidemYili; i++) {
-        if (i <= 5) toplamHak += 14; else if (i < 15) toplamHak += 20; else toplamHak += 26;
-    }
-    return { yil: kidemYili, hak: toplamHak };
+// ============================================================
+// 🛠️ YARDIMCI: İzin Hakediş Hesapla (PDF İÇİN - MATRİS TABANLI)
+// ============================================================
+
+// A. HAKEDİŞ MATRİSİ (Tablo Verileri)
+const HAKEDIS_MATRISI = {
+    // --- GRUP 1: 2007 - 2015 ARASI VE ÖNCESİ (Tablo 1) ---
+    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
+    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
+    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
+    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
+    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+
+    // --- GRUP 2: 2016 VE SONRASI (Tablo 2) ---
+    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2021": { 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2022": { 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2023": { 2023: 25, 2024: 27, 2025: 27 },
+    "2024": { 2024: 27, 2025: 27 },
+    "2025": { 2025: 27 }
 };
 
+// B. İzin Hakediş Hesapla (Güncellenmiş Fonksiyon)
+const izinHakedisHesapla = (iseGirisTarihi) => {
+    if (!iseGirisTarihi) return { yil: 0, hak: 0 };
+
+    const giris = new Date(iseGirisTarihi);
+    const girisYili = giris.getFullYear(); 
+    const buYil = new Date().getFullYear();
+
+    // Kıdem Yılı Hesabı (Bilgi amaçlı)
+    const fark = new Date() - giris;
+    const kidemYili = Math.floor(fark / (1000 * 60 * 60 * 24 * 365.25));
+
+    // Kural: Giriş yılı 2007'den küçükse 2007 satırını kullan
+    let arananGirisYili = girisYili;
+    if (girisYili < 2007) arananGirisYili = 2007;
+
+    let hak = 0;
+
+    // A. Özel Tabloda Veri Var mı?
+    if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
+        hak = HAKEDIS_MATRISI[arananGirisYili][buYil];
+    } else {
+        // B. Standart Hesaplama (Yedek Plan - Tabloda yoksa)
+        if (kidemYili < 1) hak = 0;
+        else if (kidemYili <= 5) hak = 14;
+        else if (kidemYili < 15) hak = 20;
+        else hak = 26;
+    }
+
+    return { yil: kidemYili, hak: hak };
+};
+
+// ============================================================
 // 1. PERSONEL LİSTESİ
+// ============================================================
 exports.personelListesi = async (req, res) => {
     try {
         const result = await pool.query(`
@@ -49,7 +99,9 @@ exports.birimleriGetir = async (req, res) => {
     } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
 };
 
+// ============================================================
 // 2. PERSONEL EKLE
+// ============================================================
 exports.personelEkle = async (req, res) => {
     const { 
         tc_no, ad, soyad, sifre, telefon, telefon2, dogum_tarihi, adres, 
@@ -115,7 +167,9 @@ exports.personelEkle = async (req, res) => {
     } finally { client.release(); }
 };
 
+// ============================================================
 // 3. PERSONEL GÜNCELLE
+// ============================================================
 exports.personelGuncelle = async (req, res) => {
     const { id } = req.params;
     const body = req.body;
@@ -190,7 +244,9 @@ exports.personelGuncelle = async (req, res) => {
     } finally { client.release(); }
 };
 
+// ============================================================
 // 4. PDF OLUŞTURMA
+// ============================================================
 exports.personelKartiPdf = async (req, res) => {
     const { id } = req.params;
     try {
@@ -217,17 +273,13 @@ exports.personelKartiPdf = async (req, res) => {
         if (pRes.rows.length === 0) return res.status(404).send('Personel bulunamadı');
         const p = pRes.rows[0];
 
-        // İzin Hesaplama
+        // İzin Hesaplama (GÜNCELLENMİŞ FONKSİYON KULLANILIYOR)
         const hakedis = izinHakedisHesapla(p.ise_giris_tarihi);
-        let kullanilan = 0;
-        // Tüm zamanların kullanılanı için ayrı bir sorgu yapmak daha doğru olurdu ama şimdilik buradan hesaplayalım
-        // Not: Gerçek bakiye için hesaplaBakiye fonksiyonunu kullanmak daha iyidir, burada basit hesap yapıyoruz.
-        const kalanIzni = (p.devreden_izin || 0) + hakedis.hak; // Basit gösterim
-
+        
+        // PDF Oluşturma Başlangıcı
         const doc = new PDFDocument({ margin: 30, size: 'A4' });
         
-        // Font Ayarları (TR Karakter Sorunu İçin)
-        // Eğer font dosyası yoksa standart fontu kullanır ama TR karakterler bozuk çıkabilir.
+        // Font Ayarları
         const fontPath = path.join(__dirname, '../../templates/font.ttf'); 
         const headerPath = path.join(__dirname, '../../templates/pdf1.png');
 
@@ -245,32 +297,27 @@ exports.personelKartiPdf = async (req, res) => {
 
         // --- 1. BAŞLIK VE LOGO ---
         if (fs.existsSync(headerPath)) {
-            // Logoyu sayfanın en üstüne yay
             doc.image(headerPath, 0, 0, { width: 595.28, height: 100 });
         } else {
-            // Logo yoksa metin yaz
             doc.fontSize(18).text('MERSİN BÜYÜKŞEHİR BELEDİYESİ', 0, 40, { align: 'center' });
             doc.fontSize(12).text('ULAŞIM DAİRESİ BAŞKANLIĞI', { align: 'center' });
         }
 
-        let y = 130; // Başlangıç Y koordinatı
+        let y = 130; 
 
         // Başlık
         doc.fontSize(16).fillColor('#000000').text('PERSONEL KİMLİK BİLGİ FORMU', 0, y, { align: 'center' });
-        doc.rect(30, y + 20, 535, 2).fill('#cc0000'); // Kırmızı çizgi
+        doc.rect(30, y + 20, 535, 2).fill('#cc0000'); 
         y += 40;
 
-        // --- 2. FOTOĞRAF ALANI (SAĞ TARAFA SABİT) ---
-        // Fotoğrafın yeri sabit: x=430, y=170
+        // --- 2. FOTOĞRAF ALANI ---
         const photoX = 430;
         const photoY = y;
         const photoW = 110;
         const photoH = 130;
 
-        // Fotoğraf Çerçevesi
         doc.rect(photoX, photoY, photoW, photoH).strokeColor('#333').lineWidth(1).stroke();
 
-        // Fotoğrafı Yükle
         if (p.fotograf_yolu && fs.existsSync(p.fotograf_yolu)) {
             try {
                 doc.image(p.fotograf_yolu, photoX + 1, photoY + 1, { width: photoW - 2, height: photoH - 2, fit: [photoW-2, photoH-2] });
@@ -281,24 +328,18 @@ exports.personelKartiPdf = async (req, res) => {
             doc.fontSize(10).fillColor('#999').text('FOTOĞRAF', photoX, photoY + 60, { width: photoW, align: 'center' });
         }
 
-        // --- 3. BİLGİ TABLOLARI (SOL TARAF) ---
+        // --- 3. BİLGİ TABLOLARI ---
         const labelX = 30;
         const valueX = 160;
         const rowH = 20;
         
-        // Yardımcı Fonksiyon: Satır Çiz
         const drawRow = (label, value) => {
-            // Arka plan rengi (okunabilirlik için)
-            // y pozisyonuna göre açık gri veya beyaz
             if (((y - 170) / 20) % 2 === 1) {
                 doc.rect(labelX, y - 2, 380, rowH).fillColor('#f9f9f9').fill();
             }
-            
             doc.fillColor('#333333').fontSize(9).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold').text(label, labelX + 5, y + 4);
-            
             const valStr = (value === null || value === undefined || value === '') ? '-' : String(value);
             doc.fillColor('#000000').fontSize(9).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica').text(valStr, valueX, y + 4);
-            
             y += rowH;
         };
 
@@ -313,10 +354,9 @@ exports.personelKartiPdf = async (req, res) => {
         drawRow('Kan Grubu', p.kan_grubu);
         drawRow('Telefon', p.telefon);
         drawRow('E-Posta', p.email);
-        // Adres uzun olabilir, tek satıra sığmazsa diye biraz boşluk bırakalım
         drawRow('Adres', p.adres ? p.adres.substring(0, 45) : '-'); 
         
-        y += 10; // Boşluk
+        y += 10; 
 
         // BÖLÜM 2: KURUMSAL BİLGİLER
         doc.fillColor('#cc0000').fontSize(11).text('KURUMSAL BİLGİLER', labelX, y - 5);
@@ -334,13 +374,10 @@ exports.personelKartiPdf = async (req, res) => {
         y += 10;
 
         // BÖLÜM 3: EHLİYET VE BELGELER
-        // Artık fotoğrafın altını geçtiğimiz için genişliği artırabiliriz
         const fullWidth = 535;
-        
         doc.fillColor('#cc0000').fontSize(11).text('EHLİYET VE BELGELER', labelX, y - 5);
         y += 10;
 
-        // Yan yana bilgi göstermek için koordinatları manuel ayarlayalım
         const col2X = 300;
         
         // Satır 1
@@ -365,7 +402,6 @@ exports.personelKartiPdf = async (req, res) => {
         doc.fillColor('#cc0000').fontSize(11).text('LOJİSTİK - BEDEN ÖLÇÜLERİ', labelX, y - 5);
         y += 10;
 
-        // Kutu kutu beden bilgileri
         const sizes = [
             { l: 'Ayakkabı', v: p.ayakkabi_no },
             { l: 'Tişört', v: p.tisort_beden },
@@ -385,7 +421,6 @@ exports.personelKartiPdf = async (req, res) => {
         y += 50;
 
         // --- SAYFA 2: İZİN GEÇMİŞİ TABLOSU ---
-        // Eğer yer kaldıysa alta, kalmadıysa yeni sayfaya
         if (y > 650) {
             doc.addPage();
             y = 50;
@@ -439,7 +474,9 @@ exports.personelKartiPdf = async (req, res) => {
     }
 };
 
+// ============================================================
 // 5. DİĞER İŞLEMLER
+// ============================================================
 exports.personelDondur = async (req, res) => {
     try { await pool.query("UPDATE personeller SET aktif = FALSE, calisma_durumu = $1 WHERE personel_id = $2", [req.body.sebep, req.body.personel_id]); res.json({ mesaj: 'Pasif' }); } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
 };
