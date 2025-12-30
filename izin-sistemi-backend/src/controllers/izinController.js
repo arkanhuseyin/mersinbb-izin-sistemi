@@ -336,7 +336,7 @@ exports.getPersonelGecmis = async (req, res) => {
     } catch(e) { res.status(500).send('Hata'); }
 };
 
-// 7. PERSONEL DETAYLI İZİN BİLGİSİ (Modal ve Rapor İçin)
+// 7. PERSONEL DETAYLI İZİN BİLGİSİ (Modal ve Rapor İçin - GÜNCELLENMİŞ)
 exports.getPersonelIzinDetay = async (req, res) => {
     const { id } = req.params; // Personel ID
     try {
@@ -351,15 +351,14 @@ exports.getPersonelIzinDetay = async (req, res) => {
 
         if (pRes.rows.length === 0) return res.status(404).json({ mesaj: 'Personel bulunamadı' });
 
-        // B. Manuel Girilen Geçmiş Yıl Bakiyeleri (Sıralı: En eskiden yeniye)
+        // B. Manuel Girilen Geçmiş Yıl Bakiyeleri
         const gecmisRes = await pool.query(`
             SELECT * FROM izin_gecmis_bakiyeler 
             WHERE personel_id = $1 
             ORDER BY yil ASC
         `, [id]);
 
-        // C. Onaylanmış Yıllık İzin Talepleri (Eskiden yeniye)
-        // Hesaplama yapabilmek için tarih sırasına göre çekiyoruz
+        // C. Onaylanmış İzin Talepleri
         const izinRes = await pool.query(`
             SELECT * FROM izin_talepleri 
             WHERE personel_id = $1 
@@ -367,8 +366,28 @@ exports.getPersonelIzinDetay = async (req, res) => {
             ORDER BY baslangic_tarihi ASC
         `, [id]);
 
+        // --- HESAPLAMA KISMI (BURASI EKSİKTİ) ---
+        
+        // 1. Kullanılan Toplamı Hesapla (Sadece YILLIK İZİN olanlar)
+        let toplamKullanilan = 0;
+        izinRes.rows.forEach(izin => {
+            if (izin.izin_turu === 'YILLIK İZİN') {
+                toplamKullanilan += parseInt(izin.kac_gun);
+            }
+        });
+
+        // 2. Kalan Bakiyeyi Hesapla (Senin yazdığın yardımcı fonksiyonu kullanıyoruz)
+        const netKalan = await hesaplaBakiye(id);
+        
+        // 3. Personel objesine bu hesaplanan değerleri ekle
+        const personelVerisi = {
+            ...pRes.rows[0],
+            kullanilan: toplamKullanilan, // Frontend bunu bekliyor
+            kalan: netKalan
+        };
+
         res.json({
-            personel: pRes.rows[0],
+            personel: personelVerisi,
             gecmisBakiyeler: gecmisRes.rows,
             izinler: izinRes.rows
         });

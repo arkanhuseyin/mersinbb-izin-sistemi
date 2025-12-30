@@ -298,12 +298,16 @@ export default function LeaveReports() {
                                                         <span className="fw-bold text-info">+{secilenPersonel.bu_yil_hakedis}</span>
                                                     </div>
                                                     <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                                                        <span>Toplam Kullanılan:</span>
-                                                        <span className="fw-bold text-danger">-{secilenPersonel.kullanilan}</span>
-                                                    </div>
-                                                    <div className="alert alert-primary mb-0 text-center fw-bold fs-5">
-                                                        Net Kalan: {secilenPersonel.kalan} Gün
-                                                    </div>
+    <span>Toplam Kullanılan:</span>
+    {/* DÜZELTME: Backend'den gelen taze hesaplamayı okusun */}
+    <span className="fw-bold text-danger">
+    {personelDetay.personel.kullanilan > 0 ? `-${personelDetay.personel.kullanilan}` : '0'}
+</span>
+</div>
+<div className="alert alert-primary mb-0 text-center fw-bold fs-5">
+    {/* DÜZELTME: Backend'den gelen taze hesaplamayı okusun */}
+    Net Kalan: {personelDetay.personel.kalan} Gün
+</div>
                                                 </div>
                                             </div>
 
