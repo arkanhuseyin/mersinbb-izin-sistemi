@@ -72,9 +72,9 @@ router.delete('/sil/:personel_id', auth, personelController.personelSil);
 router.get('/pdf/:id', auth, personelController.personelKartiPdf);
 
 // 8. BEDEN İŞLEMLERİ 
-router.get('/kiyafet-donemi', authMiddleware, personelController.getKiyafetDonemiDurumu);
-router.post('/kiyafet-donemi-ayar', authMiddleware, personelController.toggleKiyafetDonemi);
-router.post('/beden-kaydet', authMiddleware, personelController.bedenGuncelle);
+router.get('/kiyafet-donemi', auth, personelController.getKiyafetDonemiDurumu);
+router.post('/kiyafet-donemi-ayar', auth, personelController.toggleKiyafetDonemi);
+router.post('/beden-kaydet', auth, personelController.bedenGuncelle);
 
 
 // ============================================================
