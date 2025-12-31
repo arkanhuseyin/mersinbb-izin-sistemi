@@ -6,7 +6,10 @@
     "icon": "./assets/iconn.png",
     "android": {
       "package": "com.mbb.yeni.izin.sistemi",
-      "versionCode": 1
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "plugins": [
       [
@@ -25,6 +28,11 @@
         }
       ]
     ],
-
+    "extra": {
+      "eas": {
+        "projectId": "755f827e-a0c4-478c-97a6-dc9841d9758a"
+      }
+    },
+    "owner": "huseyin.arkan333"
   }
 }

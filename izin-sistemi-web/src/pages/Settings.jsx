@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History
+    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History, Shirt, ToggleLeft, ToggleRight
 } from 'lucide-react';
+
+// API URL
+const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
 
 // ============================================================
 // 📋 HAKEDİŞ MATRİSİ (FRONTEND TARAFI İÇİN)
@@ -36,6 +39,8 @@ export default function Settings() {
     const [activeTab, setActiveTab] = useState('profile');
     const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } });
     
+    const token = localStorage.getItem('token'); // Token'ı buraya aldık
+
     const [usersList, setUsersList] = useState([]);
     const [birimler, setBirimler] = useState([]);
     const [arama, setArama] = useState('');
@@ -55,10 +60,14 @@ export default function Settings() {
     const [kullanilanIzin, setKullanilanIzin] = useState(0);
     const [kidemYili, setKidemYili] = useState(0);
 
-    // YENİ: Geçmiş Bakiye Yönetimi State'leri
+    // YENİ: Geçmiş Bakiye Yönetimi State'leri (MEVCUT)
     const [gecmisBakiyeler, setGecmisBakiyeler] = useState([]);
     const [yeniGecmisYil, setYeniGecmisYil] = useState(new Date().getFullYear() - 1);
     const [yeniGecmisGun, setYeniGecmisGun] = useState(0);
+
+    // ✅ YENİ EKLENEN: KIYAFET YÖNETİMİ STATE
+    const [kiyafetDonemiAktif, setKiyafetDonemiAktif] = useState(false);
+    const [kiyafetLoading, setKiyafetLoading] = useState(false);
 
     // --- SABİT LİSTELER ---
     const sabitListeler = {
@@ -78,7 +87,7 @@ export default function Settings() {
             "Sürekli İşçi", "Kadrolu İşçi", "Memur", "Sözleşmeli Personel", "Şirket Personeli", "Geçici İşçi", "Düz İşçi (KHK)"
         ],
         roller: [
-            "personel", "amir", "yazici", "ik", "admin"
+            "personel", "amir", "yazici", "ik", "admin", "filo" // Filo eklendi
         ]
     };
 
@@ -86,7 +95,7 @@ export default function Settings() {
         tc_no: '', ad: '', soyad: '', sifre: '123456', telefon: '', telefon2: '', adres: '',
         dogum_tarihi: '', cinsiyet: 'Erkek', medeni_hal: 'Bekar', kan_grubu: '', egitim_durumu: 'Lise',
         birim_id: '1', 
-        gorev: '',          
+        gorev: '',           
         kadro_tipi: '',     
         gorev_yeri: '', calisma_durumu: 'Çalışıyor', 
         rol: 'personel',    
@@ -100,6 +109,8 @@ export default function Settings() {
 
     useEffect(() => {
         if (activeTab === 'users' && isYetkili) { fetchUsers(); fetchBirimler(); }
+        // ✅ Yeni: Kıyafet sekmesi kontrolü
+        if (activeTab === 'kiyafet' && isYetkili) { checkKiyafetDurumu(); }
     }, [activeTab]);
 
     // --- OTOMATİK ROL ÖNERİSİ ---
@@ -170,8 +181,7 @@ export default function Settings() {
 
     const fetchIzinGecmisi = async (id) => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/personel/izin-gecmisi/${id}`, {
+            const res = await axios.get(`${API_URL}/api/personel/izin-gecmisi/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setIzinGecmisi(res.data);
@@ -181,8 +191,7 @@ export default function Settings() {
     // YENİ: Geçmiş Bakiyeleri Çek
     const fetchGecmisBakiyeler = async (id) => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/izin/gecmis-bakiyeler/${id}`, {
+            const res = await axios.get(`${API_URL}/api/izin/gecmis-bakiyeler/${id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setGecmisBakiyeler(res.data);
@@ -193,8 +202,7 @@ export default function Settings() {
     const addGecmisBakiye = async () => {
         if (!yeniGecmisGun || yeniGecmisGun <= 0) return alert("Lütfen geçerli bir gün sayısı giriniz.");
         try {
-            const token = localStorage.getItem('token');
-            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/izin/gecmis-bakiye-ekle', 
+            await axios.post(`${API_URL}/api/izin/gecmis-bakiye-ekle`, 
                 { personel_id: formData.personel_id, yil: yeniGecmisYil, gun_sayisi: yeniGecmisGun },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -207,19 +215,37 @@ export default function Settings() {
     const deleteGecmisBakiye = async (id) => {
         if(!window.confirm("Silmek istediğinize emin misiniz?")) return;
         try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`https://mersinbb-izin-sistemi.onrender.com/api/izin/gecmis-bakiye-sil/${id}`, 
+            await axios.delete(`${API_URL}/api/izin/gecmis-bakiye-sil/${id}`, 
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             fetchGecmisBakiyeler(formData.personel_id);
         } catch (e) { alert("Hata oluştu."); }
     };
 
+    // ✅ YENİ: KIYAFET FONKSİYONLARI
+    const checkKiyafetDurumu = async () => {
+        setKiyafetLoading(true);
+        try {
+            const res = await axios.get(`${API_URL}/api/personel/kiyafet-donemi`, { headers: { Authorization: `Bearer ${token}` } });
+            setKiyafetDonemiAktif(res.data.aktif);
+        } catch (e) { console.error(e); } finally { setKiyafetLoading(false); }
+    };
+
+    const toggleDonem = async () => {
+        const yeniDurum = !kiyafetDonemiAktif;
+        if(!window.confirm(`Dönemi ${yeniDurum ? 'AÇMAK' : 'KAPATMAK'} istediğinize emin misiniz?`)) return;
+        setKiyafetLoading(true);
+        try {
+            await axios.post(`${API_URL}/api/personel/kiyafet-donemi-ayar`, { durum: yeniDurum }, { headers: { Authorization: `Bearer ${token}` } });
+            setKiyafetDonemiAktif(yeniDurum);
+            alert(`Dönem ${yeniDurum ? 'AÇILDI' : 'KAPATILDI'}`);
+        } catch (e) { alert('Hata: Yetkiniz yok veya sunucu hatası.'); } finally { setKiyafetLoading(false); }
+    };
+
     const fetchUsers = async () => {
         setYukleniyor(true);
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/liste', { 
+            const res = await axios.get(`${API_URL}/api/personel/liste`, { 
                 headers: { Authorization: `Bearer ${token}` } 
             });
             setUsersList(res.data);
@@ -229,8 +255,7 @@ export default function Settings() {
 
     const fetchBirimler = async () => {
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/birimler', { headers: { Authorization: `Bearer ${token}` } });
+            const res = await axios.get(`${API_URL}/api/personel/birimler`, { headers: { Authorization: `Bearer ${token}` } });
             setBirimler(res.data);
         } catch (error) { console.error(error); }
     };
@@ -262,7 +287,6 @@ export default function Settings() {
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('token');
             const data = new FormData();
             
             Object.keys(formData).forEach(key => { 
@@ -272,8 +296,8 @@ export default function Settings() {
             if (fotograf) data.append('fotograf', fotograf);
 
             const url = modalMode === 'add' 
-                ? 'https://mersinbb-izin-sistemi.onrender.com/api/personel/ekle' 
-                : `https://mersinbb-izin-sistemi.onrender.com/api/personel/guncelle/${formData.personel_id}`;
+                ? `${API_URL}/api/personel/ekle` 
+                : `${API_URL}/api/personel/guncelle/${formData.personel_id}`;
             
             const method = modalMode === 'add' ? 'post' : 'put';
 
@@ -290,14 +314,13 @@ export default function Settings() {
     const changeStatus = async (id, type, reason = null) => {
         if(!window.confirm('Bu işlemi yapmak istediğinize emin misiniz?')) return;
         try {
-            const token = localStorage.getItem('token');
             if (type === 'dondur') {
-                await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/dondur', { personel_id: id, sebep: reason }, { headers: { Authorization: `Bearer ${token}` } });
+                await axios.post(`${API_URL}/api/personel/dondur`, { personel_id: id, sebep: reason }, { headers: { Authorization: `Bearer ${token}` } });
                 setDondurmaModal(null);
             } else if (type === 'aktif') {
-                await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/aktif-et', { personel_id: id }, { headers: { Authorization: `Bearer ${token}` } });
+                await axios.post(`${API_URL}/api/personel/aktif-et`, { personel_id: id }, { headers: { Authorization: `Bearer ${token}` } });
             } else if (type === 'sil') {
-                await axios.delete(`https://mersinbb-izin-sistemi.onrender.com/api/personel/sil/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+                await axios.delete(`${API_URL}/api/personel/sil/${id}`, { headers: { Authorization: `Bearer ${token}` } });
             }
             alert('İşlem başarılı.');
             
@@ -312,8 +335,7 @@ export default function Settings() {
     };
 
     const downloadPdf = (id, ad) => {
-        const token = localStorage.getItem('token');
-        axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/personel/pdf/${id}`, {
+        axios.get(`${API_URL}/api/personel/pdf/${id}`, {
             headers: { Authorization: `Bearer ${token}` },
             responseType: 'blob'
         }).then((response) => {
@@ -329,8 +351,7 @@ export default function Settings() {
     const profilGuncelle = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('token');
-            await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/personel/guncelle', {
+            await axios.post(`${API_URL}/api/personel/guncelle`, {
                 yeni_sifre: yeniSifre
             }, { headers: { Authorization: `Bearer ${token}` } });
             alert('Şifreniz başarıyla güncellendi.');
@@ -356,11 +377,14 @@ export default function Settings() {
             <ul className="nav nav-tabs mb-4 border-bottom-0">
                 <li className="nav-item"><button className={`nav-link px-4 fw-bold ${activeTab === 'profile' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} onClick={() => setActiveTab('profile')}>Profilim</button></li>
                 {isYetkili && <li className="nav-item"><button className={`nav-link px-4 fw-bold ${activeTab === 'users' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} onClick={() => setActiveTab('users')}>Personel Listesi</button></li>}
+                {/* ✅ YENİ SEKME */}
+                {isYetkili && <li className="nav-item"><button className={`nav-link px-4 fw-bold ${activeTab === 'kiyafet' ? 'active shadow-sm border-0 bg-dark text-white' : 'text-muted border-0 bg-transparent'}`} onClick={() => setActiveTab('kiyafet')}>👕 Kıyafet Yönetimi</button></li>}
             </ul>
 
             <div className="card shadow-sm border-0 rounded-4" style={{minHeight: '600px'}}>
                 <div className="card-body p-4">
                     
+                    {/* TAB: PROFİLİM */}
                     {activeTab === 'profile' && (
                         <div className="row justify-content-center">
                             <div className="col-md-6 text-center">
@@ -386,6 +410,34 @@ export default function Settings() {
                         </div>
                     )}
 
+                    {/* ✅ TAB: KIYAFET YÖNETİMİ (YENİ) */}
+                    {activeTab === 'kiyafet' && isYetkili && (
+                        <div className="row justify-content-center pt-5">
+                            <div className="col-md-6 text-center">
+                                <div className={`card border-0 shadow-lg ${kiyafetDonemiAktif ? 'bg-success-subtle' : 'bg-danger-subtle'}`}>
+                                    <div className="card-body p-5">
+                                        <div className={`rounded-circle p-4 d-inline-block mb-3 ${kiyafetDonemiAktif ? 'bg-success text-white' : 'bg-danger text-white'}`}>
+                                            <Shirt size={64} />
+                                        </div>
+                                        <h3 className={`fw-bold mb-2 ${kiyafetDonemiAktif ? 'text-success' : 'text-danger'}`}>
+                                            {kiyafetDonemiAktif ? 'DÖNEM AKTİF 🟢' : 'DÖNEM PASİF 🔴'}
+                                        </h3>
+                                        <p className="text-muted mb-4 fs-5">
+                                            {kiyafetDonemiAktif ? "Mobil uygulamadan veri girişi AÇIK." : "Mobil uygulamadan veri girişi KAPALI."}
+                                        </p>
+                                        <button onClick={toggleDonem} disabled={kiyafetLoading} className={`btn btn-lg px-5 py-3 fw-bold shadow ${kiyafetDonemiAktif ? 'btn-danger' : 'btn-success'}`}>
+                                            {kiyafetLoading ? 'İşleniyor...' : (kiyafetDonemiAktif ? <><ToggleRight className="me-2"/> DÖNEMİ KAPAT</> : <><ToggleLeft className="me-2"/> DÖNEMİ BAŞLAT</>)}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="alert alert-info mt-4">
+                                    <strong>Bilgi:</strong> "Dönemi Başlat" dediğinizde tüm personel mobil uygulamasından "Profilim" sekmesine girip beden bilgilerini güncelleyebilir.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: PERSONEL LİSTESİ */}
                     {activeTab === 'users' && isYetkili && (
                         <>
                             <div className="d-flex justify-content-between align-items-end mb-4">
@@ -525,7 +577,6 @@ export default function Settings() {
                                                             </select>
                                                         </div>
 
-                                                        {/* YENİ: ROL SEÇİMİ (ELLE DEĞİŞTİRİLEBİLİR) */}
                                                         <div className="col-md-4">
                                                             <label className="small fw-bold text-danger d-flex align-items-center gap-1"><Shield size={14}/> Sistem Rolü (Yetki)</label>
                                                             <select className="form-select form-select-sm border-danger" value={formData.rol} onChange={e=>setFormData({...formData, rol: e.target.value})}>
@@ -578,7 +629,6 @@ export default function Settings() {
 
                                             <hr/>
 
-                                            {/* GEÇMİŞ BAKİYE YÖNETİMİ */}
                                             <div className="bg-warning-subtle p-3 rounded mb-4 border border-warning">
                                                 <h6 className="fw-bold d-flex align-items-center gap-2 text-dark"><History size={18}/> Geçmiş Dönem İzin Girişi (Excel'den Aktarım)</h6>
                                                 <div className="d-flex gap-2 align-items-end mt-2">
@@ -627,7 +677,6 @@ export default function Settings() {
                                             </div>
                                         </div>
                                     )}
-
                                 </div>
                             </div>
                         </div>
