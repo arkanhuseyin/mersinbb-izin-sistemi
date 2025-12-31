@@ -483,8 +483,50 @@ exports.personelDondur = async (req, res) => {
 exports.personelAktifEt = async (req, res) => {
     try { await pool.query("UPDATE personeller SET aktif = TRUE, calisma_durumu = 'Çalışıyor' WHERE personel_id = $1", [req.body.personel_id]); res.json({ mesaj: 'Aktif' }); } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
 };
+// ============================================================
+// GÜÇLENDİRİLMİŞ PERSONEL SİLME (Önce İlişkili Verileri Temizler)
+// ============================================================
 exports.personelSil = async (req, res) => {
-    try { await pool.query('DELETE FROM personeller WHERE personel_id = $1', [req.params.personel_id]); res.json({ mesaj: 'Silindi' }); } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
+    const client = await pool.connect();
+    
+    try {
+        await client.query('BEGIN'); // İşlemi başlat (Transaction)
+        const pid = req.params.personel_id;
+
+        // 1. ADIM: Bu personele ait İZİN TALEPLERİNİ sil
+        await client.query('DELETE FROM izin_talepleri WHERE personel_id = $1', [pid]);
+
+        // 2. ADIM: Bu personele ait GEÇMİŞ BAKİYELERİ sil
+        await client.query('DELETE FROM gecmis_bakiyeler WHERE personel_id = $1', [pid]);
+
+        // 3. ADIM: Bu personele ait PROFİL DEĞİŞİKLİK TALEPLERİNİ sil (Yeni eklediğimiz tablo)
+        // (Eğer tablonuzun adı farklıysa burayı düzeltin)
+        await client.query('DELETE FROM profil_degisiklikleri WHERE personel_id = $1', [pid]);
+
+        // 4. ADIM: Varsa LOGLARI sil (Opsiyonel, hata verirse burayı açın)
+        // await client.query('DELETE FROM logs WHERE user_id = $1', [pid]);
+
+        // 5. ADIM: Artık tertemiz, PERSONELİ SİL
+        const result = await client.query('DELETE FROM personeller WHERE personel_id = $1', [pid]);
+
+        if (result.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ mesaj: 'Personel bulunamadı.' });
+        }
+
+        await client.query('COMMIT'); // İşlemi onayla ve bitir
+        res.json({ mesaj: 'Personel ve tüm geçmiş verileri başarıyla silindi.' });
+
+    } catch (err) {
+        await client.query('ROLLBACK'); // Hata olursa her şeyi geri al
+        console.error('Silme Hatası:', err); // Render loglarında hatayı görmek için
+        res.status(500).json({ 
+            mesaj: 'Silme işlemi başarısız. Personelin başka tablolarda kaydı olabilir.', 
+            detay: err.message 
+        });
+    } finally {
+        client.release();
+    }
 };
 exports.birimGuncelle = async (req, res) => {
     try { await pool.query('UPDATE personeller SET birim_id = $1 WHERE personel_id = $2', [req.body.yeni_birim_id, req.body.personel_id]); res.json({ mesaj: 'Transfer' }); } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
