@@ -1,180 +1,222 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
-import axios from 'axios';
-import { API_URL } from '../config'; 
+import React, { useState, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, RefreshControl } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { User, Phone, MapPin, Briefcase, CreditCard, LogOut, Shirt, ChevronRight } from 'lucide-react-native';
 
-export default function ProfilScreen({ route, navigation }) {
-  const { user: initialUser, token } = route.params;
-  const [profilData, setProfilData] = useState(initialUser);
-  const [sayfaYukleniyor, setSayfaYukleniyor] = useState(true);
-  const [kaydetYukleniyor, setKaydetYukleniyor] = useState(false);
+export default function ProfilScreen() {
+  const navigation = useNavigation();
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [email, setEmail] = useState('');
-  const [telefon, setTelefon] = useState('');
-  const [adres, setAdres] = useState('');
-  const [sifre, setSifre] = useState('');
-   
-  const [srcTarih, setSrcTarih] = useState('');
-  const [psikoTarih, setPsikoTarih] = useState('');
-  const [ehliyetTarih, setEhliyetTarih] = useState('');
+  // Sayfaya her gelindiğinde verileri tazele (Beden güncelleyince görünsün diye)
+  useFocusEffect(
+    useCallback(() => {
+      fetchUserProfile();
+    }, [])
+  );
 
-  const [files, setFiles] = useState({ adres: null, src: null, psiko: null, ehliyet: null });
-
-  useEffect(() => { guncelBilgileriGetir(); }, []);
-
-  const guncelBilgileriGetir = async () => {
+  const fetchUserProfile = async () => {
     try {
-        const response = await axios.get(`${API_URL}/api/personel/bilgi`, {
-            headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true' }
-        });
-        const gelenVeri = response.data;
-        setProfilData(gelenVeri);
-        setEmail(gelenVeri.email || '');
-        setTelefon(gelenVeri.telefon || '');
-        setAdres(gelenVeri.adres || '');
-        setSrcTarih(gelenVeri.src_tarih ? gelenVeri.src_tarih.split('T')[0] : '');
-        setPsikoTarih(gelenVeri.psiko_tarih ? gelenVeri.psiko_tarih.split('T')[0] : '');
-        setEhliyetTarih(gelenVeri.ehliyet_tarih ? gelenVeri.ehliyet_tarih.split('T')[0] : '');
-    } catch (error) { console.log("Veri çekme hatası"); } finally { setSayfaYukleniyor(false); }
+      // Not: Normalde en güncel veriyi veritabanından çekmek gerekir.
+      // Şimdilik AsyncStorage'daki veriyi kullanıyoruz.
+      // Backend'de '/me' endpoint'i varsa oradan çekmek daha sağlıklı olur.
+      const storedUser = await AsyncStorage.getItem('userData');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   };
 
-  const pickDoc = async (tur) => {
-    let result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf' });
-    if (!result.canceled) setFiles({ ...files, [tur]: result.assets[0] });
+  const handleLogout = async () => {
+    Alert.alert('Çıkış', 'Çıkış yapmak istediğinize emin misiniz?', [
+        { text: 'İptal', style: 'cancel' },
+        { text: 'Çıkış Yap', style: 'destructive', onPress: async () => {
+            await AsyncStorage.removeItem('userToken');
+            await AsyncStorage.removeItem('userData');
+            navigation.reset({ index: 0, routes: [{ name: 'Login' }] });
+        }}
+    ]);
   };
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images, // Düzeltilmiş syntax
-      quality: 0.5,
-    });
-    if (!result.canceled) setFiles({ ...files, ehliyet: result.assets[0] });
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchUserProfile();
   };
 
-  const kaydet = async () => {
-    setKaydetYukleniyor(true);
-    try {
-        const formData = new FormData();
-        formData.append('email', email); 
-        formData.append('telefon', telefon); 
-        formData.append('adres', adres);
-        formData.append('src_tarih', srcTarih); 
-        formData.append('psiko_tarih', psikoTarih); 
-        formData.append('ehliyet_tarih', ehliyetTarih);
-        if(sifre) formData.append('yeni_sifre', sifre);
-
-        if(files.adres) formData.append('adres_belgesi', { uri: files.adres.uri, name: 'adres.pdf', type: 'application/pdf' });
-        if(files.src) formData.append('src_belgesi', { uri: files.src.uri, name: 'src.pdf', type: 'application/pdf' });
-        if(files.psiko) formData.append('psiko_belgesi', { uri: files.psiko.uri, name: 'psiko.pdf', type: 'application/pdf' });
-        
-        if(files.ehliyet) {
-             let type = files.ehliyet.mimeType || 'image/jpeg';
-             let name = files.ehliyet.fileName || 'ehliyet.jpg';
-             formData.append('ehliyet_belgesi', { uri: files.ehliyet.uri, name, type });
-        }
-
-        // BAĞLANTI AYARLARINA DOKUNMADIM (Senin kodun)
-        await axios.post(`${API_URL}/api/personel/guncelle`, formData, {
-            headers: { 
-                'Authorization': `Bearer ${token}`, 
-                'bypass-tunnel-reminder': 'true', 
-                'Content-Type': 'multipart/form-data' 
-            }
-        });
-
-        Alert.alert("Başarılı", "Değişiklik talebiniz yönetici onayına gönderildi.");
-        setSifre(''); setFiles({ adres: null, src: null, psiko: null, ehliyet: null }); guncelBilgileriGetir();
-    } catch (error) { Alert.alert("Hata", "Güncelleme başarısız."); } finally { setKaydetYukleniyor(false); }
-  };
-
-  if (sayfaYukleniyor) return <View style={styles.center}><ActivityIndicator size="large" color="#0d6efd" /></View>;
+  if (loading) {
+    return <View style={styles.center}><ActivityIndicator size="large" color="#cc0000" /></View>;
+  }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{paddingBottom: 50}}>
-      <View style={styles.readOnlyBox}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{profilData.ad ? profilData.ad[0] : '?'}</Text></View>
-        <Text style={styles.name}>{profilData.ad} {profilData.soyad}</Text>
-        <Text style={styles.tc}>TC: {profilData.tc_no}</Text>
-        <Text style={styles.rol}>{profilData.rol_adi ? profilData.rol_adi.toUpperCase() : 'PERSONEL'}</Text>
+    <View style={styles.container}>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={styles.avatarContainer}>
+            <User color="#cc0000" size={40} />
+        </View>
+        <Text style={styles.nameText}>{user?.ad} {user?.soyad}</Text>
+        <Text style={styles.roleText}>{user?.unvani || user?.gorevi}</Text>
       </View>
 
-      <View style={styles.form}>
-        <Text style={styles.header}>📝 Kişisel Bilgiler</Text>
+      <ScrollView 
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         
-        {/* BOŞLUK HATASI BURADA DÜZELTİLDİ: Componentler alt alta alındı */}
-        <Text style={styles.label}>Telefon Numarası</Text> 
-        <TextInput style={styles.input} value={telefon} onChangeText={setTelefon} placeholder="05XX" keyboardType="phone-pad" />
-        
-        <Text style={styles.label}>E-Posta Adresi</Text> 
-        <TextInput style={styles.input} value={email} onChangeText={setEmail} placeholder="email@..." keyboardType="email-address" autoCapitalize="none" />
-        
-        <Text style={styles.label}>Yeni Şifre</Text> 
-        <TextInput style={styles.input} value={sifre} onChangeText={setSifre} placeholder="******" secureTextEntry />
-        
-        <View style={styles.divider} />
-        
-        <Text style={styles.header}>📄 Belgeler ve Tarihler</Text>
-        
-        <Text style={styles.label}>Açık Adres</Text> 
-        <TextInput style={[styles.input, {height: 60}]} value={adres} onChangeText={setAdres} multiline />
-        <TouchableOpacity style={[styles.fileBtn, files.adres && styles.fileBtnSuccess]} onPress={() => pickDoc('adres')}>
-            <Text style={styles.fileBtnText}>{files.adres ? "İkametgah Seçildi" : "İkametgah Yükle (PDF)"}</Text>
-        </TouchableOpacity>
-        
-        <Text style={styles.label}>SRC Tarihi</Text> 
-        <TextInput style={styles.input} value={srcTarih} onChangeText={setSrcTarih} />
-        <TouchableOpacity style={[styles.fileBtn, files.src && styles.fileBtnSuccess]} onPress={() => pickDoc('src')}>
-            <Text style={styles.fileBtnText}>{files.src ? "SRC Seçildi" : "SRC Belgesi (PDF)"}</Text>
-        </TouchableOpacity>
-        
-        <Text style={styles.label}>Psikoteknik</Text> 
-        <TextInput style={styles.input} value={psikoTarih} onChangeText={setPsikoTarih} />
-        <TouchableOpacity style={[styles.fileBtn, files.psiko && styles.fileBtnSuccess]} onPress={() => pickDoc('psiko')}>
-            <Text style={styles.fileBtnText}>{files.psiko ? "Psiko. Seçildi" : "Psikoteknik (PDF)"}</Text>
-        </TouchableOpacity>
-        
-        <Text style={styles.label}>Ehliyet Tarihi</Text> 
-        <TextInput style={styles.input} value={ehliyetTarih} onChangeText={setEhliyetTarih} />
-        
-        <TouchableOpacity style={[styles.fileBtn, files.ehliyet && styles.fileBtnSuccess]} onPress={pickImage}>
-            <Ionicons name={files.ehliyet ? "checkmark-circle" : "camera"} size={20} color="white" />
-            <Text style={styles.fileBtnText}>{files.ehliyet ? "Ehliyet Seçildi" : "Ehliyet Yükle (Foto/PDF)"}</Text>
-        </TouchableOpacity>
+        {/* 1. KİŞİSEL BİLGİLER */}
+        <View style={styles.card}>
+            <Text style={styles.cardTitle}>Kişisel Bilgiler</Text>
+            
+            <View style={styles.row}>
+                <CreditCard size={20} color="#666" />
+                <View style={styles.rowContent}>
+                    <Text style={styles.label}>TC Kimlik No</Text>
+                    <Text style={styles.value}>{user?.tc_no}</Text>
+                </View>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.row}>
+                <Phone size={20} color="#666" />
+                <View style={styles.rowContent}>
+                    <Text style={styles.label}>Telefon</Text>
+                    <Text style={styles.value}>{user?.telefon || '-'}</Text>
+                </View>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.row}>
+                <MapPin size={20} color="#666" />
+                <View style={styles.rowContent}>
+                    <Text style={styles.label}>Adres</Text>
+                    <Text style={styles.value}>{user?.adres || '-'}</Text>
+                </View>
+            </View>
+        </View>
 
-        <View style={styles.divider} />
-        
-        {kaydetYukleniyor ? (
-            <ActivityIndicator size="large" color="#0d6efd" />
-        ) : (
-            <TouchableOpacity style={styles.saveBtn} onPress={kaydet}>
-                <Text style={styles.saveBtnText}>Değişiklik Talebi Gönder</Text>
+        {/* 2. KURUMSAL BİLGİLER */}
+        <View style={styles.card}>
+            <Text style={styles.cardTitle}>Kurumsal Bilgiler</Text>
+            <View style={styles.row}>
+                <Briefcase size={20} color="#666" />
+                <View style={styles.rowContent}>
+                    <Text style={styles.label}>Birim</Text>
+                    <Text style={styles.value}>{user?.birim_adi || '-'}</Text>
+                </View>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.row}>
+                <View style={styles.rowContent}>
+                    <Text style={styles.label}>Sicil No</Text>
+                    <Text style={styles.value}>{user?.sicil_no || '-'}</Text>
+                </View>
+                <View style={styles.rowContent}>
+                    <Text style={styles.label}>Kadro</Text>
+                    <Text style={styles.value}>{user?.kadro_tipi || '-'}</Text>
+                </View>
+            </View>
+        </View>
+
+        {/* ✅ 3. YENİ EKLENEN: LOJİSTİK VE BEDEN BİLGİLERİ */}
+        <View style={styles.card}>
+            <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:15}}>
+                <Text style={styles.cardTitle}>Lojistik & Beden Bilgileri</Text>
+                <Shirt size={20} color="#cc0000" />
+            </View>
+            
+            <View style={styles.bedenGrid}>
+                <View style={styles.bedenItem}>
+                    <Text style={styles.bedenLabel}>Ayakkabı</Text>
+                    <Text style={styles.bedenValue}>{user?.ayakkabi_no || '-'}</Text>
+                </View>
+                <View style={styles.bedenItem}>
+                    <Text style={styles.bedenLabel}>Tişört</Text>
+                    <Text style={styles.bedenValue}>{user?.tisort_beden || '-'}</Text>
+                </View>
+                <View style={styles.bedenItem}>
+                    <Text style={styles.bedenLabel}>Gömlek</Text>
+                    <Text style={styles.bedenValue}>{user?.gomlek_beden || '-'}</Text>
+                </View>
+                <View style={styles.bedenItem}>
+                    <Text style={styles.bedenLabel}>Mont</Text>
+                    <Text style={styles.bedenValue}>{user?.mont_beden || '-'}</Text>
+                </View>
+            </View>
+
+            {/* BUTON: Tıklayınca 'Kiyafet' ekranına gider */}
+            <TouchableOpacity 
+                style={styles.editButton}
+                onPress={() => navigation.navigate('Kiyafet')}
+            >
+                <Text style={styles.editButtonText}>Beden Bilgilerini Güncelle</Text>
+                <ChevronRight size={16} color="#cc0000" />
             </TouchableOpacity>
-        )}
-      </View>
-    </ScrollView>
+        </View>
+
+        {/* ÇIKIŞ BUTONU */}
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <LogOut size={20} color="#fff" />
+            <Text style={styles.logoutText}>Oturumu Kapat</Text>
+        </TouchableOpacity>
+        
+        <View style={{height: 30}} />
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f0f2f5' },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  readOnlyBox: { alignItems: 'center', padding: 30, backgroundColor: '#0d6efd', borderBottomLeftRadius: 30, borderBottomRightRadius: 30 },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: 'white', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  avatarText: { fontSize: 30, color: '#0d6efd', fontWeight: 'bold' },
-  name: { fontSize: 22, fontWeight: 'bold', color: 'white' },
-  tc: { color: '#e0e0e0', marginTop: 5, fontSize: 16, fontWeight: 'bold' },
-  rol: { color: '#ffc107', fontWeight: 'bold', marginTop: 5 },
-  form: { padding: 20 },
-  header: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 15, marginTop: 10 },
-  label: { fontSize: 14, color: '#666', marginBottom: 5, marginTop: 10 },
-  input: { backgroundColor: 'white', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16 },
-  fileBtn: { flexDirection: 'row', backgroundColor: '#6c757d', padding: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
-  fileBtnSuccess: { backgroundColor: '#198754' },
-  fileBtnText: { color: 'white', marginLeft: 10, fontWeight: 'bold' },
-  saveBtn: { backgroundColor: '#0d6efd', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 30, marginBottom: 50, elevation: 5 },
-  saveBtnText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
-  divider: { height: 1, backgroundColor: '#ccc', marginVertical: 20 }
+  
+  header: {
+    backgroundColor: '#cc0000', paddingTop: 60, paddingBottom: 30, alignItems: 'center',
+    borderBottomLeftRadius: 30, borderBottomRightRadius: 30,
+  },
+  avatarContainer: {
+    width: 80, height: 80, borderRadius: 40, backgroundColor: '#fff',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 10
+  },
+  nameText: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  roleText: { color: 'rgba(255,255,255,0.8)', fontSize: 14 },
+
+  content: { padding: 20, marginTop: -20 },
+  
+  card: {
+    backgroundColor: '#fff', borderRadius: 15, padding: 20, marginBottom: 15,
+    shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 5, elevation: 3,
+  },
+  cardTitle: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 10 },
+  
+  row: { flexDirection: 'row', alignItems: 'center', marginVertical: 8 },
+  rowContent: { marginLeft: 15, flex: 1 },
+  label: { fontSize: 12, color: '#999' },
+  value: { fontSize: 15, color: '#333', fontWeight: '500' },
+  divider: { height: 1, backgroundColor: '#eee', marginVertical: 5 },
+
+  // Beden Tablosu
+  bedenGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+  bedenItem: { 
+    width: '23%', backgroundColor: '#f9f9f9', padding: 8, borderRadius: 8, 
+    alignItems: 'center', marginBottom: 10, borderWidth:1, borderColor:'#eee' 
+  },
+  bedenLabel: { fontSize: 10, color: '#666', marginBottom: 2 },
+  bedenValue: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+
+  editButton: {
+    marginTop: 5, flexDirection: 'row', justifyContent: 'center', alignItems: 'center',
+    paddingVertical: 12, backgroundColor: '#fff0f0', borderRadius: 8
+  },
+  editButtonText: { color: '#cc0000', fontWeight: '600', marginRight: 5, fontSize: 13 },
+
+  logoutButton: {
+    backgroundColor: '#333', borderRadius: 12, padding: 15,
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 10
+  },
+  logoutText: { color: '#fff', fontWeight: 'bold', marginLeft: 10 }
 });

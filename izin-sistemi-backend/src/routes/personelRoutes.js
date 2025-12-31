@@ -71,6 +71,11 @@ router.delete('/sil/:personel_id', auth, personelController.personelSil);
 // 7. PDF İndir (Kurumsal 2 Sayfa)
 router.get('/pdf/:id', auth, personelController.personelKartiPdf);
 
+// 8. BEDEN İŞLEMLERİ 
+router.get('/kiyafet-donemi', authMiddleware, personelController.getKiyafetDonemiDurumu);
+router.post('/kiyafet-donemi-ayar', authMiddleware, personelController.toggleKiyafetDonemi);
+router.post('/beden-kaydet', authMiddleware, personelController.bedenGuncelle);
+
 
 // ============================================================
 // 🔵 PROFİL İŞLEMLERİ (Personelin Kendisi)

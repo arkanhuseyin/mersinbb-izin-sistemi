@@ -489,3 +489,48 @@ exports.personelSil = async (req, res) => {
 exports.birimGuncelle = async (req, res) => {
     try { await pool.query('UPDATE personeller SET birim_id = $1 WHERE personel_id = $2', [req.body.yeni_birim_id, req.body.personel_id]); res.json({ mesaj: 'Transfer' }); } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
 };
+
+// ============================================================
+// 6. KIYAFET TALEP SİSTEMİ (YENİ)
+// ============================================================
+
+// 1. Dönem Açık mı? (Mobil soracak)
+exports.getKiyafetDonemiDurumu = async (req, res) => {
+    try {
+        const result = await pool.query("SELECT deger_bool FROM sistem_ayarlari WHERE ayar_adi = 'kiyafet_talep_donemi'");
+        const aktif = result.rows.length > 0 ? result.rows[0].deger_bool : false;
+        res.json({ aktif });
+    } catch (err) { res.json({ aktif: false }); }
+};
+
+// 2. Dönemi Aç/Kapa (Sadece Admin)
+exports.toggleKiyafetDonemi = async (req, res) => {
+    if (req.user.rol !== 'admin' && req.user.rol !== 'filo') return res.status(403).json({ mesaj: 'Yetkisiz' });
+    const { durum } = req.body; 
+    try {
+        await pool.query("UPDATE sistem_ayarlari SET deger_bool = $1 WHERE ayar_adi = 'kiyafet_talep_donemi'", [durum]);
+        res.json({ mesaj: `Dönem ${durum ? 'AÇILDI' : 'KAPATILDI'}.` });
+    } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
+};
+
+// 3. Beden Kaydet (Personel)
+exports.bedenGuncelle = async (req, res) => {
+    const { personel_id } = req.user;
+    const { ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden } = req.body;
+
+    // Önce Kontrol: Dönem açık mı?
+    const ayarRes = await pool.query("SELECT deger_bool FROM sistem_ayarlari WHERE ayar_adi = 'kiyafet_talep_donemi'");
+    if (ayarRes.rows.length === 0 || !ayarRes.rows[0].deger_bool) {
+        return res.status(400).json({ mesaj: 'Şu an güncelleme dönemi KAPALIDIR.' });
+    }
+
+    try {
+        await pool.query(
+            `UPDATE personeller SET 
+             ayakkabi_no=$1, tisort_beden=$2, gomlek_beden=$3, suveter_beden=$4, mont_beden=$5 
+             WHERE personel_id=$6`,
+            [ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden, personel_id]
+        );
+        res.json({ mesaj: 'Beden bilgileriniz kaydedildi.' });
+    } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
+};
