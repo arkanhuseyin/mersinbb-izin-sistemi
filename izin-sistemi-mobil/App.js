@@ -3,20 +3,18 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'react-native';
 
-// Mevcut Ekranlar
-import LoginScreen from './LoginScreen';
-import DashboardScreen from './DashboardScreen';
-import IzinTalepScreen from './IzinTalepScreen';
-import IzinDetayScreen from './IzinDetayScreen';
-import GecmisIzinlerScreen from './GecmisIzinlerScreen';
-import OnayListesiScreen from './OnayListesiScreen';
-import OnayDetayScreen from './OnayDetayScreen';
-import ProfilScreen from './ProfilScreen';
-import BildirimScreen from './BildirimScreen';
-import SifreUnuttumScreen from './SifreUnuttumScreen';
-
-// ✅ YENİ EKLENEN: KIYAFET EKRANI
-import KiyafetScreen from './KiyafetScreen';
+// ✅ DOĞRU PATH: src/screens
+import LoginScreen from './src/screens/LoginScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
+import IzinTalepScreen from './src/screens/IzinTalepScreen';
+import IzinDetayScreen from './src/screens/IzinDetayScreen';
+import GecmisIzinlerScreen from './src/screens/GecmisIzinlerScreen';
+import OnayListesiScreen from './src/screens/OnayListesiScreen';
+import OnayDetayScreen from './src/screens/OnayDetayScreen';
+import ProfilScreen from './src/screens/ProfilScreen';
+import BildirimScreen from './src/screens/BildirimScreen';
+import SifreUnuttumScreen from './src/screens/SifreUnuttumScreen';
+import KiyafetScreen from './src/screens/KiyafetScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,70 +22,69 @@ export default function App() {
   return (
     <NavigationContainer>
       <StatusBar backgroundColor="#cc0000" barStyle="light-content" />
-      <Stack.Navigator 
+      <Stack.Navigator
         initialRouteName="Login"
         screenOptions={{
-          headerShown: false, // Varsayılan olarak header gizli
+          headerShown: false,
           headerStyle: { backgroundColor: '#cc0000' },
           headerTintColor: '#fff',
           headerTitleStyle: { fontWeight: 'bold' },
         }}
       >
-        {/* Giriş Ekranı */}
-        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+        {/* Giriş */}
+        <Stack.Screen name="Login" component={LoginScreen} />
 
         {/* Ana Panel */}
         <Stack.Screen name="Dashboard" component={DashboardScreen} />
 
         {/* İzin İşlemleri */}
-        <Stack.Screen 
-          name="IzinTalep" 
-          component={IzinTalepScreen} 
-          options={{ headerShown: true, title: 'İzin Talebi Oluştur' }} 
+        <Stack.Screen
+          name="IzinTalep"
+          component={IzinTalepScreen}
+          options={{ headerShown: true, title: 'İzin Talebi Oluştur' }}
         />
-        <Stack.Screen 
-          name="IzinDetay" 
-          component={IzinDetayScreen} 
-          options={{ headerShown: true, title: 'İzin Detayları' }} 
+        <Stack.Screen
+          name="IzinDetay"
+          component={IzinDetayScreen}
+          options={{ headerShown: true, title: 'İzin Detayları' }}
         />
-        <Stack.Screen 
-          name="GecmisIzinler" 
-          component={GecmisIzinlerScreen} 
-          options={{ headerShown: true, title: 'Geçmiş İzinlerim' }} 
-        />
-
-        {/* Yönetici Onay İşlemleri */}
-        <Stack.Screen 
-          name="OnayListesi" 
-          component={OnayListesiScreen} 
-          options={{ headerShown: true, title: 'Onay Bekleyenler' }} 
-        />
-        <Stack.Screen 
-          name="OnayDetay" 
-          component={OnayDetayScreen} 
-          options={{ headerShown: true, title: 'Talep İncele' }} 
+        <Stack.Screen
+          name="GecmisIzinler"
+          component={GecmisIzinlerScreen}
+          options={{ headerShown: true, title: 'Geçmiş İzinlerim' }}
         />
 
-        {/* Diğer Ekranlar */}
+        {/* Yönetici Onay */}
+        <Stack.Screen
+          name="OnayListesi"
+          component={OnayListesiScreen}
+          options={{ headerShown: true, title: 'Onay Bekleyenler' }}
+        />
+        <Stack.Screen
+          name="OnayDetay"
+          component={OnayDetayScreen}
+          options={{ headerShown: true, title: 'Talep İncele' }}
+        />
+
+        {/* Diğer */}
         <Stack.Screen name="Profil" component={ProfilScreen} />
-        <Stack.Screen 
-          name="Bildirimler" 
-          component={BildirimScreen} 
-          options={{ headerShown: true, title: 'Bildirimler' }} 
+        <Stack.Screen
+          name="Bildirimler"
+          component={BildirimScreen}
+          options={{ headerShown: true, title: 'Bildirimler' }}
         />
-        <Stack.Screen 
-            name="SifreUnuttum" 
-            component={SifreUnuttumScreen} 
-            options={{ headerShown: true, title: 'Şifremi Unuttum' }} 
-        />
-
-        {/* ✅ YENİ EKLENEN: KIYAFET/BEDEN EKRANI */}
-        <Stack.Screen 
-            name="Kiyafet" 
-            component={KiyafetScreen} 
-            options={{ headerShown: false }} // Kendi header'ı var
+        <Stack.Screen
+          name="SifreUnuttum"
+          component={SifreUnuttumScreen}
+          options={{ headerShown: true, title: 'Şifremi Unuttum' }}
         />
 
+        {/* Kıyafet */}
+        <Stack.Screen
+          name="Kiyafet"
+          component={KiyafetScreen}
+          options={{ headerShown: false }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -103,3 +103,5 @@ const styles = StyleSheet.create({
   backButton: { backgroundColor: '#6c757d', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
   backButtonText: { color: 'white', fontWeight: 'bold' }
 });
+
+// deneme

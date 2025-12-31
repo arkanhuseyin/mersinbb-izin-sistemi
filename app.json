@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "d4c13f00-2b45-46e5-8214-8849707ca092"
+      }
+    },
+    "android": {
+      "package": "com.huseyin.arkan333.mersinbbizinsistemi"
+    }
+  }
+}

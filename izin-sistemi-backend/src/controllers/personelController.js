@@ -515,7 +515,10 @@ exports.toggleKiyafetDonemi = async (req, res) => {
 
 // 3. Beden Kaydet (Personel)
 exports.bedenGuncelle = async (req, res) => {
-    const { personel_id } = req.user;
+    // 🔴 ESKİ HATALI SATIR: const { personel_id } = req.user;
+    // 🟢 YENİ DOĞRU SATIR:
+    const personel_id = req.user.id; 
+    
     const { ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden } = req.body;
 
     // Önce Kontrol: Dönem açık mı?
@@ -525,12 +528,21 @@ exports.bedenGuncelle = async (req, res) => {
     }
 
     try {
-        await pool.query(
+        const result = await pool.query(
             `UPDATE personeller SET 
              ayakkabi_no=$1, tisort_beden=$2, gomlek_beden=$3, suveter_beden=$4, mont_beden=$5 
              WHERE personel_id=$6`,
             [ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden, personel_id]
         );
-        res.json({ mesaj: 'Beden bilgileriniz kaydedildi.' });
-    } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
+
+        // Ekstra Güvenlik: Eğer kimse güncellenmediyse hata verelim
+        if (result.rowCount === 0) {
+            return res.status(404).json({ mesaj: 'Kullanıcı bulunamadı, işlem başarısız.' });
+        }
+
+        res.json({ mesaj: 'Beden bilgileriniz başarıyla kaydedildi.' });
+    } catch (err) { 
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu.' }); 
+    }
 };
