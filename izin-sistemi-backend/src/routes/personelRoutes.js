@@ -51,7 +51,7 @@ router.get('/liste', auth, personelController.personelListesi);
 // 2. Birimleri Getir
 router.get('/birimler', auth, personelController.birimleriGetir);
 
-// 3. Personel İzin Geçmişi (YENİ EKLENDİ - 2. Sekme İçin Zorunlu)
+// 3. Personel İzin Geçmişi
 router.get('/izin-gecmisi/:id', auth, personelController.personelIzinGecmisi);
 
 // 4. Yeni Personel Ekle (Admin)
@@ -109,7 +109,7 @@ router.post('/guncelle', auth, upload.fields([
         const { email, telefon, adres, src_tarih, psiko_tarih, ehliyet_tarih, yeni_sifre } = req.body;
         const pid = req.user.id;
 
-        // A) ŞİFRE GÜNCELLEME
+        // A) ŞİFRE GÜNCELLEME (Giriş yapmış kullanıcı kendi şifresini değiştiriyorsa)
         if (yeni_sifre && yeni_sifre.length >= 6) {
              const hash = await bcrypt.hash(yeni_sifre, 10);
              await pool.query('UPDATE personeller SET sifre_hash = $1 WHERE personel_id = $2', [hash, pid]);
@@ -162,7 +162,7 @@ router.get('/talepler', auth, async (req, res) => {
     } catch (err) { res.status(500).send('Hata'); }
 });
 
-// Talep Onayla/Reddet
+// Talep Onayla/Reddet (DÜZELTİLDİ: Sifre Guncelleme Eklendi)
 router.post('/talep-islem', auth, async (req, res) => {
     const client = await pool.connect();
     try {
@@ -178,14 +178,17 @@ router.post('/talep-islem', auth, async (req, res) => {
             const veri = talep.yeni_veri; 
             const dosyalar = talep.dosya_yollari || {};
             
+            // ✅ DÜZELTME BURADA: sifre_hash eklendi
             await client.query(`
                 UPDATE personeller SET 
-                email = COALESCE($1, email), telefon = COALESCE($2, telefon), adres = COALESCE($3, adres),
-                src_tarih = COALESCE($4, src_tarih), psiko_tarih = COALESCE($5, psiko_tarih), ehliyet_tarih = COALESCE($6, ehliyet_tarih),
-                adres_belgesi_yol = COALESCE($7, adres_belgesi_yol), src_belgesi_yol = COALESCE($8, src_belgesi_yol),
-                psiko_belgesi_yol = COALESCE($9, psiko_belgesi_yol), ehliyet_belgesi_yol = COALESCE($10, ehliyet_belgesi_yol)
-                WHERE personel_id = $11
+                sifre_hash = COALESCE($1, sifre_hash),
+                email = COALESCE($2, email), telefon = COALESCE($3, telefon), adres = COALESCE($4, adres),
+                src_tarih = COALESCE($5, src_tarih), psiko_tarih = COALESCE($6, psiko_tarih), ehliyet_tarih = COALESCE($7, ehliyet_tarih),
+                adres_belgesi_yol = COALESCE($8, adres_belgesi_yol), src_belgesi_yol = COALESCE($9, src_belgesi_yol),
+                psiko_belgesi_yol = COALESCE($10, psiko_belgesi_yol), ehliyet_belgesi_yol = COALESCE($11, ehliyet_belgesi_yol)
+                WHERE personel_id = $12
             `, [
+                veri.sifre_hash || null, // ✅ 1. parametre Şifre
                 veri.email || null, veri.telefon || null, veri.adres || null, 
                 tarihDuzelt(veri.src_tarih), tarihDuzelt(veri.psiko_tarih), tarihDuzelt(veri.ehliyet_tarih),
                 dosyalar.adres_belgesi_yol || null, dosyalar.src_belgesi_yol || null, 

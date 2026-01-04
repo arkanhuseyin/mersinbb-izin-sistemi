@@ -811,13 +811,25 @@ exports.getPersonelBakiye = async (req, res) => {
 };
 
 // ============================================================
-// 11. ŞİFRE SIFIRLAMA TALEBİ (Giriş Yapmadan - Kimlik Fotolu)
+// 11. ŞİFRE SIFIRLAMA TALEBİ (Giriş Yapmadan - LOGLU VERSİYON)
 // ============================================================
 exports.sifreSifirlamaTalep = async (req, res) => {
+    // 🛑 DEBUG İÇİN LOGLAR (Terminalde görünecek)
+    console.log("--- ŞİFRE SIFIRLAMA TALEBİ GELDİ ---");
+    console.log("Body (Metin Verileri):", req.body);
+    console.log("File (Dosya):", req.file);
+
     const { tc_no, yeni_sifre } = req.body;
     const kimlik_foto = req.file ? req.file.path : null;
 
-    if (!tc_no || !yeni_sifre || !kimlik_foto) {
+    // Kontrol: Veriler gelmiş mi?
+    if (!tc_no) {
+        console.log("HATA: TC No boş geldi!");
+        return res.status(400).json({ mesaj: 'TC Kimlik numarası sunucuya ulaşmadı.' });
+    }
+
+    if (!yeni_sifre || !kimlik_foto) {
+        console.log("HATA: Şifre veya Fotoğraf eksik!");
         return res.status(400).json({ mesaj: 'TC, Yeni Şifre ve Kimlik Fotoğrafı zorunludur.' });
     }
 
@@ -825,21 +837,25 @@ exports.sifreSifirlamaTalep = async (req, res) => {
         const client = await pool.connect();
         
         // 1. TC'den Personel ID bul
-        const pRes = await client.query("SELECT personel_id FROM personeller WHERE tc_no = $1", [tc_no]);
+        // trim() ekleyerek boşlukları temizliyoruz
+        const temizTc = tc_no.trim();
+        console.log(`Veritabanında aranan TC: '${temizTc}'`);
+
+        const pRes = await client.query("SELECT personel_id FROM personeller WHERE tc_no = $1", [temizTc]);
         
         if (pRes.rows.length === 0) {
             client.release();
-            // Güvenlik gereği "Böyle biri yok" dememek daha iyidir ama iç sistem olduğu için diyebiliriz.
+            console.log("HATA: Bu TC veritabanında bulunamadı.");
             return res.status(404).json({ mesaj: 'Bu TC kimlik numarasına ait personel bulunamadı.' });
         }
 
         const personel_id = pRes.rows[0].personel_id;
+        console.log(`Personel bulundu! ID: ${personel_id}`);
 
         // 2. Şifreyi Hashle
         const sifre_hash = await bcrypt.hash(yeni_sifre, 10);
 
-        // 3. Talebi "profil_degisiklikleri" tablosuna işle
-        // Not: yeni_veri içine şifreyi, dosya_yollari içine kimliği koyuyoruz.
+        // 3. Talebi Kaydet
         const yeniVeri = { sifre_hash: sifre_hash }; 
         const dosyaYollari = { kimlik_belgesi_yol: kimlik_foto };
 
@@ -849,10 +865,11 @@ exports.sifreSifirlamaTalep = async (req, res) => {
         );
 
         client.release();
+        console.log("BAŞARILI: Talep kaydedildi.");
         res.json({ mesaj: 'Talebiniz alındı. Yönetici onayından sonra şifreniz güncellenecektir.' });
 
     } catch (err) {
-        console.error(err);
+        console.error("SUNUCU HATASI:", err);
         res.status(500).json({ mesaj: 'Sunucu hatası oluştu.' });
     }
 };
