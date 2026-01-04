@@ -566,7 +566,8 @@ exports.personelGuncelle = async (req, res) => {
             ise_giris_tarihi=COALESCE($27, ise_giris_tarihi),
             calisma_durumu=$28,
             ayrilma_tarihi=$29,
-            aktif=COALESCE($30, aktif)
+            aktif=COALESCE($30, aktif),
+            egitim_durumu=COALESCE($31, egitim_durumu)
         `;
         
         const values = [
@@ -578,10 +579,12 @@ exports.personelGuncelle = async (req, res) => {
             body.sicil_no, body.asis_kart_no, body.hareket_merkezi, formatNull(body.ise_giris_tarihi),
             body.calisma_durumu,
             formatNull(body.ayrilma_tarihi),
-            aktiflikDurumu
+            aktiflikDurumu,
+            body.egitim_durumu // YENİ EKLENEN: $31
         ];
 
-        let pIdx = 31; 
+        // Buradaki sayaç artık 32'den başlamalı çünkü 31'i yukarıda kullandık
+        let pIdx = 32; 
         if (body.birim_id) { query += `, birim_id=$${pIdx++}`; values.push(body.birim_id); }
         if (rolId) { query += `, rol_id=$${pIdx++}`; values.push(rolId); }
         if (fotograf_yolu) { query += `, fotograf_yolu=$${pIdx++}`; values.push(fotograf_yolu); }
