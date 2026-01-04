@@ -138,7 +138,7 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Bilgi İşlem Dairesi Başkanlığı © 2026</Text>
+            <Text style={styles.footerText}>Toplu Taşıma Şube Müdürlüğü - Hüseyin Arkan © 2026</Text>
             <Text style={styles.footerTextSmall}>v1.0.0</Text>
           </View>
 
