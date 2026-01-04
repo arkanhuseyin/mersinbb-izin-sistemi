@@ -527,6 +527,9 @@ exports.personelEkle = async (req, res) => {
     } finally { client.release(); }
 };
 
+// ============================================================
+// 3. PERSONEL GÜNCELLE
+// ============================================================
 exports.personelGuncelle = async (req, res) => {
     const { id } = req.params;
     const body = req.body;
@@ -545,6 +548,7 @@ exports.personelGuncelle = async (req, res) => {
         let aktiflikDurumu = body.aktif; 
         if (body.ayrilma_tarihi && body.ayrilma_tarihi.length > 5) aktiflikDurumu = false;
 
+        // SQL Query Update: Added egitim_durumu at position $31
         let query = `
             UPDATE personeller SET 
             ad=$1, soyad=$2, telefon=$3, adres=$4, gorev=$5, kadro_tipi=$6, gorev_yeri=$7,
@@ -567,7 +571,7 @@ exports.personelGuncelle = async (req, res) => {
             calisma_durumu=$28,
             ayrilma_tarihi=$29,
             aktif=COALESCE($30, aktif),
-            egitim_durumu=COALESCE($31, egitim_durumu)
+            egitim_durumu=COALESCE($31, egitim_durumu) 
         `;
         
         const values = [
@@ -580,11 +584,10 @@ exports.personelGuncelle = async (req, res) => {
             body.calisma_durumu,
             formatNull(body.ayrilma_tarihi),
             aktiflikDurumu,
-            body.egitim_durumu // YENİ EKLENEN: $31
+            body.egitim_durumu // Added egitim_durumu to values array
         ];
 
-        // Buradaki sayaç artık 32'den başlamalı çünkü 31'i yukarıda kullandık
-        let pIdx = 32; 
+        let pIdx = 32; // Increment index to 32 because we added a 31st parameter
         if (body.birim_id) { query += `, birim_id=$${pIdx++}`; values.push(body.birim_id); }
         if (rolId) { query += `, rol_id=$${pIdx++}`; values.push(rolId); }
         if (fotograf_yolu) { query += `, fotograf_yolu=$${pIdx++}`; values.push(fotograf_yolu); }
