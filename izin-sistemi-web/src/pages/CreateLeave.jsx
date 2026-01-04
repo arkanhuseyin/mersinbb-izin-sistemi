@@ -14,7 +14,6 @@ export default function CreateLeave() {
         izin_turu: 'YILLIK İZİN',
         haftalik_izin: 'Pazar',
         aciklama: '',
-        // YENİ ALANLAR
         adres_secimi: 'MEVCUT',
         izin_adresi: '' 
     });
@@ -23,7 +22,7 @@ export default function CreateLeave() {
     const [hesaplanan, setHesaplanan] = useState({ bitis: '', ise_baslama: '' });
     const [resmiTatiller, setResmiTatiller] = useState([]);
     
-    // ✅ EKLENDİ: Bakiye State
+    // ✅ 1. Bakiye State'i
     const [bakiye, setBakiye] = useState(null);
 
     const izinTurleri = ["YILLIK İZİN", "MAZERET İZNİ", "RAPOR", "BABALIK İZNİ", "DOĞUM İZNİ", "DÜĞÜN İZNİ", "EVLİLİK İZNİ", "ÖLÜM İZNİ", "ÜCRETLİ İZİN", "ÜCRETSİZ İZİN"];
@@ -37,12 +36,12 @@ export default function CreateLeave() {
             setFormData(prev => ({ ...prev, izin_adresi: user.adres || '' }));
         }
 
-        // 1. Tatilleri Çek
+        // Tatilleri Çek
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/resmi-tatiller', {
             headers: { Authorization: `Bearer ${token}` }
         }).then(res => setResmiTatiller(res.data.map(t => t.tarih.split('T')[0]))).catch(console.error);
 
-        // 2. ✅ EKLENDİ: Bakiyeyi Çek
+        // ✅ 2. Bakiyeyi Çek
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/bakiye', {
             headers: { Authorization: `Bearer ${token}` }
         }).then(res => setBakiye(res.data.kalan_izin)).catch(console.error);
@@ -58,7 +57,7 @@ export default function CreateLeave() {
         }
     }, [formData.adres_secimi]);
 
-    // Hesaplama Motoru (Aynı kod)
+    // Hesaplama Motoru
     useEffect(() => {
         if (!formData.gun_sayisi || formData.gun_sayisi <= 0) return;
         let kalan = parseInt(formData.gun_sayisi);
@@ -94,7 +93,7 @@ export default function CreateLeave() {
                 bitis_tarihi: hesaplanan.bitis.split('.').reverse().join('-'), 
                 ise_baslama: hesaplanan.ise_baslama.split('.').reverse().join('-'),
                 kac_gun: parseInt(formData.gun_sayisi),
-                personel_imza: imza // YENİ: İmza gönderiliyor
+                personel_imza: imza 
             };
 
             await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/izin/olustur', gonderilecekVeri, {
@@ -105,7 +104,7 @@ export default function CreateLeave() {
             navigate('/dashboard/leaves');
         } catch (error) {
             console.error(error);
-            alert("❌ Hata: Talep oluşturulamadı.");
+            alert("❌ Hata: Talep oluşturulamadı Yeterli İzin Hakkı Yok.");
         }
     };
 
@@ -116,7 +115,7 @@ export default function CreateLeave() {
                 <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Geri Dön</button>
             </div>
 
-            {/* ✅ EKLENDİ: BAKİYE BİLGİSİ KUTUCUĞU */}
+            {/* ✅ 3. BURASI EKLENDİ: BAKİYE BİLGİSİ KUTUCUĞU */}
             <div className="alert alert-success d-flex align-items-center justify-content-between shadow-sm border-0 mb-4 rounded-3 px-4">
                 <div>
                     <strong className="d-block text-success">Kalan Yıllık İzin Hakkınız</strong>
@@ -137,7 +136,7 @@ export default function CreateLeave() {
 
                             <div className="col-12"><div className="alert alert-light border text-center"><strong>Bitiş:</strong> {hesaplanan.bitis} | <strong>İşe Başlama:</strong> {hesaplanan.ise_baslama}</div></div>
 
-                            {/* YENİ: ADRES SEÇİMİ */}
+                            {/* ADRES SEÇİMİ */}
                             <div className="col-12">
                                 <label className="form-label fw-bold"><MapPin size={16}/> İzin Adresi</label>
                                 <div className="d-flex gap-3 mb-2">
@@ -155,7 +154,7 @@ export default function CreateLeave() {
 
                             <div className="col-12"><label className="form-label fw-bold">Açıklama</label><textarea className="form-control" rows="2" value={formData.aciklama} onChange={e => setFormData({...formData, aciklama: e.target.value})}></textarea></div>
 
-                            {/* YENİ: İMZA ALANI */}
+                            {/* İMZA ALANI */}
                             <div className="col-12">
                                 <label className="form-label fw-bold text-danger"><PenTool size={16}/> İmza (Zorunlu)</label>
                                 <div className="border rounded shadow-sm bg-light" style={{width: '100%', height: 200}}>
