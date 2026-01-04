@@ -272,14 +272,25 @@ exports.talepOnayla = async (req, res) => {
         await hareketKaydet(talep_id, onaylayan_id, islemBaslik, `Durum: ${yeni_durum}`);
         await logKaydet(onaylayan_id, 'İZİN_İŞLEMİ', `Talep ${talep_id} durumu: ${yeni_durum}`, req);
 
-        // Bildirim
-        if (yeni_durum === 'IK_ONAYLADI') {
-            const tRes = await client.query('SELECT personel_id FROM izin_talepleri WHERE talep_id = $1', [talep_id]);
-            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [tRes.rows[0].personel_id, '🚨 Onaylandı', 'Islak imza için İK\'ya geliniz.']);
-        }
-        else if (yeni_durum === 'REDDEDILDI') {
-            const tRes = await client.query('SELECT personel_id FROM izin_talepleri WHERE talep_id = $1', [talep_id]);
-            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [tRes.rows[0].personel_id, '❌ Reddedildi', 'İzin talebiniz reddedildi.']);
+        // --- BİLDİRİM KISMI (GÜNCELLENDİ) ---
+        // Personel bilgilerini çekiyoruz ki ismen hitap edebilelim
+        const talepBilgi = await client.query(
+            "SELECT p.personel_id, p.ad, p.soyad, i.baslangic_tarihi FROM izin_talepleri i JOIN personeller p ON i.personel_id = p.personel_id WHERE i.talep_id = $1", 
+            [talep_id]
+        );
+        
+        if (talepBilgi.rows.length > 0) {
+            const p = talepBilgi.rows[0];
+            const baslangicTarihi = new Date(p.baslangic_tarihi).toLocaleDateString('tr-TR');
+
+            if (yeni_durum === 'IK_ONAYLADI') {
+                const mesaj = `Sayın Personelimiz ${p.ad} ${p.soyad}, ${baslangicTarihi} başlangıç tarihli izin talebiniz onaylanmıştır.\n\nDikkat : Yasal Prosedür gereği , izninizin başlayacağı tarihten 1 gün önce Personel İşleri (İK) birimine gelerek ISLAK İMZA atmanız gerekmektedir. ISLAK İMZAYA gelmediğiniz takdirde izin talebiniz iptal olacaktır.`;
+                
+                await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '✅ İzin Onaylandı (Islak İmza Gerekli)', mesaj]);
+            }
+            else if (yeni_durum === 'REDDEDILDI') {
+                await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '❌ Reddedildi', 'İzin talebiniz reddedildi.']);
+            }
         }
 
         await client.query('COMMIT');
@@ -287,6 +298,7 @@ exports.talepOnayla = async (req, res) => {
 
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error(err);
         res.status(500).json({ mesaj: 'Hata oluştu.' });
     } finally { client.release(); }
 };
@@ -339,21 +351,53 @@ exports.izinDurumRaporu = async (req, res) => {
 exports.islakImzaDurumu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     const { talep_id, durum } = req.body; 
+    
+    const client = await pool.connect(); 
+
     try {
-        const talepRes = await pool.query('SELECT personel_id FROM izin_talepleri WHERE talep_id = $1', [talep_id]);
-        if(talepRes.rows.length === 0) return res.status(404).json({mesaj: 'Bulunamadı'});
-        const pid = talepRes.rows[0].personel_id;
+        await client.query('BEGIN');
+
+        // Personel ve Tarih Bilgisi Çek
+        const talepRes = await client.query(
+            'SELECT t.personel_id, t.baslangic_tarihi, p.ad, p.soyad FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE t.talep_id = $1', 
+            [talep_id]
+        );
+        
+        if(talepRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({mesaj: 'Bulunamadı'});
+        }
+        
+        const p = talepRes.rows[0];
+        const baslangicTarihi = new Date(p.baslangic_tarihi).toLocaleDateString('tr-TR');
 
         if (durum === 'GELDI') {
-            await pool.query("UPDATE izin_talepleri SET durum = 'TAMAMLANDI' WHERE talep_id = $1", [talep_id]);
-            await pool.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [pid, '✅ İşlem Tamamlandı', 'İşlemler tamamlandı.']);
+            await client.query("UPDATE izin_talepleri SET durum = 'TAMAMLANDI' WHERE talep_id = $1", [talep_id]);
+            
+            // İYİ TATİLLER MESAJI
+            const mesaj = `Sayın Personelimiz ${p.ad} ${p.soyad}, ${baslangicTarihi} başlangıç tarihli izin talebiniz onaylanmıştır. İyi Tatiller.`;
+            
+            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '🎉 İyi Tatiller', mesaj]);
+            
+            await client.query('COMMIT');
             res.json({ mesaj: 'Personel izne ayrıldı.' });
+
         } else if (durum === 'GELMEDI') {
-            await pool.query("UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE talep_id = $1", [talep_id]);
-            await pool.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [pid, '⚠️ İPTAL', 'Islak imzaya gelinmediği için iptal edildi.']);
+            await client.query("UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE talep_id = $1", [talep_id]);
+            
+            // İPTAL MESAJI
+            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '⚠️ İPTAL', 'Islak imzaya gelinmediği için izin talebiniz iptal edilmiştir.']);
+            
+            await client.query('COMMIT');
             res.json({ mesaj: 'İzin iptal edildi.' });
         }
-    } catch (e) { res.status(500).send('Hata'); }
+    } catch (e) { 
+        await client.query('ROLLBACK');
+        console.error(e);
+        res.status(500).send('Hata'); 
+    } finally {
+        client.release();
+    }
 };
 
 // 6. LOG & TIMELINE

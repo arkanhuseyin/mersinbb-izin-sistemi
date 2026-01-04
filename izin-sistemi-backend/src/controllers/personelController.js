@@ -665,7 +665,7 @@ exports.profilGuncelleTalep = async (req, res) => {
 };
 
 // ============================================================
-// 8. BAKİYE SORGULAMA (Mobil ve Web İçin)
+// 8. BAKİYE SORGULAMA (Mobil ve Web İçin - GÜÇLENDİRİLMİŞ)
 // ============================================================
 exports.getPersonelBakiye = async (req, res) => {
     const pid = req.user.id;
@@ -678,21 +678,26 @@ exports.getPersonelBakiye = async (req, res) => {
         
         const { ise_giris_tarihi, devreden_izin } = pRes.rows[0];
 
-        // 2. Bu yılki hakedişi hesapla
+        // 2. Bu yılki hakedişi hesapla (Sayıya çevir)
         const hesaplama = izinHakedisHesapla(ise_giris_tarihi); 
-        const buYilHak = hesaplama.hak;
+        const buYilHak = parseInt(hesaplama.hak) || 0;
 
-        // 3. Kullanılan YILLIK İzinleri Topla (Sadece İK Onaylılar)
+        // 3. Veritabanındaki 'devreden_izin' değerini garanti sayıya çevir
+        const devreden = parseInt(devreden_izin) || 0;
+
+        // 4. Kullanılan YILLIK İzinleri Topla (Sadece İK Onaylılar ve Tamamlananlar)
         const izinRes = await client.query(`
             SELECT SUM(kac_gun) as toplam 
             FROM izin_talepleri 
             WHERE personel_id = $1 
-            AND durum = 'IK_ONAYLADI' 
+            AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
             AND izin_turu = 'YILLIK İZİN'
         `, [pid]);
 
         const kullanilan = parseInt(izinRes.rows[0].toplam) || 0;
-        const toplamHak = (parseInt(devreden_izin) || 0) + buYilHak;
+        
+        // 5. NET HESAPLAMA
+        const toplamHak = devreden + buYilHak;
         const kalan = toplamHak - kullanilan;
 
         client.release();
@@ -700,14 +705,14 @@ exports.getPersonelBakiye = async (req, res) => {
         res.json({
             kalan_izin: kalan,
             detay: {
-                devreden: parseInt(devreden_izin) || 0,
+                devreden: devreden,
                 bu_yil_hak: buYilHak,
                 kullanilan: kullanilan
             }
         });
 
     } catch (err) {
-        console.error(err);
+        console.error('Bakiye Hatası:', err);
         res.status(500).json({ mesaj: 'Hata oluştu' });
     }
 };
