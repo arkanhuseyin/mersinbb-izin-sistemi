@@ -45,10 +45,10 @@ export default function LoginScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.card}>
-        <Text style={styles.title}>Mersin BB</Text>
-        <Text style={styles.subtitle}>Personel Takip Sistemi</Text>
+        <Text style={styles.title}>Mersin Büyükşehir Belediyesi</Text>
+        <Text style={styles.subtitle}>İnsan Kaynakları Modülü - İKYS </Text>
         <Text style={styles.label}>TC Kimlik No</Text>
-        <TextInput style={styles.input} placeholder="11111111111" placeholderTextColor="#999" value={tcNo} onChangeText={setTcNo} keyboardType="number-pad" />
+        <TextInput style={styles.input} value={tcNo} onChangeText={setTcNo} keyboardType="number-pad" />
         <Text style={styles.label}>Şifre</Text>
         <TextInput style={styles.input} placeholder="******" placeholderTextColor="#999" value={sifre} onChangeText={setSifre} secureTextEntry={true} />
         
