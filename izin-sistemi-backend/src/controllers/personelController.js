@@ -809,3 +809,50 @@ exports.getPersonelBakiye = async (req, res) => {
         res.status(500).json({ mesaj: 'Hata oluştu' });
     }
 };
+
+// ============================================================
+// 11. ŞİFRE SIFIRLAMA TALEBİ (Giriş Yapmadan - Kimlik Fotolu)
+// ============================================================
+exports.sifreSifirlamaTalep = async (req, res) => {
+    const { tc_no, yeni_sifre } = req.body;
+    const kimlik_foto = req.file ? req.file.path : null;
+
+    if (!tc_no || !yeni_sifre || !kimlik_foto) {
+        return res.status(400).json({ mesaj: 'TC, Yeni Şifre ve Kimlik Fotoğrafı zorunludur.' });
+    }
+
+    try {
+        const client = await pool.connect();
+        
+        // 1. TC'den Personel ID bul
+        const pRes = await client.query("SELECT personel_id FROM personeller WHERE tc_no = $1", [tc_no]);
+        
+        if (pRes.rows.length === 0) {
+            client.release();
+            // Güvenlik gereği "Böyle biri yok" dememek daha iyidir ama iç sistem olduğu için diyebiliriz.
+            return res.status(404).json({ mesaj: 'Bu TC kimlik numarasına ait personel bulunamadı.' });
+        }
+
+        const personel_id = pRes.rows[0].personel_id;
+
+        // 2. Şifreyi Hashle
+        const sifre_hash = await bcrypt.hash(yeni_sifre, 10);
+
+        // 3. Talebi "profil_degisiklikleri" tablosuna işle
+        // Not: yeni_veri içine şifreyi, dosya_yollari içine kimliği koyuyoruz.
+        const yeniVeri = { sifre_hash: sifre_hash }; 
+        const dosyaYollari = { kimlik_belgesi_yol: kimlik_foto };
+
+        await client.query(
+            "INSERT INTO profil_degisiklikleri (personel_id, yeni_veri, dosya_yollari) VALUES ($1, $2, $3)",
+            [personel_id, yeniVeri, dosyaYollari]
+        );
+
+        client.release();
+        res.json({ mesaj: 'Talebiniz alındı. Yönetici onayından sonra şifreniz güncellenecektir.' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mesaj: 'Sunucu hatası oluştu.' });
+    }
+};

@@ -168,6 +168,16 @@ export default function ProfilOnay() {
                                                     <User size={16} className="text-success"/> Ehliyet Görüntüsü
                                                 </a>
                                             )}
+											{/* YENİ EKLENEN: KİMLİK BELGESİ GÖRÜNTÜLEME */}
+{talep.dosya_yollari.kimlik_belgesi_yol && (
+    <div className="alert alert-info border-info d-flex flex-column gap-2">
+        <strong className="text-info d-flex align-items-center gap-2"><ShieldAlert size={18}/> Şifre Sıfırlama Talebi</strong>
+        <p className="small m-0">Bu talep şifre değişikliği içindir. Lütfen aşağıdaki kimlik görüntüsü ile personel bilgilerini doğrulayınız.</p>
+        <a href={belgeLink(talep.dosya_yollari.kimlik_belgesi_yol)} target="_blank" rel="noreferrer" className="btn btn-sm btn-primary text-start d-flex align-items-center gap-2 mt-1">
+            <User size={16} className="text-white"/> Kimlik Fotoğrafını Görüntüle
+        </a>
+    </div>
+)}
                                             
                                             {Object.keys(talep.dosya_yollari || {}).length === 0 && (
                                                 <div className="text-muted small fst-italic">Belge yüklenmemiş.</div>
