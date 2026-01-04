@@ -17,7 +17,6 @@ export default function SifreUnuttumScreen({ navigation }) {
 
   // Fotoğraf Seçme Fonksiyonu
   const fotoSec = async () => {
-    // İzin iste
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (permissionResult.granted === false) {
       Alert.alert("İzin Gerekli", "Galeriye erişim izni vermeniz gerekiyor.");
@@ -27,7 +26,7 @@ export default function SifreUnuttumScreen({ navigation }) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
-      quality: 0.7,
+      quality: 0.5, // Kaliteyi biraz düşürdük ki hızlı yüklensin
     });
 
     if (!result.canceled) {
@@ -45,7 +44,7 @@ export default function SifreUnuttumScreen({ navigation }) {
 
     const result = await ImagePicker.launchCameraAsync({
       allowsEditing: true,
-      quality: 0.7,
+      quality: 0.5,
     });
 
     if (!result.canceled) {
@@ -60,7 +59,7 @@ export default function SifreUnuttumScreen({ navigation }) {
     }
 
     if (sifre !== sifreTekrar) {
-        Alert.alert("Hata", "Şifreler uyuşmuyor.");
+        Alert.alert("Hata", "Girdiğiniz şifreler uyuşmuyor.");
         return;
     }
 
@@ -72,13 +71,14 @@ export default function SifreUnuttumScreen({ navigation }) {
     setYukleniyor(true);
     try {
         const formData = new FormData();
-        formData.append('tc_no', tcNo);
+        // ✅ DÜZELTME 1: .trim() ile boşlukları temizle
+        formData.append('tc_no', tcNo.trim()); 
         formData.append('yeni_sifre', sifre);
         
         // Fotoğrafı FormData'ya ekle
         const filename = kimlikFoto.uri.split('/').pop();
         const match = /\.(\w+)$/.exec(filename);
-        const type = match ? `image/${match[1]}` : `image`;
+        const type = match ? `image/${match[1]}` : `image/jpeg`;
 
         formData.append('kimlik_foto', {
             uri: kimlikFoto.uri,
@@ -86,10 +86,11 @@ export default function SifreUnuttumScreen({ navigation }) {
             type: type,
         });
 
-        // Backend'deki yeni rotaya istek atıyoruz (Rotayı backendde ayarladığınızdan emin olun)
+        // ✅ DÜZELTME 2: 'Content-Type' header'ı SİLİNDİ. 
+        // Axios, FormData olduğunu anlayıp doğru boundary'i kendisi ekleyecek.
         await axios.post(`${API_URL}/api/auth/sifre-talep`, formData, {
             headers: { 
-                'Content-Type': 'multipart/form-data',
+                "Accept": "application/json",
             }
         });
 
@@ -100,9 +101,11 @@ export default function SifreUnuttumScreen({ navigation }) {
     } catch (error) {
         console.log(error);
         if (error.response && error.response.status === 404) {
-            Alert.alert("Hata", "Bu TC numarasına ait personel bulunamadı.");
+            Alert.alert("Hata", "Bu TC numarasına ait personel sistemde bulunamadı.");
+        } else if (error.response && error.response.status === 400) {
+            Alert.alert("Hata", error.response.data.mesaj || "Eksik bilgi gönderildi.");
         } else {
-            Alert.alert("Hata", "İşlem başarısız. Sunucu hatası.");
+            Alert.alert("Hata", "Sunucu ile bağlantı kurulamadı.");
         }
     } finally {
         setYukleniyor(false);
