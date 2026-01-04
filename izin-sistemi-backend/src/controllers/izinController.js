@@ -143,7 +143,7 @@ exports.gecmisBakiyeSil = async (req, res) => {
 // 🚀 TEMEL İŞLEVLER
 // ============================================================
 
-// 1. YENİ İZİN TALEBİ OLUŞTUR
+// 1. YENİ İZİN TALEBİ OLUŞTUR (BAKİYE KONTROLLÜ)
 exports.talepOlustur = async (req, res) => {
     let { 
         baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, 
@@ -153,24 +153,33 @@ exports.talepOlustur = async (req, res) => {
     const belge_yolu = req.file ? req.file.path : null;
     const personel_id = req.user.id; 
     
-    // Rol ve Görev Bilgisi
-    const pRes = await pool.query("SELECT rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
-    const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [pRes.rows[0].rol_id]);
-    
-    const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
-    const userGorev = pRes.rows[0].gorev || '';
-
     try {
-        // Bakiye Kontrolü
+        // 1. Önce Personelin Kimlik ve Rol Bilgilerini Çekelim
+        // DİKKAT: Ad ve Soyad bilgisini de buradan çekiyoruz ki mesajda kullanabilelim.
+        const pRes = await pool.query("SELECT ad, soyad, rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
+        if (pRes.rows.length === 0) return res.status(404).json({ mesaj: 'Personel bulunamadı.' });
+
+        const { ad, soyad, rol_id, gorev } = pRes.rows[0];
+        const userGorev = gorev || '';
+
+        // Rol Adını Çek
+        const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [rol_id]);
+        const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
+
+        // 🛑 2. KRİTİK BAKİYE KONTROLÜ 
         if (izin_turu === 'YILLIK İZİN') {
             const kalanHak = await hesaplaBakiye(personel_id);
-            if (parseInt(kac_gun) > kalanHak) {
+            const istenenGun = parseInt(kac_gun);
+
+            if (istenenGun > kalanHak) {
+                // İSTEDİĞİNİZ KURUMSAL MESAJ FORMATI:
                 return res.status(400).json({ 
-                    mesaj: `Yetersiz Bakiye! Toplam kalan hakkınız: ${kalanHak} gün. Talep edilen: ${kac_gun} gün.` 
+                    mesaj: `Sayın Personelimiz ${ad} ${soyad}, Kullanmak istediğiniz izin (${istenenGun} Gün), Mevcut izin (${kalanHak} Gün) hakkınızdan fazladır.` 
                 });
             }
         }
 
+        // Tarih Formatlarını Düzenle
         baslangic_tarihi = tarihFormatla(baslangic_tarihi);
         bitis_tarihi = tarihFormatla(bitis_tarihi);
         ise_baslama = tarihFormatla(ise_baslama);
@@ -203,6 +212,7 @@ exports.talepOlustur = async (req, res) => {
             baslangicDurumu = 'YAZICI_ONAYLADI';
         }
 
+        // Kayıt İşlemi
         const yeniTalep = await pool.query(
             `INSERT INTO izin_talepleri 
             (personel_id, baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, 
@@ -223,7 +233,7 @@ exports.talepOlustur = async (req, res) => {
         console.error('İzin Oluşturma Hatası:', err);
         res.status(500).json({ mesaj: 'İzin oluşturulurken hata çıktı.' });
     }
-};
+};;
 
 // 2. İZİNLERİ LİSTELE
 exports.izinleriGetir = async (req, res) => {
