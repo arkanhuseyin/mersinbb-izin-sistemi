@@ -5,7 +5,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import SignatureScreen from 'react-native-signature-canvas';
-import * as ImagePicker from 'expo-image-picker'; 
+import * as ImagePicker from 'expo-image-picker';
 import { API_URL } from '../config';
 
 export default function IzinTalepScreen({ route, navigation }) {
@@ -21,19 +21,23 @@ export default function IzinTalepScreen({ route, navigation }) {
   const [izinAdresi, setIzinAdresi] = useState(user.adres || '');
   const [imza, setImza] = useState(null);
   const [imzaModalAcik, setImzaModalAcik] = useState(false);
-  const [raporDosyasi, setRaporDosyasi] = useState(null); 
+  const [raporDosyasi, setRaporDosyasi] = useState(null);
   
   const [bitisTarihi, setBitisTarihi] = useState('');
   const [iseBaslama, setIseBaslama] = useState('');
   const [resmiTatiller, setResmiTatiller] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
-  const [yukleniyor, setYukleniyor] = useState(false); 
+  const [yukleniyor, setYukleniyor] = useState(false);
+  
+  // ✅ YENİ: Bakiye State
+  const [bakiye, setBakiye] = useState(null);
   
   const imzaRef = useRef();
   const izinTurleri = ["YILLIK İZİN", "MAZERET İZNİ", "RAPOR", "BABALIK İZNİ", "DOĞUM İZNİ", "DÜĞÜN İZNİ", "EVLİLİK İZNİ", "ÖLÜM İZNİ", "ÜCRETLİ İZİN", "ÜCRETSİZ İZİN"];
   const gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
 
   useEffect(() => {
+    // 1. Tatilleri Çek
     const tatilCek = async () => {
       try {
         const res = await axios.get(`${API_URL}/api/izin/resmi-tatiller`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true' } });
@@ -41,6 +45,16 @@ export default function IzinTalepScreen({ route, navigation }) {
       } catch (e) { console.log("Tatil hatası"); }
     };
     tatilCek();
+
+    // 2. ✅ YENİ: Bakiyeyi Çek
+    const bakiyeCek = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/personel/bakiye`, { headers: { 'Authorization': `Bearer ${token}`, 'bypass-tunnel-reminder': 'true' } });
+        setBakiye(res.data.kalan_izin);
+      } catch (e) { console.log("Bakiye hatası"); }
+    };
+    bakiyeCek();
+
   }, []);
 
   useEffect(() => { hesapla(); }, [baslangicTarihi, gunSayisi, haftalikIzin, resmiTatiller]);
@@ -66,7 +80,7 @@ export default function IzinTalepScreen({ route, navigation }) {
     setIseBaslama(donus.toLocaleDateString('tr-TR'));
   };
 
-// --- KAMERA ---
+  // --- KAMERA ---
   const openCamera = async () => {
     try {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -75,9 +89,7 @@ export default function IzinTalepScreen({ route, navigation }) {
             return;
         }
         let result = await ImagePicker.launchCameraAsync({
-            // HATALI OLAN: mediaTypes: 'images',
-            // DOĞRUSU 👇
-            mediaTypes: ImagePicker.MediaTypeOptions.Images, 
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.5,
         });
         if (!result.canceled) setRaporDosyasi(result.assets[0]);
@@ -95,8 +107,6 @@ export default function IzinTalepScreen({ route, navigation }) {
             return;
         }
         let result = await ImagePicker.launchImageLibraryAsync({
-            // HATALI OLAN: mediaTypes: 'images',
-            // DOĞRUSU 👇
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             quality: 0.5,
             allowsEditing: false,
@@ -155,6 +165,13 @@ export default function IzinTalepScreen({ route, navigation }) {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.header}>📝 Yeni İzin Talebi</Text>
+      
+      {/* ✅ YENİ: BAKİYE KARTI */}
+      <View style={styles.bakiyeContainer}>
+          <Text style={styles.bakiyeLabel}>Kalan Yıllık İzin Hakkınız</Text>
+          <Text style={styles.bakiyeValue}>{bakiye !== null ? `${bakiye} Gün` : 'Hesaplanıyor...'}</Text>
+      </View>
+
       <Text style={styles.label}>İzin Türü</Text>
       <View style={styles.pickerBox}><Picker selectedValue={izinTuru} onValueChange={setIzinTuru}>{izinTurleri.map(t=><Picker.Item key={t} label={t} value={t}/>)}</Picker></View>
       
@@ -223,4 +240,7 @@ const styles = StyleSheet.create({
   modalBtnCancel: { backgroundColor:'#6c757d', padding:15, borderRadius:5, flex:1, marginRight:5, alignItems:'center' },
   modalBtnClear: { backgroundColor:'#ffc107', padding:15, borderRadius:5, flex:1, marginHorizontal:5, alignItems:'center' },
   modalBtnSave: { backgroundColor:'#28a745', padding:15, borderRadius:5, flex:1, marginLeft:5, alignItems:'center' },
+  bakiyeContainer: { backgroundColor: '#e8f5e9', padding: 15, borderRadius: 10, marginBottom: 15, borderLeftWidth: 5, borderLeftColor: '#28a745', alignItems: 'center' },
+  bakiyeLabel: { fontSize: 14, color: '#2e7d32', fontWeight: '600' },
+  bakiyeValue: { fontSize: 24, fontWeight: 'bold', color: '#1b5e20', marginTop: 5 },
 });

@@ -10,6 +10,9 @@ export default function LeaveRequests() {
     const [secilenTalep, setSecilenTalep] = useState(null);
     const [timeline, setTimeline] = useState([]);
     
+    // ✅ EKLENDİ: Bakiye State
+    const [bakiye, setBakiye] = useState(null);
+
     const [activeTab, setActiveTab] = useState('pending');
     const [arama, setArama] = useState('');
     
@@ -42,6 +45,12 @@ export default function LeaveRequests() {
             const response = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } });
             setIzinler(response.data);
             setFilteredIzinler(response.data);
+
+            // ✅ EKLENDİ: Bakiye Çekme
+            axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/bakiye', { 
+                headers: { Authorization: `Bearer ${token}` } 
+            }).then(res => setBakiye(res.data.kalan_izin)).catch(console.error);
+
         } catch (error) { console.error(error); }
     };
 
@@ -132,7 +141,18 @@ export default function LeaveRequests() {
         <div className="container-fluid p-4">
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <div><h3 className="fw-bold text-dark m-0">📅 İzin Talepleri</h3></div>
-                <div className="bg-white p-2 px-3 rounded shadow-sm border"><small className="d-block text-muted" style={{fontSize:'10px'}}>TOPLAM</small><span className="fw-bold text-primary">{izinler.length}</span></div>
+                
+                {/* ✅ EKLENDİ: BAKİYE VE TOPLAM KUTUCUKLARI */}
+                <div className="d-flex gap-3">
+                    <div className="bg-success bg-opacity-10 p-2 px-3 rounded shadow-sm border border-success">
+                        <small className="d-block text-success fw-bold" style={{fontSize:'10px'}}>KALAN İZİN</small>
+                        <span className="fw-bold text-success">{bakiye !== null ? bakiye : '-'} Gün</span>
+                    </div>
+                    <div className="bg-white p-2 px-3 rounded shadow-sm border">
+                        <small className="d-block text-muted" style={{fontSize:'10px'}}>TOPLAM TALEP</small>
+                        <span className="fw-bold text-primary">{izinler.length}</span>
+                    </div>
+                </div>
             </div>
 
             <div className="card border-0 shadow-sm mb-4 rounded-4"><div className="card-body p-2"><div className="d-flex justify-content-between align-items-center flex-wrap gap-2">

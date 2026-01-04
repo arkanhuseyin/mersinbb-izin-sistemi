@@ -663,3 +663,51 @@ exports.profilGuncelleTalep = async (req, res) => {
         res.status(500).json({ mesaj: 'Hata oluştu.' });
     }
 };
+
+// ============================================================
+// 8. BAKİYE SORGULAMA (Mobil ve Web İçin)
+// ============================================================
+exports.getPersonelBakiye = async (req, res) => {
+    const pid = req.user.id;
+    try {
+        const client = await pool.connect();
+        
+        // 1. Personel Bilgilerini Al
+        const pRes = await client.query('SELECT ise_giris_tarihi, devreden_izin FROM personeller WHERE personel_id = $1', [pid]);
+        if (pRes.rows.length === 0) { client.release(); return res.status(404).json({ mesaj: 'Personel yok' }); }
+        
+        const { ise_giris_tarihi, devreden_izin } = pRes.rows[0];
+
+        // 2. Bu yılki hakedişi hesapla
+        const hesaplama = izinHakedisHesapla(ise_giris_tarihi); 
+        const buYilHak = hesaplama.hak;
+
+        // 3. Kullanılan YILLIK İzinleri Topla (Sadece İK Onaylılar)
+        const izinRes = await client.query(`
+            SELECT SUM(kac_gun) as toplam 
+            FROM izin_talepleri 
+            WHERE personel_id = $1 
+            AND durum = 'IK_ONAYLADI' 
+            AND izin_turu = 'YILLIK İZİN'
+        `, [pid]);
+
+        const kullanilan = parseInt(izinRes.rows[0].toplam) || 0;
+        const toplamHak = (parseInt(devreden_izin) || 0) + buYilHak;
+        const kalan = toplamHak - kullanilan;
+
+        client.release();
+        
+        res.json({
+            kalan_izin: kalan,
+            detay: {
+                devreden: parseInt(devreden_izin) || 0,
+                bu_yil_hak: buYilHak,
+                kullanilan: kullanilan
+            }
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu' });
+    }
+};

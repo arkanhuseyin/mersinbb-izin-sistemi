@@ -22,6 +22,9 @@ export default function CreateLeave() {
     const [kullaniciAdresi, setKullaniciAdresi] = useState('');
     const [hesaplanan, setHesaplanan] = useState({ bitis: '', ise_baslama: '' });
     const [resmiTatiller, setResmiTatiller] = useState([]);
+    
+    // ✅ EKLENDİ: Bakiye State
+    const [bakiye, setBakiye] = useState(null);
 
     const izinTurleri = ["YILLIK İZİN", "MAZERET İZNİ", "RAPOR", "BABALIK İZNİ", "DOĞUM İZNİ", "DÜĞÜN İZNİ", "EVLİLİK İZNİ", "ÖLÜM İZNİ", "ÜCRETLİ İZİN", "ÜCRETSİZ İZİN"];
     const gunler = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
@@ -34,9 +37,16 @@ export default function CreateLeave() {
             setFormData(prev => ({ ...prev, izin_adresi: user.adres || '' }));
         }
 
+        // 1. Tatilleri Çek
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/resmi-tatiller', {
             headers: { Authorization: `Bearer ${token}` }
         }).then(res => setResmiTatiller(res.data.map(t => t.tarih.split('T')[0]))).catch(console.error);
+
+        // 2. ✅ EKLENDİ: Bakiyeyi Çek
+        axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/bakiye', {
+            headers: { Authorization: `Bearer ${token}` }
+        }).then(res => setBakiye(res.data.kalan_izin)).catch(console.error);
+
     }, []);
 
     // Adres Seçimi Değişince
@@ -104,6 +114,15 @@ export default function CreateLeave() {
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h3 className="fw-bold text-primary m-0"><FileText className="me-2"/>Yeni İzin Talebi</h3>
                 <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)}><ArrowLeft size={16}/> Geri Dön</button>
+            </div>
+
+            {/* ✅ EKLENDİ: BAKİYE BİLGİSİ KUTUCUĞU */}
+            <div className="alert alert-success d-flex align-items-center justify-content-between shadow-sm border-0 mb-4 rounded-3 px-4">
+                <div>
+                    <strong className="d-block text-success">Kalan Yıllık İzin Hakkınız</strong>
+                    <small className="text-muted">Güncel bakiyeniz</small>
+                </div>
+                <div className="display-6 fw-bold text-success">{bakiye !== null ? bakiye : '-'} <span className="fs-6">Gün</span></div>
             </div>
 
             <div className="card shadow-sm border-0">

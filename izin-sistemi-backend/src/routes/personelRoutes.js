@@ -219,4 +219,8 @@ const talepUpload = upload.fields([
 ]);
 router.post('/guncelle-talep', auth, talepUpload, personelController.profilGuncelleTalep);
 
+
+// Bakiye Sorgulama
+router.get('/bakiye', auth, personelController.getPersonelBakiye);
+
 module.exports = router;
