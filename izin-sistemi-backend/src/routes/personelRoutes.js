@@ -204,4 +204,19 @@ router.post('/talep-islem', auth, async (req, res) => {
     } catch (err) { await client.query('ROLLBACK'); console.error(err); res.status(500).send('Hata'); } finally { client.release(); }
 });
 
+// ============================================================
+// 📱 MOBİL AYARLAR EKRANI İÇİN ROTALAR
+// ============================================================
+
+// 1. Şifre Değiştirme
+router.post('/sifre-degistir', auth, personelController.sifreDegistir);
+
+// 2. Profil Güncelleme Talebi (Dosya Yüklemeli)
+const talepUpload = upload.fields([
+    { name: 'adres_belgesi', maxCount: 1 },
+    { name: 'src_belgesi', maxCount: 1 },
+    { name: 'psiko_belgesi', maxCount: 1 }
+]);
+router.post('/guncelle-talep', auth, talepUpload, personelController.profilGuncelleTalep);
+
 module.exports = router;

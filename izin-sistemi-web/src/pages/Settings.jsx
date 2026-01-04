@@ -99,7 +99,7 @@ export default function Settings() {
         kadro_tipi: '',     
         gorev_yeri: '', calisma_durumu: 'Çalışıyor', 
         rol: 'personel',    
-        ehliyet_no: '', ehliyet_sinifi: '', ehliyet_bitis_tarihi: '', src_belge_no: '', psikoteknik_tarihi: '', surucu_no: '',
+        ehliyet_no: '', ehliyet_sinifi: '', ehliyet_tarih: '', src_belge_no: '', psiko_tarih: '', surucu_no: '',
         ayakkabi_no: '', tisort_beden: '', gomlek_beden: '', suveter_beden: '', mont_beden: '',
         sicil_no: '', asis_kart_no: '', hareket_merkezi: '', ise_giris_tarihi: '', ayrilma_tarihi: ''
     };
@@ -272,8 +272,8 @@ export default function Settings() {
             setFormData({
                 ...data,
                 dogum_tarihi: fixDate(data.dogum_tarihi),
-                ehliyet_bitis_tarihi: fixDate(data.ehliyet_bitis_tarihi),
-                psikoteknik_tarihi: fixDate(data.psikoteknik_tarihi),
+                ehliyet_tarih: fixDate(data.ehliyet_tarih),
+                psiko_tarih: fixDate(data.psiko_tarih),
                 ise_giris_tarihi: fixDate(data.ise_giris_tarihi),
                 ayrilma_tarihi: fixDate(data.ayrilma_tarihi),
                 rol: data.rol_adi || 'personel'
@@ -591,7 +591,7 @@ export default function Settings() {
                                                         <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Lojistik ve Beden</h6></div>
                                                         <div className="col-md-3"><label className="small fw-bold">Ehliyet No</label><input className="form-control form-control-sm" value={formData.ehliyet_no} onChange={e=>setFormData({...formData, ehliyet_no:e.target.value})} /></div>
                                                         <div className="col-md-3"><label className="small fw-bold">Ehliyet Sınıfı</label><input className="form-control form-control-sm" value={formData.ehliyet_sinifi} onChange={e=>setFormData({...formData, ehliyet_sinifi:e.target.value})} /></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet Bitiş</label><input type="date" className="form-control form-control-sm" value={formData.ehliyet_bitis_tarihi} onChange={e=>setFormData({...formData, ehliyet_bitis_tarihi:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet Bitiş</label><input type="date" className="form-control form-control-sm" value={formData.ehliyet_tarih} onChange={e=>setFormData({...formData, ehliyet_tarih:e.target.value})} /></div>
                                                         <div className="col-md-3"><label className="small fw-bold">SRC Belge No</label><input className="form-control form-control-sm" value={formData.src_belge_no} onChange={e=>setFormData({...formData, src_belge_no:e.target.value})} /></div>
                                                         
                                                         <div className="col-md-2"><label className="small">Ayakkabı</label><input className="form-control form-control-sm" value={formData.ayakkabi_no} onChange={e=>setFormData({...formData, ayakkabi_no:e.target.value})} /></div>

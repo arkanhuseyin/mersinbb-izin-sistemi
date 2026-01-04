@@ -107,7 +107,7 @@ exports.personelEkle = async (req, res) => {
         tc_no, ad, soyad, sifre, telefon, telefon2, dogum_tarihi, adres, 
         cinsiyet, medeni_hal, kan_grubu, egitim_durumu,
         birim_id, rol, gorev, kadro_tipi, gorev_yeri, calisma_durumu,
-        ehliyet_no, ehliyet_sinifi, ehliyet_bitis_tarihi, src_belge_no, psikoteknik_tarihi, surucu_no,
+        ehliyet_no, ehliyet_sinifi, ehliyet_tarih, src_belge_no, psiko_tarih, surucu_no,
         ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden,
         sicil_no, asis_kart_no, hareket_merkezi, ise_giris_tarihi
     } = req.body;
@@ -130,10 +130,10 @@ exports.personelEkle = async (req, res) => {
                 tc_no, ad, soyad, sifre_hash, birim_id, rol_id,
                 gorev, kadro_tipi, telefon, adres, kan_grubu, 
                 egitim_durumu, dogum_tarihi, medeni_hal, cinsiyet, calisma_durumu,
-                ehliyet_no, src_belge_no, psikoteknik_tarihi, surucu_no, gorev_yeri,
+                ehliyet_no, src_belge_no, psiko_tarih, surucu_no, gorev_yeri,
                 ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden,
                 fotograf_yolu, aktif,
-                telefon2, ehliyet_sinifi, ehliyet_bitis_tarihi, sicil_no, asis_kart_no, hareket_merkezi, ise_giris_tarihi
+                telefon2, ehliyet_sinifi, ehliyet_tarih, sicil_no, asis_kart_no, hareket_merkezi, ise_giris_tarihi
             ) VALUES (
                 $1, $2, $3, $4, $5, $6,
                 $7, $8, $9, $10, $11,
@@ -149,10 +149,10 @@ exports.personelEkle = async (req, res) => {
             tc_no, ad, soyad, hashedPassword, birim_id, rolId,
             gorev, kadro_tipi, telefon, adres, kan_grubu,
             egitim_durumu, formatNull(dogum_tarihi), medeni_hal, cinsiyet, calisma_durumu || 'Çalışıyor',
-            ehliyet_no, src_belge_no, formatNull(psikoteknik_tarihi), surucu_no, gorev_yeri,
+            ehliyet_no, src_belge_no, formatNull(psiko_tarih), surucu_no, gorev_yeri,
             ayakkabi_no, tisort_beden, gomlek_beden, suveter_beden, mont_beden,
             fotograf_yolu,
-            formatNull(telefon2), ehliyet_sinifi, formatNull(ehliyet_bitis_tarihi), sicil_no, asis_kart_no, hareket_merkezi, formatNull(ise_giris_tarihi)
+            formatNull(telefon2), ehliyet_sinifi, formatNull(ehliyet_tarih), sicil_no, asis_kart_no, hareket_merkezi, formatNull(ise_giris_tarihi)
         ];
 
         const result = await client.query(query, values);
@@ -200,9 +200,9 @@ exports.personelGuncelle = async (req, res) => {
             telefon2=$18, 
             ehliyet_no=$19, 
             ehliyet_sinifi=$20, 
-            ehliyet_bitis_tarihi=COALESCE($21, ehliyet_bitis_tarihi),
+            ehliyet_tarih=COALESCE($21, ehliyet_tarih),
             src_belge_no=$22, 
-            psikoteknik_tarihi=COALESCE($23, psikoteknik_tarihi),
+            psiko_tarih=COALESCE($23, psiko_tarih),
             sicil_no=$24, 
             asis_kart_no=$25, 
             hareket_merkezi=$26, 
@@ -216,8 +216,8 @@ exports.personelGuncelle = async (req, res) => {
             body.ad, body.soyad, body.telefon, body.adres, body.gorev, body.kadro_tipi, body.gorev_yeri,
             body.ayakkabi_no, body.tisort_beden, body.gomlek_beden, body.suveter_beden, body.mont_beden,
             body.tc_no, formatNull(body.dogum_tarihi), body.cinsiyet, body.medeni_hal, body.kan_grubu,
-            body.telefon2, body.ehliyet_no, body.ehliyet_sinifi, formatNull(body.ehliyet_bitis_tarihi),
-            body.src_belge_no, formatNull(body.psikoteknik_tarihi),
+            body.telefon2, body.ehliyet_no, body.ehliyet_sinifi, formatNull(body.ehliyet_tarih),
+            body.src_belge_no, formatNull(body.psiko_tarih),
             body.sicil_no, body.asis_kart_no, body.hareket_merkezi, formatNull(body.ise_giris_tarihi),
             body.calisma_durumu,
             formatNull(body.ayrilma_tarihi),
@@ -393,7 +393,7 @@ exports.personelKartiPdf = async (req, res) => {
         doc.fillColor('#333').text('SRC Belge No:', labelX + 5, y + 4);
         doc.fillColor('#000').text(p.src_belge_no || '-', valueX, y + 4);
         doc.fillColor('#333').text('Psikoteknik:', col2X, y + 4);
-        doc.fillColor('#000').text(p.psikoteknik_tarihi ? new Date(p.psikoteknik_tarihi).toLocaleDateString('tr-TR') : '-', col2X + 50, y + 4);
+        doc.fillColor('#000').text(p.psiko_tarih ? new Date(p.psiko_tarih).toLocaleDateString('tr-TR') : '-', col2X + 50, y + 4);
         y += rowH;
 
         y += 10;
@@ -499,11 +499,11 @@ exports.personelSil = async (req, res) => {
         // 2. ADIM: Bu personele ait GEÇMİŞ BAKİYELERİ sil
         await client.query('DELETE FROM gecmis_bakiyeler WHERE personel_id = $1', [pid]);
 
-        // 3. ADIM: Bu personele ait PROFİL DEĞİŞİKLİK TALEPLERİNİ sil (Yeni eklediğimiz tablo)
-        // (Eğer tablonuzun adı farklıysa burayı düzeltin)
+        // 3. ADIM: Bu personele ait PROFİL DEĞİŞİKLİK TALEPLERİNİ sil
+        // (Eğer bu tabloyu henüz oluşturmadıysanız bu satırı silin veya yorum satırı yapın)
         await client.query('DELETE FROM profil_degisiklikleri WHERE personel_id = $1', [pid]);
 
-        // 4. ADIM: Varsa LOGLARI sil (Opsiyonel, hata verirse burayı açın)
+        // 4. ADIM: Varsa SİSTEM AYARLARI veya LOGLARI sil (Gerekirse açın)
         // await client.query('DELETE FROM logs WHERE user_id = $1', [pid]);
 
         // 5. ADIM: Artık tertemiz, PERSONELİ SİL
@@ -586,5 +586,80 @@ exports.bedenGuncelle = async (req, res) => {
     } catch (err) { 
         console.error(err);
         res.status(500).json({ mesaj: 'Hata oluştu.' }); 
+    }
+};
+// ============================================================
+// 7. PROFİL VE AYARLAR (MOBİL İÇİN)
+// ============================================================
+
+// A) Şifre Değiştirme (Admin Onayı GEREKMEZ - Direkt Değişir)
+exports.sifreDegistir = async (req, res) => {
+    const { eski_sifre, yeni_sifre } = req.body;
+    const pid = req.user.id; 
+
+    try {
+        const client = await pool.connect();
+        // 1. Mevcut şifreyi kontrol et
+        const userRes = await client.query("SELECT sifre_hash FROM personeller WHERE personel_id = $1", [pid]);
+        if (userRes.rows.length === 0) { client.release(); return res.status(404).json({ mesaj: 'Kullanıcı bulunamadı.' }); }
+        
+        const user = userRes.rows[0];
+        const match = await bcrypt.compare(eski_sifre, user.sifre_hash);
+        
+        if (!match) {
+            client.release();
+            return res.status(400).json({ mesaj: 'Mevcut şifrenizi yanlış girdiniz.' });
+        }
+
+        // 2. Yeni şifreyi hashle ve kaydet
+        const newHash = await bcrypt.hash(yeni_sifre, 10);
+        await client.query("UPDATE personeller SET sifre_hash = $1 WHERE personel_id = $2", [newHash, pid]);
+        
+        client.release();
+        res.json({ mesaj: 'Şifreniz başarıyla değiştirildi.' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mesaj: 'Sunucu hatası oluştu.' });
+    }
+};
+
+// B) Profil Güncelleme Talebi (Admin Onayı GEREKİR)
+exports.profilGuncelleTalep = async (req, res) => {
+    try {
+        const { email, telefon, adres, src_tarih, psiko_tarih } = req.body;
+        const pid = req.user.id;
+
+        // 1. Değişecek verileri JSON paketine koyalım
+        const yeniVeri = {};
+        if (email) yeniVeri.email = email;
+        if (telefon) yeniVeri.telefon = telefon;
+        if (adres) yeniVeri.adres = adres;
+        if (src_tarih) yeniVeri.src_tarih = src_tarih;
+        if (psiko_tarih) yeniVeri.psiko_tarih = psiko_tarih;
+
+        // 2. Yüklenen dosyaları JSON paketine koyalım
+        const dosyaYollari = {};
+        if (req.files) {
+            if (req.files.adres_belgesi) dosyaYollari.adres_belgesi = req.files.adres_belgesi[0].path;
+            if (req.files.src_belgesi) dosyaYollari.src_belgesi = req.files.src_belgesi[0].path;
+            if (req.files.psiko_belgesi) dosyaYollari.psiko_belgesi = req.files.psiko_belgesi[0].path;
+        }
+
+        // Boş istek kontrolü
+        if (Object.keys(yeniVeri).length === 0 && Object.keys(dosyaYollari).length === 0) {
+            return res.status(400).json({ mesaj: 'Değiştirilecek bir bilgi girmediniz.' });
+        }
+
+        // 3. Talebi veritabanına kaydet
+        await pool.query(
+            "INSERT INTO profil_degisiklikleri (personel_id, yeni_veri, dosya_yollari) VALUES ($1, $2, $3)",
+            [pid, yeniVeri, dosyaYollari]
+        );
+
+        res.json({ mesaj: 'Talebiniz alındı. Yönetici onayından sonra güncellenecektir.' });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu.' });
     }
 };

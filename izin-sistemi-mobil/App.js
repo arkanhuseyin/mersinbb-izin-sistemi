@@ -15,6 +15,7 @@ import ProfilScreen from './src/screens/ProfilScreen';
 import BildirimScreen from './src/screens/BildirimScreen';
 import SifreUnuttumScreen from './src/screens/SifreUnuttumScreen';
 import KiyafetScreen from './src/screens/KiyafetScreen';
+import AyarlarScreen from './src/screens/AyarlarScreen'; // ✅ YENİ EKLENDİ
 
 const Stack = createNativeStackNavigator();
 
@@ -66,8 +67,17 @@ export default function App() {
           options={{ headerShown: true, title: 'Talep İncele' }}
         />
 
-        {/* Diğer */}
+        {/* Profil ve Ayarlar */}
         <Stack.Screen name="Profil" component={ProfilScreen} />
+        
+        {/* ✅ YENİ EKLENEN AYARLAR EKRANI */}
+        <Stack.Screen 
+          name="Ayarlar" 
+          component={AyarlarScreen} 
+          options={{ headerShown: true, title: 'Ayarlar & Güncelleme' }} 
+        />
+
+        {/* Diğer */}
         <Stack.Screen
           name="Bildirimler"
           component={BildirimScreen}
