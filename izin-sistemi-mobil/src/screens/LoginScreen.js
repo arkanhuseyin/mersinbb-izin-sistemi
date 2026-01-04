@@ -16,7 +16,9 @@ import {
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { API_URL } from '../../config'; // config dosyası muhtemelen src/config.js veya root'tadır, yol hatası alırsanız '../config' deneyin.
+
+// ✅ DÜZELTME 1: Config dosyası 'src' içinde olduğu için sadece bir üst dizine (../) çıkıyoruz.
+import { API_URL } from '../config'; 
 
 export default function LoginScreen({ navigation }) {
   const [tcNo, setTcNo] = useState('');
@@ -70,7 +72,7 @@ export default function LoginScreen({ navigation }) {
         <View style={styles.overlay}>
           
           <View style={styles.logoContainer}>
-            {/* ✅ LOGO YOLU DÜZELTİLDİ: src/screens/ klasöründen assets/ klasörüne gitmek için ../../ kullanıldı */}
+            {/* ✅ DÜZELTME 2: Logo ana dizinde (assets) olduğu için iki üst dizine (../../) çıkıyoruz. */}
             <Image 
               source={require('../../assets/logombb.png')} 
               style={styles.logo} 
@@ -101,7 +103,7 @@ export default function LoginScreen({ navigation }) {
               <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
               <TextInput 
                 style={styles.input} 
-                placeholder="******" 
+                placeholder="Şifre" 
                 placeholderTextColor="#999"
                 value={sifre} 
                 onChangeText={setSifre} 
