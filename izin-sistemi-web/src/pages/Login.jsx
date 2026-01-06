@@ -1,78 +1,149 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { BusFront, Lock, User } from 'lucide-react';
+import { User, Lock, Eye, EyeOff } from 'lucide-react';
+
+// ✅ LOGOYU BURADAN İMPORT EDİYORUZ
+// Eğer Login.jsx 'src/pages' içindeyse: '../assets/logombb.png'
+// Eğer Login.jsx direkt 'src' içindeyse: './assets/logombb.png' olarak değiştirin.
+import logoMbb from '../assets/logombb.png'; 
 
 export default function Login() {
     const [tcNo, setTcNo] = useState('');
     const [sifre, setSifre] = useState('');
     const [hata, setHata] = useState('');
+    const [sifreGoster, setSifreGoster] = useState(false);
+    const [yukleniyor, setYukleniyor] = useState(false);
     const navigate = useNavigate();
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        setHata('');
+        setYukleniyor(true);
+
         try {
             const response = await axios.post('https://mersinbb-izin-sistemi.onrender.com/api/auth/login', { tc_no: tcNo, sifre: sifre });
             localStorage.setItem('token', response.data.token);
             localStorage.setItem('user', JSON.stringify(response.data.user));
-            navigate('/dashboard/home'); // Dashboard'un ana sayfasına yönlendir
+            navigate('/dashboard/home'); 
         } catch (error) {
             setHata('Giriş bilgileri hatalı veya sunucu erişilemiyor.');
+        } finally {
+            setYukleniyor(false);
         }
     };
 
     return (
-        <div className="d-flex vh-100" style={{ background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)' }}>
-            {/* SOL TARAFTAKİ GÖRSEL ALAN */}
-            <div className="d-none d-md-flex col-md-6 col-lg-7 bg-primary align-items-center justify-content-center p-5" 
-                 style={{ background: 'linear-gradient(45deg, #004e92, #000428)' }}>
-                <div className="text-white text-center">
-                    <BusFront size={120} className="mb-4 opacity-75" />
-                    <h1 className="display-4 fw-bold">Filo Yönetim Merkezi</h1>
-                    <p className="lead opacity-75">Mersin Büyükşehir Belediyesi<br/>Toplu Taşıma Şube Müdürlüğü</p>
-					<p className="lead opacity-75">Hüseyin Arkan<br/></p>
-                </div>
-            </div>
+        <div style={{ 
+            backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?ixlib=rb-1.2.1&auto=format&fit=crop&w=1920&q=80')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            height: '100vh',
+            width: '100vw',
+            position: 'relative'
+        }}>
+            {/* Overlay Katmanı (Kurumsal Mavi - Mobille Aynı Ton) */}
+            <div style={{
+                position: 'absolute',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(13, 110, 253, 0.85)', 
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px'
+            }}>
 
-            {/* SAĞ TARAFTAKİ FORM ALANI */}
-            <div className="col-12 col-md-6 col-lg-5 d-flex align-items-center justify-content-center bg-white shadow-lg">
-                <div className="w-75">
-                    <div className="text-center mb-5">
-                        <h3 className="fw-bold text-primary">Hoşgeldiniz</h3>
-                        <p className="text-muted">Personel Yönetim Sistemine Giriş</p>
+                {/* LOGO ve BAŞLIK ALANI */}
+                <div className="text-center mb-4">
+                    {/* ✅ Import ettiğimiz logoyu kullanıyoruz */}
+                    <img 
+                        src={logoMbb} 
+                        alt="Mersin BB Logo" 
+                        style={{ width: '120px', height: 'auto', marginBottom: '15px', filter: 'drop-shadow(0px 2px 4px rgba(0,0,0,0.2))' }}
+                    />
+                    <h2 className="fw-bold text-white m-0" style={{ letterSpacing: '1px', textShadow: '0px 2px 4px rgba(0,0,0,0.3)' }}>MERSİN BÜYÜKŞEHİR</h2>
+                    <h4 className="fw-light text-white m-0" style={{ letterSpacing: '2px', opacity: 0.9 }}>BELEDİYESİ</h4>
+                </div>
+
+                {/* BEYAZ KART ALANI */}
+                <div className="bg-white p-4 p-md-5 shadow-lg" style={{ 
+                    borderRadius: '20px', 
+                    width: '100%', 
+                    maxWidth: '420px',
+                    position: 'relative',
+                    zIndex: 10
+                }}>
+                    <div className="text-center mb-4">
+                        <h4 className="fw-bold text-dark m-0">Personel Girişi</h4>
+                        <p className="text-muted small">İKYS Sistemine Hoşgeldiniz</p>
                     </div>
 
-                    {hata && <div className="alert alert-danger text-center py-2 small">{hata}</div>}
+                    {hata && <div className="alert alert-danger text-center py-2 small mb-3">{hata}</div>}
 
                     <form onSubmit={handleLogin}>
-                        <div className="mb-4">
-                            <label className="form-label text-muted small fw-bold">TC KİMLİK NO</label>
-                            <div className="input-group input-group-lg">
-                                <span className="input-group-text bg-light border-0"><User size={20} color="#666"/></span>
-                                <input type="text" className="form-control bg-light border-0" maxLength="11"
-                                    value={tcNo} onChange={(e) => setTcNo(e.target.value)} required />
+                        {/* TC INPUT */}
+                        <div className="mb-3">
+                            <div className="d-flex align-items-center bg-light border rounded-3 px-3 py-2" style={{ height: '55px' }}>
+                                <User size={20} className="text-secondary me-3" />
+                                <input 
+                                    type="text" 
+                                    className="form-control border-0 bg-transparent shadow-none p-0" 
+                                    placeholder="TC Kimlik No"
+                                    maxLength="11"
+                                    value={tcNo} 
+                                    onChange={(e) => setTcNo(e.target.value)} 
+                                    required 
+                                    style={{ fontSize: '16px', fontWeight: '500' }}
+                                />
                             </div>
                         </div>
 
+                        {/* ŞİFRE INPUT */}
                         <div className="mb-4">
-                            <label className="form-label text-muted small fw-bold">ŞİFRE</label>
-                            <div className="input-group input-group-lg">
-                                <span className="input-group-text bg-light border-0"><Lock size={20} color="#666"/></span>
-                                <input type="password" className="form-control bg-light border-0"
-                                    value={sifre} onChange={(e) => setSifre(e.target.value)} required />
+                            <div className="d-flex align-items-center bg-light border rounded-3 px-3 py-2" style={{ height: '55px' }}>
+                                <Lock size={20} className="text-secondary me-3" />
+                                <input 
+                                    type={sifreGoster ? "text" : "password"}
+                                    className="form-control border-0 bg-transparent shadow-none p-0" 
+                                    placeholder="Şifre"
+                                    value={sifre} 
+                                    onChange={(e) => setSifre(e.target.value)} 
+                                    required 
+                                    style={{ fontSize: '16px', fontWeight: '500' }}
+                                />
+                                <button type="button" className="btn btn-link text-secondary p-0 ms-2" onClick={() => setSifreGoster(!sifreGoster)}>
+                                    {sifreGoster ? <EyeOff size={20}/> : <Eye size={20}/>}
+                                </button>
                             </div>
                         </div>
 
-                        <button type="submit" className="btn btn-primary w-100 btn-lg shadow-sm fw-bold mt-3" 
-                                style={{background: 'linear-gradient(to right, #004e92, #000428)', border: 'none'}}>
-                            GÜVENLİ GİRİŞ YAP
+                        <button 
+                            type="submit" 
+                            className="btn btn-primary w-100 py-3 rounded-3 fw-bold shadow-sm" 
+                            disabled={yukleniyor}
+                            style={{ 
+                                backgroundColor: '#0d6efd', 
+                                border: 'none', 
+                                fontSize: '16px', 
+                                letterSpacing: '0.5px',
+                                transition: 'all 0.3s'
+                            }}
+                        >
+                            {yukleniyor ? 'Giriş Yapılıyor...' : 'GİRİŞ YAP'}
                         </button>
                     </form>
-                    
-                    <div className="text-center mt-4 text-muted small">
-                        &copy; 2025 MBB Bilgi İşlem Dairesi
-                    </div>
                 </div>
+
+                {/* ✅ FOOTER - İSTENİLEN İMZA */}
+                <div className="mt-5 text-center text-white opacity-75">
+                    <p className="m-0 small fw-bold">Toplu Taşıma Şube Müdürlüğü</p>
+                    <p className="m-0" style={{ fontSize: '11px', marginTop: '5px' }}>
+                        Hüseyin Arkan Tarafından Hazırlanmıştır © 2026
+                    </p>
+                    <p className="m-0" style={{ fontSize: '10px', marginTop: '2px' }}>v1.0.0</p>
+                </div>
+
             </div>
         </div>
     );
