@@ -1,5 +1,6 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck, BusFront } from 'lucide-react';
+import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck } from 'lucide-react';
+import logoMbb from '../assets/logombb.png'; // ✅ Logo import edildi
 
 export default function Sidebar() {
     const navigate = useNavigate();
@@ -10,21 +11,24 @@ export default function Sidebar() {
         user = JSON.parse(localStorage.getItem('user'));
     } catch (e) { console.error("Kullanıcı verisi okunamadı"); }
 
-    const isActive = (path) => location.pathname === path ? 'bg-primary text-white shadow' : 'text-secondary hover-bg-light';
+    // Dashboard ile aynı renk paleti
+    const activeStyle = {
+        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+        color: '#fff',
+        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
+    };
+
+    const inactiveStyle = {
+        color: '#64748b',
+        background: 'transparent'
+    };
 
    // --- YETKİ KONTROLÜ ---
     const checkPermission = (modulKey) => {
-        // 1. Admin ise her yeri görsün
         if (user?.rol_adi === 'admin') return true;
-
-        // 2. Kullanıcının yetkilerine bak
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
-
-        // 3. Hiç kayıt yoksa varsayılan olarak göster
         if (!permission) return true;
-
-        // 4. Kayıt varsa veritabanındaki değere bak
         return permission.goruntule === true;
     };
 
@@ -58,7 +62,7 @@ export default function Sidebar() {
             title: 'Ayarlar', 
             path: '/dashboard/settings', 
             icon: <Settings size={20}/>, 
-            show: checkPermission('ayarlar') || true // Ayarlar (Profil) herkese açık
+            show: checkPermission('ayarlar') || true 
         },
         { 
             title: 'Profil Onayları', 
@@ -81,39 +85,67 @@ export default function Sidebar() {
     };
 
     return (
-        <div className="bg-white border-end h-100 d-flex flex-column p-3" style={{width: '260px', minWidth:'260px'}}>
-            <div className="mb-4 px-2 d-flex align-items-center gap-2">
-                <div className="bg-primary rounded p-1"><BusFront size={24} className="text-white"/></div>
-                <h5 className="m-0 fw-bold text-primary">Mersin BB</h5>
+        <div className="d-flex flex-column h-100 bg-white border-end shadow-sm" 
+             style={{width: '280px', minWidth:'280px', transition: 'all 0.3s ease', fontFamily: "'Inter', sans-serif"}}>
+            
+            {/* Hover efektleri için stil */}
+            <style>{`
+                .sidebar-btn:hover { background-color: #f1f5f9 !important; color: #1e293b !important; transform: translateX(5px); }
+                .sidebar-active:hover { transform: none !important; }
+            `}</style>
+
+            {/* --- HEADER: LOGO VE KURUMSAL İSİM --- */}
+            <div className="p-4 pb-2 text-center border-bottom border-light bg-light bg-opacity-25">
+                <div className="mb-3 d-inline-block p-2 rounded-circle bg-white shadow-sm border">
+                    <img src={logoMbb} alt="MBB Logo" style={{width: '70px', height: '70px', objectFit:'contain'}} />
+                </div>
+                <div>
+                    <h6 className="fw-bold text-dark m-0" style={{letterSpacing:'-0.5px'}}>Mersin Büyükşehir Belediyesi</h6>
+                    <div className="my-1" style={{height:'2px', width:'40px', background:'#3b82f6', margin:'0 auto'}}></div>
+                    <p className="fw-semibold text-secondary m-0" style={{fontSize:'12px'}}>Ulaşım Dairesi Başkanlığı</p>
+                    <p className="text-muted m-0 small opacity-75" style={{fontSize:'11px'}}>Toplu Taşıma Şube Müdürlüğü</p>
+                </div>
             </div>
 
-            <div className="flex-grow-1 overflow-auto">
+            {/* --- MENÜ LİSTESİ --- */}
+            <div className="flex-grow-1 overflow-auto p-3 custom-scroll">
                 <div className="d-flex flex-column gap-2">
+                    <small className="text-uppercase fw-bold text-muted ps-3 mb-1" style={{fontSize:'10px', letterSpacing:'1px'}}>Menü</small>
                     {menuItems.map((item, index) => item.show && (
                         <button 
                             key={index}
                             onClick={() => navigate(item.path)}
-                            className={`btn text-start d-flex align-items-center gap-3 py-2 border-0 ${isActive(item.path)}`} 
-                            style={{borderRadius: '10px', transition: 'all 0.2s'}}
+                            className={`btn text-start d-flex align-items-center gap-3 py-3 px-3 border-0 fw-medium ${location.pathname === item.path ? 'sidebar-active' : 'sidebar-btn'}`} 
+                            style={{
+                                borderRadius: '12px', 
+                                transition: 'all 0.2s ease',
+                                fontSize: '14px',
+                                ...(location.pathname === item.path ? activeStyle : inactiveStyle)
+                            }}
                         >
                             {item.icon}
-                            <span className="fw-medium">{item.title}</span>
+                            <span>{item.title}</span>
                         </button>
                     ))}
                 </div>
             </div>
 
-            <div className="mt-auto border-top pt-3">
-                <div className="d-flex align-items-center gap-2 mb-3 px-2">
-                    <div className="bg-light rounded-circle d-flex align-items-center justify-content-center fw-bold text-primary border" style={{width:40, height:40}}>
+            {/* --- FOOTER: KULLANICI KARTI --- */}
+            <div className="p-3 mt-auto bg-light bg-opacity-50">
+                <div className="bg-white p-3 rounded-4 shadow-sm border d-flex align-items-center gap-3 mb-3">
+                    <div className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm flex-shrink-0" 
+                         style={{width:'42px', height:'42px', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', fontSize:'14px'}}>
                         {user?.ad ? user.ad[0] : '?'}
                     </div>
                     <div style={{lineHeight: '1.2', overflow: 'hidden'}}>
-                        <div className="fw-bold text-dark small text-truncate">{user?.ad} {user?.soyad}</div>
-                        <div className="text-muted small" style={{fontSize:'10px'}}>{user?.rol_adi ? user.rol_adi.toUpperCase() : 'PERSONEL'}</div>
+                        <div className="fw-bold text-dark text-truncate" style={{fontSize:'14px'}}>{user?.ad} {user?.soyad}</div>
+                        <div className="text-muted small text-uppercase" style={{fontSize:'10px', letterSpacing:'0.5px'}}>{user?.rol_adi || 'PERSONEL'}</div>
                     </div>
                 </div>
-                <button onClick={handleLogout} className="btn btn-light w-100 text-danger d-flex align-items-center justify-content-center gap-2 btn-sm border-0 hover-shadow">
+                
+                <button onClick={handleLogout} 
+                        className="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-3 border-0 bg-opacity-10 text-danger fw-bold hover-shadow"
+                        style={{fontSize:'13px', backgroundColor: '#fee2e2'}}>
                     <LogOut size={16}/> Çıkış Yap
                 </button>
             </div>
