@@ -26,7 +26,7 @@ export default function DashboardHome() {
     // --- DİL AYARLARI ---
     const TEXT = {
         tr: {
-            greeting: { morning: 'Günaydın', afternoon: 'Tünaydın', evening: 'İyi Akşamlar' },
+            greeting: { morning: 'Günaydın', afternoon: 'Tünaydın', evening: 'İyi Geceler' },
             welcome: 'Sisteme Hoş Geldiniz',
             role: 'Sistem Yöneticisi',
             department: 'Toplu Taşıma Şube Müdürlüğü',
@@ -53,7 +53,7 @@ export default function DashboardHome() {
         }
     };
 
-    // --- TEMA MOTORU (Cyberpunk & Clean Light) ---
+    // --- TEMA MOTORU ---
     const THEME = {
         light: { 
             bg: '#f3f4f6', 
@@ -64,7 +64,7 @@ export default function DashboardHome() {
             border: '#e5e7eb',
             shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01)',
             chartGrid: '#e5e7eb',
-            accentGradient: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', // Mersin Mavisi
+            accentGradient: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', 
             successGradient: 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
         },
         dark: { 
@@ -76,7 +76,7 @@ export default function DashboardHome() {
             border: 'rgba(255,255,255,0.08)',
             shadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
             chartGrid: '#374151',
-            accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)', // Cyberpunk Neon
+            accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
             successGradient: 'linear-gradient(135deg, #059669 0%, #34d399 100%)'
         }
     };
@@ -94,12 +94,12 @@ export default function DashboardHome() {
             .then(res => {
                 const data = res.data;
                 
-                // 🛑 DÜZELTME BURADA: 'TAMAMLANDI' statüsü artık ONAYLI sayılıyor.
+                // ✅ DÜZELTME: 'TAMAMLANDI' durumu da artık 'ONAYLI' olarak sayılacak.
                 setStats({
                     toplam: data.length,
                     onayli: data.filter(x => x.durum === 'IK_ONAYLADI' || x.durum === 'TAMAMLANDI').length,
                     bekleyen: data.filter(x => x.durum.includes('BEK') || x.durum.includes('AMIR') || x.durum.includes('YAZICI')).length,
-                    reddedilen: data.filter(x => x.durum === 'REDDEDILDI').length
+                    reddedilen: data.filter(x => x.durum === 'REDDEDILDI' || x.durum === 'IPTAL_EDILDI').length
                 });
 
                 const turMap = {};
@@ -114,14 +114,14 @@ export default function DashboardHome() {
             });
     }, [lang]);
 
+    // ✅ DÜZELTME: Burası artık direkt metin değil, "key" (anahtar kelime) döndürüyor.
     const getGreeting = () => {
         const h = new Date().getHours();
-        if (h < 12) return TEXT[lang].greeting.morning;
-        if (h < 18) return TEXT[lang].greeting.afternoon;
-        return TEXT[lang].greeting.evening;
+        if (h < 12) return 'morning';
+        if (h < 18) return 'afternoon';
+        return 'evening';
     };
 
-    // --- BİLEŞENLER ---
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
@@ -142,7 +142,6 @@ export default function DashboardHome() {
             <div className="card h-100 rounded-4 position-relative overflow-hidden border-0 hover-glass"
                  style={{ backgroundColor: current.cardBg, backdropFilter: 'blur(12px)', boxShadow: current.shadow, border: `1px solid ${current.border}` }}>
                 
-                {/* Arka plan dekorasyonu */}
                 <div className="position-absolute end-0 bottom-0 opacity-10" style={{transform: 'translate(20%, 20%)'}}>
                     <Icon size={100} color={color} />
                 </div>
@@ -153,7 +152,6 @@ export default function DashboardHome() {
                              style={{ background: `linear-gradient(135deg, ${color}20 0%, ${color}10 100%)`, color: color, width:50, height:50 }}>
                             <Icon size={24} strokeWidth={2.5} />
                         </div>
-                        {/* Sparkline */}
                         <div style={{width: 60, height: 30}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={[{v:5}, {v:12}, {v:8}, {v:15}, {v:10}, {v:20}]}>
@@ -180,19 +178,15 @@ export default function DashboardHome() {
     return (
         <div className="container-fluid p-4 p-lg-5" style={{backgroundColor: current.bg, minHeight: '100vh', transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily: "'Inter', sans-serif"}}>
             
-            {/* CSS ANIMASYONLARI */}
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
                 .fade-in-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
                 .hover-glass { transition: transform 0.3s ease, box-shadow 0.3s ease; }
                 .hover-glass:hover { transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15) !important; }
-                .custom-scroll::-webkit-scrollbar { width: 6px; }
-                .custom-scroll::-webkit-scrollbar-thumb { background: ${darkMode ? '#334155' : '#cbd5e1'}; border-radius: 10px; }
                 .glass-panel { background: ${current.glass}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid ${current.border}; }
             `}</style>
 
-            {/* --- TOP BAR (Nav & Controls) --- */}
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-5 fade-in-up" style={{animationDelay: '0ms'}}>
                 <div className="d-flex align-items-center gap-3 mb-3 mb-md-0">
                     <div className="p-2 rounded-circle bg-primary bg-opacity-10 text-primary">
@@ -219,7 +213,7 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* 🔥 HERO SECTION (KARTVİZİT) */}
+            {/* HERO SECTION */}
             <div className="card border-0 shadow-lg rounded-5 mb-5 overflow-hidden fade-in-up position-relative" 
                  style={{ 
                      background: current.accentGradient,
@@ -230,11 +224,6 @@ export default function DashboardHome() {
                     <Sparkles size={250} strokeWidth={0.5} />
                 </div>
                 
-                {/* Dalga Efekti (SVG) */}
-                <div className="position-absolute bottom-0 start-0 w-100 opacity-25" style={{lineHeight:0}}>
-                    <svg viewBox="0 0 1440 320" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" fillOpacity="1" d="M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,224C672,245,768,267,864,250.7C960,235,1056,181,1152,165.3C1248,149,1344,171,1392,181.3L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>
-                </div>
-
                 <div className="card-body p-4 p-lg-5 d-flex flex-column flex-md-row align-items-center justify-content-between gap-4 position-relative z-1">
                     <div className="d-flex align-items-center gap-4">
                         <div className="p-1 rounded-circle bg-white bg-opacity-25 shadow-lg" style={{backdropFilter:'blur(10px)'}}>
@@ -268,13 +257,10 @@ export default function DashboardHome() {
                 <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
             </div>
 
-            {/* ANA İÇERİK */}
             <div className="row g-4">
                 
                 {/* SOL SÜTUN */}
                 <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
-                    
-                    {/* ALAN GRAFİĞİ */}
                     <div className="card border-0 shadow-sm h-100 rounded-5 mb-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent d-flex justify-content-between align-items-center">
                             <div>
@@ -302,7 +288,6 @@ export default function DashboardHome() {
                         </div>
                     </div>
 
-                    {/* BAR GRAFİĞİ */}
                     <div className="card border-0 shadow-sm rounded-5 overflow-hidden glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent">
                             <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h5>
@@ -319,13 +304,11 @@ export default function DashboardHome() {
                             </ResponsiveContainer>
                         </div>
                     </div>
-
                 </div>
 
                 {/* SAĞ SÜTUN */}
                 <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                     
-                    {/* DONUT CHART */}
                     <div className="card border-0 shadow-sm rounded-5 mb-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent">
                             <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.status}</h5>
@@ -354,7 +337,6 @@ export default function DashboardHome() {
                         </div>
                     </div>
 
-                    {/* SON İŞLEMLER LİSTESİ */}
                     <div className="card border-0 shadow-sm rounded-5 h-100 glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 pb-2 bg-transparent d-flex justify-content-between align-items-center">
                             <h5 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: current.text}}>
@@ -367,9 +349,9 @@ export default function DashboardHome() {
                         <div className="card-body p-3">
                             <div className="d-flex flex-column gap-3">
                                 {sonHareketler.map((item, index) => {
-                                    // 🛑 DÜZELTME BURADA: 'TAMAMLANDI' ise ONAYLI kabul et.
+                                    // ✅ DÜZELTME: 'TAMAMLANDI' durumu da 'ONAYLI' olarak görünecek.
                                     const isApproved = item.durum === 'IK_ONAYLADI' || item.durum === 'TAMAMLANDI';
-                                    const isRejected = item.durum === 'REDDEDILDI';
+                                    const isRejected = item.durum === 'REDDEDILDI' || item.durum === 'IPTAL_EDILDI';
                                     
                                     return (
                                         <div key={index} className="d-flex align-items-center p-3 rounded-4 hover-glass border"
@@ -399,7 +381,6 @@ export default function DashboardHome() {
                 </div>
             </div>
             
-            {/* FOOTER */}
             <div className="text-center mt-5 mb-4 opacity-50 fade-in-up" style={{animationDelay: '900ms', color: current.subText, fontSize: '12px'}}>
                 <p className="m-0 fw-bold">{TEXT[lang].municipality}</p>
                 <p className="m-0">{TEXT[lang].department} - Developed by {TEXT[lang].developer} © 2026</p>
