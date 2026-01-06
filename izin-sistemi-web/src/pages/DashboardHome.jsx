@@ -124,22 +124,6 @@ export default function DashboardHome() {
         return 'evening';
     };
 
-    // --- BİLEŞENLER ---
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div style={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: `1px solid ${current.border}`, color: current.text }} className="p-3 rounded-3 shadow-lg">
-                    <p className="m-0 fw-bold small opacity-75">{label}</p>
-                    <div className="d-flex align-items-center gap-2">
-                        <span className="p-1 rounded-circle bg-primary"></span>
-                        <p className="m-0 fw-bold fs-6">{payload[0].value} Adet</p>
-                    </div>
-                </div>
-            );
-        }
-        return null;
-    };
-
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
             <div className="card h-100 rounded-4 position-relative overflow-hidden border-0 hover-glass"
@@ -176,16 +160,31 @@ export default function DashboardHome() {
         </div>
     );
 
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div style={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: `1px solid ${current.border}`, color: current.text }} className="p-3 rounded-3 shadow-lg">
+                    <p className="m-0 fw-bold small opacity-75">{label}</p>
+                    <div className="d-flex align-items-center gap-2">
+                        <span className="p-1 rounded-circle bg-primary"></span>
+                        <p className="m-0 fw-bold fs-6">{payload[0].value} Adet</p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
+
     return (
-        // ✅ 1. DÜZELTME: Ana Kapsayıcıyı Flexbox Yaptık (Footer'ı itmek için)
-        <div className="d-flex flex-column" 
-             style={{
-                 backgroundColor: current.bg, 
-                 minHeight: '100vh', 
-                 transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', 
-                 fontFamily: "'Inter', sans-serif"
-             }}>
-            
+        // ✅ FLEXBOX DÜZENİ: ANA KAPSAYICI
+        <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: '100vh', // Ekranın tamamını kapla
+            backgroundColor: current.bg,
+            transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+            fontFamily: "'Inter', sans-serif"
+        }}>
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
                 .fade-in-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -195,8 +194,8 @@ export default function DashboardHome() {
                 .glass-panel { background: ${current.glass}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid ${current.border}; }
             `}</style>
 
-            {/* ✅ 2. DÜZELTME: İçerik Alanı (Flex Grow ile alanı kaplar) */}
-            <div className="container-fluid p-4 p-lg-5 flex-grow-1">
+            {/* ✅ İÇERİK ALANI (FLEX: 1 ile tüm boşluğu kaplar) */}
+            <div className="container-fluid p-4 p-lg-5" style={{ flex: 1 }}>
 
                 {/* TOP BAR */}
                 <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-5 fade-in-up" style={{animationDelay: '0ms'}}>
@@ -265,7 +264,7 @@ export default function DashboardHome() {
                     <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
                 </div>
 
-                {/* GRAFİKLER VE LİSTE */}
+                {/* GRAFİKLER */}
                 <div className="row g-4">
                     <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
                         <div className="card border-0 shadow-sm h-100 rounded-5 mb-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
@@ -385,8 +384,8 @@ export default function DashboardHome() {
                 </div>
             </div>
             
-            {/* ✅ 3. DÜZELTME: Footer Bağımsız Bir Alanda ve En Altta */}
-            <footer className="text-center py-4 opacity-50 fade-in-up mt-auto" style={{animationDelay: '900ms', color: current.subText, fontSize: '12px'}}>
+            {/* ✅ FOOTER: MT-AUTO İLE EKRANIN EN ALTINA YAPIŞIR */}
+            <footer className="text-center py-4 opacity-50 fade-in-up" style={{animationDelay: '900ms', color: current.subText, fontSize: '12px', marginTop: 'auto'}}>
                 <p className="m-0 fw-bold">{TEXT[lang].municipality}</p>
                 <p className="m-0">{TEXT[lang].department} - Developed by {TEXT[lang].developer} © 2026</p>
             </footer>
