@@ -6,81 +6,85 @@ import {
 } from 'recharts';
 import { 
     FileCheck, Clock, FileX, Users, Calendar, TrendingUp, 
-    Activity, ArrowUpRight, Moon, Sun, Globe 
+    Activity, ArrowUpRight, Moon, Sun, Globe, BellRing, Sparkles 
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-// ✅ LOGOYU İMPORT EDİYORUZ
 import logoMbb from '../assets/logombb.png'; 
 
 export default function DashboardHome() {
-    // --- STATE YÖNETİMİ ---
+    // --- STATE ---
     const [stats, setStats] = useState({ toplam: 0, onayli: 0, bekleyen: 0, reddedilen: 0 });
     const [izinTurleri, setIzinTurleri] = useState([]);
     const [aylikData, setAylikData] = useState([]);
     const [sonHareketler, setSonHareketler] = useState([]);
-    const [kullanici, setKullanici] = useState({ ad: 'Misafir', soyad: '' }); // Dinamik Kullanıcı
-    const [darkMode, setDarkMode] = useState(false); // Dark Mode
-    const [lang, setLang] = useState('tr'); // Dil Seçeneği ('tr' | 'en')
-    const [selamlama, setSelamlama] = useState('');
-    
+    const [kullanici, setKullanici] = useState({ ad: 'Misafir', soyad: '' });
+    const [darkMode, setDarkMode] = useState(false);
+    const [lang, setLang] = useState('tr');
+    const [loaded, setLoaded] = useState(false); // Animasyon tetikleyicisi
     const navigate = useNavigate();
 
-    // --- DİL SÖZLÜĞÜ (TRANSLATIONS) ---
+    // --- DİL AYARLARI ---
     const TEXT = {
         tr: {
             greeting: { morning: 'Günaydın', afternoon: 'Tünaydın', evening: 'İyi Akşamlar' },
             welcome: 'Hoş Geldiniz',
+            role: 'Sistem Yöneticisi',
             department: 'Toplu Taşıma Şube Müdürlüğü',
             municipality: 'Mersin Büyükşehir Belediyesi',
+            developer: 'Hüseyin Arkan',
             today: 'BUGÜN',
-            cards: { total: 'TOPLAM BAŞVURU', approved: 'ONAYLANAN İZİNLER', pending: 'BEKLEYEN TALEPLER', rejected: 'REDDEDİLENLER' },
-            charts: { trendTitle: 'Başvuru Yoğunluğu', trendSub: 'Aylık talep trend analizi', typeDist: 'İzin Türüne Göre Dağılım', statusTitle: 'Genel Durum', total: 'TOPLAM' },
-            activity: { title: 'Son Aktiviteler', all: 'Tümü', empty: 'Henüz işlem yok.' },
+            cards: { total: 'Toplam Başvuru', approved: 'Onaylanan İzin', pending: 'Bekleyen Talep', rejected: 'Reddedilen' },
+            charts: { trend: 'Başvuru Analizi', type: 'İzin Türü Dağılımı', status: 'Genel Durum', total: 'TOPLAM' },
+            activity: { title: 'Son Aktiviteler', all: 'Tümünü Gör', empty: 'Henüz işlem yok.' },
             status: { approved: 'ONAYLANDI', rejected: 'REDDEDİLDİ', pending: 'BEKLİYOR' }
         },
         en: {
             greeting: { morning: 'Good Morning', afternoon: 'Good Afternoon', evening: 'Good Evening' },
-            welcome: 'Welcome',
+            welcome: 'Welcome Back',
+            role: 'System Administrator',
             department: 'Public Transportation Branch',
             municipality: 'Mersin Metropolitan Municipality',
+            developer: 'Huseyin Arkan',
             today: 'TODAY',
-            cards: { total: 'TOTAL APPLICATIONS', approved: 'APPROVED LEAVES', pending: 'PENDING REQUESTS', rejected: 'REJECTED' },
-            charts: { trendTitle: 'Application Density', trendSub: 'Monthly demand trend analysis', typeDist: 'Distribution by Leave Type', statusTitle: 'General Status', total: 'TOTAL' },
+            cards: { total: 'Total Applications', approved: 'Approved Leaves', pending: 'Pending Requests', rejected: 'Rejected' },
+            charts: { trend: 'Application Analytics', type: 'Leave Type Dist.', status: 'General Status', total: 'TOTAL' },
             activity: { title: 'Recent Activities', all: 'View All', empty: 'No recent activity.' },
             status: { approved: 'APPROVED', rejected: 'REJECTED', pending: 'PENDING' }
         }
     };
 
-    // --- TEMA RENKLERİ ---
+    // --- RENK PALETİ (LIGHT / DARK) ---
     const THEME = {
-        light: { bg: '#f8f9fa', cardBg: '#ffffff', text: '#2b2d42', subText: '#8d99ae', border: '#e9ecef', grid: '#f1f5f9' },
-        dark:  { bg: '#0f172a', cardBg: '#1e293b', text: '#f8fafc', subText: '#94a3b8', border: '#334155', grid: '#334155' }
+        light: { 
+            bg: '#f0f2f5', 
+            cardBg: 'rgba(255, 255, 255, 0.9)', 
+            glass: 'rgba(255, 255, 255, 0.7)',
+            text: '#1e293b', 
+            subText: '#64748b', 
+            border: '#e2e8f0',
+            shadow: '0 10px 40px -10px rgba(0,0,0,0.05)',
+            accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)'
+        },
+        dark: { 
+            bg: '#0f172a', 
+            cardBg: 'rgba(30, 41, 59, 0.7)', 
+            glass: 'rgba(30, 41, 59, 0.4)',
+            text: '#f1f5f9', 
+            subText: '#94a3b8', 
+            border: 'rgba(255,255,255,0.08)',
+            shadow: '0 10px 40px -10px rgba(0,0,0,0.5)',
+            accentGradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)'
+        }
     };
     
-    const currentTheme = darkMode ? THEME.dark : THEME.light;
-
-    // Sabit Grafik Renkleri
-    const COLORS = {
-        primary: '#4361ee', success: '#2ec4b6', warning: '#ff9f1c', danger: '#e71d36'
-    };
+    const current = darkMode ? THEME.dark : THEME.light;
+    const COLORS = { primary: '#4f46e5', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
 
     useEffect(() => {
-        // 1. Kullanıcıyı LocalStorage'dan Çek
+        setLoaded(true); // Sayfa yüklenince animasyon başlasın
         const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            try {
-                setKullanici(JSON.parse(storedUser));
-            } catch (e) { console.error("Kullanıcı verisi okunamadı"); }
-        }
+        if (storedUser) { try { setKullanici(JSON.parse(storedUser)); } catch (e) {} }
 
-        // 2. Saate Göre Selamlama
-        const hour = new Date().getHours();
-        if (hour < 12) setSelamlama('morning');
-        else if (hour < 18) setSelamlama('afternoon');
-        else setSelamlama('evening');
-
-        // 3. Verileri Çek
         const token = localStorage.getItem('token');
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
@@ -97,166 +101,181 @@ export default function DashboardHome() {
                 setIzinTurleri(Object.keys(turMap).map(key => ({ name: key, value: turMap[key] })));
                 setSonHareketler([...data].reverse().slice(0, 5));
                 setAylikData([
-                    { name: lang === 'tr' ? 'Oca' : 'Jan', talep: 4 }, 
-                    { name: lang === 'tr' ? 'Şub' : 'Feb', talep: 8 },
-                    { name: lang === 'tr' ? 'Mar' : 'Mar', talep: 6 }, 
-                    { name: lang === 'tr' ? 'Nis' : 'Apr', talep: 15 },
-                    { name: lang === 'tr' ? 'May' : 'May', talep: 12 }, 
-                    { name: lang === 'tr' ? 'Haz' : 'Jun', talep: data.length }
+                    { name: lang === 'tr' ? 'Oca' : 'Jan', talep: 4 }, { name: lang === 'tr' ? 'Şub' : 'Feb', talep: 8 },
+                    { name: lang === 'tr' ? 'Mar' : 'Mar', talep: 6 }, { name: lang === 'tr' ? 'Nis' : 'Apr', talep: 15 },
+                    { name: lang === 'tr' ? 'May' : 'May', talep: 12 }, { name: lang === 'tr' ? 'Haz' : 'Jun', talep: data.length }
                 ]);
             });
-    }, [lang]); // Dil değişince verileri (ay isimlerini) yenile
+    }, [lang]);
 
-    // --- BİLEŞENLER ---
+    // Selamlama Mantığı
+    const getGreeting = () => {
+        const h = new Date().getHours();
+        if (h < 12) return TEXT[lang].greeting.morning;
+        if (h < 18) return TEXT[lang].greeting.afternoon;
+        return TEXT[lang].greeting.evening;
+    };
 
-    // Grafik Tooltip
+    // ✨ Özel Bileşenler
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
-                <div style={{ backgroundColor: currentTheme.cardBg, color: currentTheme.text, border: `1px solid ${currentTheme.border}` }} className="p-3 rounded-3 shadow">
-                    <p className="m-0 fw-bold mb-1">{label}</p>
-                    <p className="m-0 text-primary fw-bold" style={{fontSize:'14px'}}>{payload[0].value} Adet</p>
+                <div style={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: `1px solid ${current.border}`, color: current.text }} className="p-3 rounded-3 shadow-lg">
+                    <p className="m-0 fw-bold small opacity-75">{label}</p>
+                    <div className="d-flex align-items-center gap-2">
+                        <span className="p-1 rounded-circle bg-primary"></span>
+                        <p className="m-0 fw-bold fs-6">{payload[0].value} Adet</p>
+                    </div>
                 </div>
             );
         }
         return null;
     };
 
-    // İstatistik Kartı
-    const StatCard = ({ title, value, icon: Icon, bgGradient }) => (
-        <div className="col-md-6 col-xl-3">
-            <div className="card border-0 shadow-sm h-100 rounded-4 overflow-hidden position-relative hover-scale" 
-                 style={{ backgroundColor: currentTheme.cardBg, transition: 'all 0.3s ease' }}>
-                <div className="card-body p-4">
-                    <div className="d-flex justify-content-between align-items-start">
-                        <div>
-                            <p className="text-uppercase fw-bold small mb-2" style={{letterSpacing:'0.5px', fontSize:'11px', color: currentTheme.subText}}>{title}</p>
-                            <h2 className="fw-bolder m-0 display-6" style={{color: currentTheme.text}}>{value}</h2>
+    const StatCard = ({ title, value, icon: Icon, color, delay }) => (
+        <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
+            <div className="card h-100 rounded-4 position-relative overflow-hidden border-0 hover-glass"
+                 style={{ backgroundColor: current.cardBg, backdropFilter: 'blur(10px)', boxShadow: current.shadow, border: `1px solid ${current.border}` }}>
+                <div className="card-body p-4 position-relative z-1">
+                    <div className="d-flex justify-content-between align-items-start mb-3">
+                        <div className={`p-3 rounded-4`} style={{ background: `${color}20`, color: color }}>
+                            <Icon size={24} strokeWidth={2.5} />
                         </div>
-                        <div className={`p-3 rounded-4 shadow-sm text-white`} 
-                             style={{ background: bgGradient, width: '54px', height: '54px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Icon size={26} strokeWidth={2.5} />
+                        {/* Mini Sparkline Chart Süslemesi */}
+                        <div style={{width: 60, height: 30}}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={[{v:5}, {v:10}, {v:8}, {v:15}, {v:12}, {v:20}]}>
+                                    <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill="none" />
+                                </AreaChart>
+                            </ResponsiveContainer>
                         </div>
                     </div>
-                    <div className="mt-3 rounded-pill" style={{height:'4px', width:'40%', background: bgGradient, opacity:0.7}}></div>
+                    <div>
+                        <h2 className="fw-bolder m-0 display-6" style={{color: current.text}}>{value}</h2>
+                        <p className="fw-bold small text-uppercase m-0 mt-1 opacity-50" style={{color: current.text, letterSpacing: '1px'}}>{title}</p>
+                    </div>
                 </div>
             </div>
         </div>
     );
 
     return (
-        <div className="container-fluid p-4 p-lg-5" style={{backgroundColor: currentTheme.bg, minHeight: '100vh', transition: 'background-color 0.3s'}}>
+        <div className="container-fluid p-4 p-lg-5" style={{backgroundColor: current.bg, minHeight: '100vh', transition: 'all 0.5s ease', fontFamily: "'Inter', sans-serif"}}>
             
-            {/* Hover Efekti için CSS */}
+            {/* CSS ANIMASYONLARI VE STİLLER */}
             <style>{`
-                .hover-scale:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(0,0,0,0.15) !important; }
-                .list-hover:hover { transform: translateX(5px); }
+                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+                
+                .fade-in-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+                @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+                
+                .hover-glass { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+                .hover-glass:hover { transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15) !important; }
+                
+                .glass-header {
+                    background: ${darkMode ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'};
+                    backdrop-filter: blur(20px);
+                    border-bottom: 1px solid ${current.border};
+                }
+                
+                .custom-scroll::-webkit-scrollbar { width: 6px; }
+                .custom-scroll::-webkit-scrollbar-thumb { background: ${darkMode ? '#334155' : '#cbd5e1'}; border-radius: 10px; }
             `}</style>
 
-            {/* --- TOP BAR (Theme & Lang Toggles) --- */}
-            <div className="d-flex justify-content-end mb-3 gap-3">
-                
-                {/* Dil Değiştirici */}
-                <button 
-                    onClick={() => setLang(lang === 'tr' ? 'en' : 'tr')}
-                    className="btn d-flex align-items-center gap-2 px-3 py-2 rounded-pill border-0 shadow-sm"
-                    style={{ backgroundColor: currentTheme.cardBg, color: currentTheme.text }}
-                >
-                    <Globe size={18} />
-                    <span className="fw-bold small">{lang === 'tr' ? 'TR' : 'EN'}</span>
-                    <span style={{fontSize:'16px'}}>{lang === 'tr' ? '🇹🇷' : '🇬🇧'}</span>
-                </button>
-
-                {/* Dark Mode Toggle */}
-                <button 
-                    onClick={() => setDarkMode(!darkMode)}
-                    className="btn d-flex align-items-center gap-2 px-3 py-2 rounded-pill border-0 shadow-sm"
-                    style={{ backgroundColor: currentTheme.cardBg, color: currentTheme.text }}
-                >
-                    {darkMode ? <Sun size={18} className="text-warning"/> : <Moon size={18} className="text-primary"/>}
-                    <span className="fw-bold small d-none d-md-block">{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
-                </button>
-            </div>
-
-
-            {/* 🔥 1. HERO SECTION (Kişiselleştirilmiş Kartvizit) */}
-            <div className="card border-0 shadow-sm rounded-4 mb-5 overflow-hidden" 
-                 style={{ 
-                     background: darkMode 
-                        ? 'linear-gradient(120deg, #1e293b 0%, #0f172a 100%)' 
-                        : 'linear-gradient(120deg, #ffffff 0%, #e0e7ff 100%)',
-                     color: currentTheme.text
-                 }}>
-                <div className="card-body p-4 p-lg-5 d-flex flex-column flex-md-row align-items-center justify-content-between gap-4">
+            {/* --- TOP BAR (KONTROL PANELİ) --- */}
+            <div className="d-flex justify-content-end mb-4 gap-3 fade-in-up" style={{animationDelay: '0ms'}}>
+                <div className="d-flex align-items-center gap-2 p-1 rounded-pill shadow-sm" 
+                     style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}` }}>
                     
-                    {/* Sol: Logo ve Metin */}
-                    <div className="d-flex align-items-center gap-4">
-                        <div className="p-3 rounded-circle shadow-sm d-flex align-items-center justify-content-center" 
-                             style={{width:'100px', height:'100px', backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#fff'}}>
-                            <img src={logoMbb} alt="MBB Logo" style={{width:'80%', height:'auto'}} />
-                        </div>
-                        <div>
-                            <h5 className="fw-bold text-uppercase mb-1" style={{color: COLORS.primary, letterSpacing:'1px'}}>{TEXT[lang].municipality}</h5>
-                            <h2 className="fw-bolder mb-1">{TEXT[lang].department}</h2>
-                            <p className="m-0 fs-5 opacity-75">
-                                {TEXT[lang].greeting[selamlama]}, <strong className="text-primary">{kullanici.ad} {kullanici.soyad}</strong>
-                            </p>
-                        </div>
-                    </div>
+                    <button onClick={() => setLang(lang === 'tr' ? 'en' : 'tr')} 
+                            className="btn rounded-pill d-flex align-items-center gap-2 px-3 fw-bold"
+                            style={{ color: current.text, fontSize: '14px' }}>
+                        <Globe size={16} /> {lang === 'tr' ? 'TR' : 'EN'}
+                    </button>
+                    
+                    <div style={{width:1, height: 20, background: current.border}}></div>
 
-                    {/* Sağ: Tarih */}
-                    <div className="d-flex flex-column align-items-md-end gap-3">
-                        <div className="px-4 py-3 rounded-4 shadow-sm border d-flex align-items-center gap-3"
-                             style={{ backgroundColor: currentTheme.cardBg, borderColor: currentTheme.border }}>
-                            <div className="bg-primary bg-opacity-10 p-2 rounded-circle">
-                                <Calendar size={20} className="text-primary"/>
-                            </div>
-                            <div>
-                                <div className="small fw-bold text-uppercase opacity-75" style={{fontSize:'10px'}}>{TEXT[lang].today}</div>
-                                <div className="fw-bold fs-6">
-                                    {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' })}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
+                    <button onClick={() => setDarkMode(!darkMode)} 
+                            className="btn rounded-pill d-flex align-items-center gap-2 px-3"
+                            style={{ color: current.text }}>
+                        {darkMode ? <Sun size={18} className="text-warning"/> : <Moon size={18} className="text-primary"/>}
+                    </button>
                 </div>
             </div>
-            
-            {/* 2. İSTATİSTİK KARTLARI (Çoklu Dil) */}
-            <div className="row g-4 mb-5">
-                <StatCard title={TEXT[lang].cards.total} value={stats.toplam} icon={Users} bgGradient="linear-gradient(135deg, #4361ee 0%, #3a0ca3 100%)" />
-                <StatCard title={TEXT[lang].cards.approved} value={stats.onayli} icon={FileCheck} bgGradient="linear-gradient(135deg, #2ec4b6 0%, #20a4f3 100%)" />
-                <StatCard title={TEXT[lang].cards.pending} value={stats.bekleyen} icon={Clock} bgGradient="linear-gradient(135deg, #ff9f1c 0%, #ffbf69 100%)" />
-                <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} bgGradient="linear-gradient(135deg, #e71d36 0%, #d90429 100%)" />
+
+            {/* 🔥 HERO SECTION (KARTVİZİT & SELAMLAMA) */}
+            <div className="card border-0 shadow-lg rounded-5 mb-5 overflow-hidden fade-in-up position-relative" 
+                 style={{ 
+                     background: current.accentGradient,
+                     color: '#fff',
+                     animationDelay: '100ms'
+                 }}>
+                {/* Arka Plan Deseni (Süsleme) */}
+                <div className="position-absolute top-0 end-0 p-5 opacity-10">
+                    <Sparkles size={200} strokeWidth={0.5} />
+                </div>
+
+                <div className="card-body p-4 p-lg-5 d-flex flex-column flex-md-row align-items-center justify-content-between gap-4 position-relative z-1">
+                    <div className="d-flex align-items-center gap-4">
+                        <div className="p-1 rounded-circle bg-white bg-opacity-25 shadow-lg backdrop-blur">
+                            <img src={logoMbb} alt="MBB" className="rounded-circle bg-white p-2" style={{width: 90, height: 90, objectFit:'contain'}} />
+                        </div>
+                        <div>
+                            <div className="d-flex align-items-center gap-2 mb-1">
+                                <span className="badge bg-white bg-opacity-20 backdrop-blur fw-normal px-3 py-1 rounded-pill border border-white border-opacity-25">
+                                    {TEXT[lang].department}
+                                </span>
+                            </div>
+                            <h1 className="fw-bolder m-0 display-6 text-white">{TEXT[lang].greeting[getGreeting()]}, {kullanici.ad}!</h1>
+                            <p className="m-0 text-white text-opacity-75 fs-6 mt-1">{TEXT[lang].role} • {TEXT[lang].developer}</p>
+                        </div>
+                    </div>
+
+                    <div className="text-md-end text-center">
+                        <div className="display-4 fw-bold text-white">{new Date().getDate()}</div>
+                        <div className="text-uppercase fw-bold text-white text-opacity-75" style={{letterSpacing:'2px'}}>
+                            {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', { month: 'long', weekday: 'long' })}
+                        </div>
+                    </div>
+                </div>
             </div>
 
+            {/* İSTATİSTİK KARTLARI */}
+            <div className="row g-4 mb-5">
+                <StatCard title={TEXT[lang].cards.total} value={stats.toplam} icon={Users} color={COLORS.primary} delay="200ms" />
+                <StatCard title={TEXT[lang].cards.approved} value={stats.onayli} icon={FileCheck} color={COLORS.success} delay="300ms" />
+                <StatCard title={TEXT[lang].cards.pending} value={stats.bekleyen} icon={Clock} color={COLORS.warning} delay="400ms" />
+                <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
+            </div>
+
+            {/* ANA İÇERİK (GRAFİKLER) */}
             <div className="row g-4">
                 
-                {/* 3. GRAFİKLER (Sol Taraf) */}
-                <div className="col-xl-8 col-lg-7">
+                {/* SOL SÜTUN */}
+                <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
                     
                     {/* Alan Grafiği */}
-                    <div className="card border-0 shadow-sm h-100 rounded-4 mb-4" style={{ backgroundColor: currentTheme.cardBg }}>
-                        <div className="card-header border-0 pt-4 ps-4 d-flex justify-content-between align-items-center" style={{ backgroundColor: 'transparent' }}>
+                    <div className="card border-0 shadow-sm h-100 rounded-5 mb-4" 
+                         style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
+                        <div className="card-header border-0 pt-4 ps-4 bg-transparent d-flex justify-content-between align-items-center">
                             <div>
-                                <h5 className="fw-bold m-0" style={{color: currentTheme.text}}>{TEXT[lang].charts.trendTitle}</h5>
-                                <p className="small m-0" style={{color: currentTheme.subText}}>{TEXT[lang].charts.trendSub}</p>
+                                <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.trend}</h5>
+                                <p className="small m-0 opacity-50" style={{color: current.text}}>Aylık veri analizi</p>
                             </div>
-                            <div className="p-2 rounded-circle" style={{backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#f8f9fa'}}><TrendingUp size={20} className="text-primary"/></div>
+                            <button className="btn btn-sm btn-icon rounded-circle" style={{background: current.bg}}><ArrowUpRight size={18} color={current.subText}/></button>
                         </div>
                         <div className="card-body" style={{height: 350}}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={aylikData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
+                                <AreaChart data={aylikData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorTalep" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.8}/>
+                                            <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.5}/>
                                             <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0}/>
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={currentTheme.grid}/>
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: currentTheme.subText, fontSize:12}} dy={10}/>
-                                    <YAxis axisLine={false} tickLine={false} tick={{fill: currentTheme.subText, fontSize:12}}/>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.border} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Area type="monotone" dataKey="talep" stroke={COLORS.primary} strokeWidth={4} fill="url(#colorTalep)" />
                                 </AreaChart>
@@ -264,19 +283,20 @@ export default function DashboardHome() {
                         </div>
                     </div>
 
-                    {/* İzin Türü Dağılımı */}
-                    <div className="card border-0 shadow-sm rounded-4 overflow-hidden" style={{ backgroundColor: currentTheme.cardBg }}>
-                        <div className="card-header border-0 pt-4 ps-4 pb-0" style={{ backgroundColor: 'transparent' }}>
-                            <h5 className="fw-bold m-0" style={{color: currentTheme.text}}>{TEXT[lang].charts.typeDist}</h5>
+                    {/* Bar Grafiği */}
+                    <div className="card border-0 shadow-sm rounded-5 overflow-hidden" 
+                         style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
+                        <div className="card-header border-0 pt-4 ps-4 bg-transparent">
+                            <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h5>
                         </div>
                         <div className="card-body" style={{height: 300}}>
-                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={izinTurleri} barSize={40}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={currentTheme.grid} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: currentTheme.subText, fontSize:11}} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fill: currentTheme.subText}}/>
-                                    <Tooltip content={<CustomTooltip />} cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : '#f8f9fa'}}/>
-                                    <Bar dataKey="value" fill={COLORS.primary} radius={[10, 10, 0, 0]} />
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={izinTurleri} barSize={50}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.border} />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText}} />
+                                    <Tooltip content={<CustomTooltip />} cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} />
+                                    <Bar dataKey="value" fill={COLORS.primary} radius={[12, 12, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>
@@ -284,15 +304,16 @@ export default function DashboardHome() {
 
                 </div>
 
-                {/* 4. DURUM VE LİSTE (Sağ Taraf) */}
-                <div className="col-xl-4 col-lg-5">
+                {/* SAĞ SÜTUN */}
+                <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                     
                     {/* Donut Chart */}
-                    <div className="card border-0 shadow-sm rounded-4 mb-4" style={{ backgroundColor: currentTheme.cardBg }}>
-                        <div className="card-header border-0 pt-4 ps-4" style={{ backgroundColor: 'transparent' }}>
-                            <h5 className="fw-bold m-0" style={{color: currentTheme.text}}>{TEXT[lang].charts.statusTitle}</h5>
+                    <div className="card border-0 shadow-sm rounded-5 mb-4" 
+                         style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
+                        <div className="card-header border-0 pt-4 ps-4 bg-transparent">
+                            <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.status}</h5>
                         </div>
-                        <div className="card-body" style={{height: 300}}>
+                        <div className="card-body position-relative" style={{height: 300}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie 
@@ -301,67 +322,65 @@ export default function DashboardHome() {
                                             {name: TEXT[lang].status.pending, value: stats.bekleyen}, 
                                             {name: TEXT[lang].status.rejected, value: stats.reddedilen}
                                         ]} 
-                                        innerRadius={80} 
-                                        outerRadius={100} 
-                                        paddingAngle={5} 
-                                        dataKey="value"
-                                        stroke="none"
+                                        innerRadius={80} outerRadius={100} paddingAngle={5} dataKey="value" stroke="none"
                                     >
-                                        <Cell fill={COLORS.success} />
-                                        <Cell fill={COLORS.warning} />
-                                        <Cell fill={COLORS.danger} />
+                                        <Cell fill={COLORS.success} /> <Cell fill={COLORS.warning} /> <Cell fill={COLORS.danger} />
                                     </Pie>
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend verticalAlign="bottom" height={36} iconType="circle"/>
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="position-absolute top-50 start-50 translate-middle text-center" style={{marginTop:'-10px'}}>
-                                <h1 className="fw-bolder m-0 display-6" style={{color: currentTheme.text}}>{stats.toplam}</h1>
-                                <small className="fw-bold text-uppercase" style={{fontSize:'11px', color: currentTheme.subText}}>{TEXT[lang].charts.total}</small>
+                                <h2 className="fw-bolder m-0 display-5" style={{color: current.text}}>{stats.toplam}</h2>
+                                <p className="small fw-bold text-uppercase m-0 opacity-50" style={{color: current.text}}>{TEXT[lang].charts.total}</p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Son İşlemler Listesi */}
-                    <div className="card border-0 shadow-sm rounded-4 h-100" style={{ backgroundColor: currentTheme.cardBg }}>
-                        <div className="card-header border-0 pt-4 ps-4 pb-2 d-flex justify-content-between align-items-center" style={{ backgroundColor: 'transparent' }}>
-                            <h5 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: currentTheme.text}}><Activity size={20} className="text-warning"/> {TEXT[lang].activity.title}</h5>
-                            <button className="btn btn-sm rounded-pill px-3 fw-bold d-flex align-items-center gap-1" 
-                                    style={{ backgroundColor: darkMode ? 'rgba(255,255,255,0.1)' : '#f1f5f9', color: COLORS.primary }}
-                                    onClick={() => navigate('/dashboard/leaves')}>
-                                {TEXT[lang].activity.all} <ArrowUpRight size={14}/>
+                    {/* Son İşlemler */}
+                    <div className="card border-0 shadow-sm rounded-5 h-100" 
+                         style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
+                        <div className="card-header border-0 pt-4 ps-4 pb-2 bg-transparent d-flex justify-content-between align-items-center">
+                            <h5 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: current.text}}>
+                                <BellRing size={20} className="text-warning" /> {TEXT[lang].activity.title}
+                            </h5>
+                            <button onClick={() => navigate('/dashboard/leaves')} className="btn btn-sm btn-light rounded-pill px-3 fw-bold text-primary">
+                                {TEXT[lang].activity.all}
                             </button>
                         </div>
-                        <div className="card-body p-2">
-                            <div className="d-flex flex-column gap-2">
+                        <div className="card-body p-3">
+                            <div className="d-flex flex-column gap-3">
                                 {sonHareketler.map((item, index) => (
-                                    <div key={index} className="p-3 rounded-4 list-hover border d-flex align-items-center justify-content-between" 
-                                         style={{
-                                             backgroundColor: darkMode ? '#1e293b' : '#ffffff', 
-                                             borderColor: currentTheme.border, 
-                                             transition:'all 0.2s ease'
+                                    <div key={index} className="d-flex align-items-center p-3 rounded-4 hover-glass border"
+                                         style={{ 
+                                             backgroundColor: darkMode ? 'rgba(255,255,255,0.03)' : '#fff', 
+                                             borderColor: current.border 
                                          }}>
-                                        <div className="d-flex align-items-center">
-                                            <div className="rounded-circle d-flex align-items-center justify-content-center me-3 text-white fw-bold shadow-sm" 
-                                                 style={{width:'42px', height:'42px', background: `linear-gradient(135deg, ${COLORS.primary}, #a0c4ff)`}}>
-                                                {item.ad[0]}{item.soyad[0]}
-                                            </div>
-                                            <div>
-                                                <div className="fw-bold" style={{color: currentTheme.text}}>{item.ad} {item.soyad}</div>
-                                                <div className="small" style={{color: currentTheme.subText}}>{item.izin_turu}</div>
-                                            </div>
+                                        <div className="rounded-circle d-flex align-items-center justify-content-center me-3 text-white fw-bold shadow-sm flex-shrink-0" 
+                                             style={{width:'48px', height:'48px', background: `linear-gradient(135deg, ${COLORS.primary}, #8b5cf6)`}}>
+                                            {item.ad[0]}{item.soyad[0]}
                                         </div>
-                                        <span className={`badge rounded-pill px-3 py-2 fw-bold ${item.durum === 'IK_ONAYLADI' ? 'bg-success bg-opacity-10 text-success' : item.durum === 'REDDEDILDI' ? 'bg-danger bg-opacity-10 text-danger' : 'bg-warning bg-opacity-10 text-warning'}`} style={{fontSize:'11px'}}>
+                                        <div className="flex-grow-1">
+                                            <div className="fw-bold" style={{color: current.text}}>{item.ad} {item.soyad}</div>
+                                            <div className="small opacity-75" style={{color: current.text}}>{item.izin_turu}</div>
+                                        </div>
+                                        <span className={`badge rounded-pill px-3 py-2 fw-bold ${item.durum === 'IK_ONAYLADI' ? 'bg-success bg-opacity-10 text-success' : item.durum === 'REDDEDILDI' ? 'bg-danger bg-opacity-10 text-danger' : 'bg-warning bg-opacity-10 text-warning'}`}>
                                             {item.durum === 'IK_ONAYLADI' ? TEXT[lang].status.approved : item.durum === 'REDDEDILDI' ? TEXT[lang].status.rejected : TEXT[lang].status.pending}
                                         </span>
                                     </div>
                                 ))}
-                                {sonHareketler.length === 0 && <div className="text-center py-5" style={{color: currentTheme.subText}}>{TEXT[lang].activity.empty}</div>}
+                                {sonHareketler.length === 0 && <div className="text-center py-5 opacity-50" style={{color: current.text}}>{TEXT[lang].activity.empty}</div>}
                             </div>
                         </div>
                     </div>
 
                 </div>
+            </div>
+            
+            {/* FOOTER İMZA */}
+            <div className="text-center mt-5 mb-4 opacity-50 fade-in-up" style={{animationDelay: '900ms', color: current.subText, fontSize: '12px'}}>
+                <p className="m-0 fw-bold">{TEXT[lang].municipality}</p>
+                <p className="m-0">{TEXT[lang].department} - Developed by {TEXT[lang].developer} © 2026</p>
             </div>
         </div>
     );
