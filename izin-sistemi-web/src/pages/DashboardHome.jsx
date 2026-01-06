@@ -138,7 +138,6 @@ export default function DashboardHome() {
         return null;
     };
 
-    // İSTATİSTİK KARTI
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
             <div className="card h-100 rounded-4 position-relative overflow-hidden border-0 hover-glass"
@@ -185,7 +184,6 @@ export default function DashboardHome() {
             transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             fontFamily: "'Inter', sans-serif"
         }}>
-            
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
                 .fade-in-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -195,10 +193,10 @@ export default function DashboardHome() {
                 .glass-panel { background: ${current.glass}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid ${current.border}; }
             `}</style>
 
-            {/* ✅ 2. İÇERİK ALANI (flex-grow-1 ile boşluğu iter) */}
-            <div className="container-fluid p-3 p-lg-4 flex-grow-1">
+            {/* ✅ 2. İÇERİK ALANI (flex-grow-1 ve pb-5 ile alt boşluk garantilenir) */}
+            <div className="container-fluid p-3 p-lg-4 flex-grow-1 pb-5">
 
-                {/* HEADER ROW */}
+                {/* TOP BAR */}
                 <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 fade-in-up" style={{animationDelay: '0ms'}}>
                     <div className="d-flex align-items-center gap-3 mb-3 mb-md-0">
                         <div className="p-2 rounded-circle bg-primary bg-opacity-10 text-primary">
@@ -225,7 +223,7 @@ export default function DashboardHome() {
                     </div>
                 </div>
 
-                {/* BANNER (Daha kompakt) */}
+                {/* BANNER */}
                 <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden fade-in-up position-relative" 
                      style={{ background: current.accentGradient, color: '#fff', animationDelay: '100ms' }}>
                     <div className="position-absolute top-0 end-0 p-5 opacity-10"><Sparkles size={200} strokeWidth={0.5} /></div>
@@ -263,12 +261,12 @@ export default function DashboardHome() {
                     <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
                 </div>
 
-                {/* GRAFİKLER (Yükseklikleri ayarlandı) */}
+                {/* GRAFİKLER */}
                 <div className="row g-3">
                     {/* SOL SÜTUN */}
                     <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
                         
-                        {/* Area Chart - Height Düşürüldü: 250px */}
+                        {/* Area Chart */}
                         <div className="card border-0 shadow-sm h-100 rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent d-flex justify-content-between align-items-center">
                                 <div>
@@ -295,7 +293,7 @@ export default function DashboardHome() {
                             </div>
                         </div>
 
-                        {/* Bar Chart - Height Düşürüldü: 220px */}
+                        {/* Bar Chart - Bu kısım footer ile karışıyordu, şimdi düzeldi */}
                         <div className="card border-0 shadow-sm rounded-4 overflow-hidden glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent">
                                 <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h6>
@@ -317,7 +315,6 @@ export default function DashboardHome() {
                     {/* SAĞ SÜTUN */}
                     <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                         
-                        {/* Donut Chart - Height: 250px */}
                         <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent">
                                 <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.status}</h6>
@@ -346,7 +343,6 @@ export default function DashboardHome() {
                             </div>
                         </div>
 
-                        {/* Son İşlemler - Height: Auto (Fits remaining space) */}
                         <div className="card border-0 shadow-sm rounded-4 h-100 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 pb-2 bg-transparent d-flex justify-content-between align-items-center">
                                 <h6 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: current.text}}>
@@ -390,8 +386,14 @@ export default function DashboardHome() {
                 </div>
             </div>
             
-            {/* ✅ 3. FOOTER (En Altta, Karışmaz) */}
-            <footer className="text-center py-3 opacity-50 fade-in-up mt-auto" style={{animationDelay: '900ms', color: current.subText, fontSize: '11px'}}>
+            {/* ✅ 3. FOOTER (En Altta, İçerikten Bağımsız, mt-auto ile itilir) */}
+            <footer className="text-center py-4 opacity-50 fade-in-up mt-auto" 
+                    style={{
+                        animationDelay: '900ms', 
+                        color: current.subText, 
+                        fontSize: '11px',
+                        borderTop: `1px solid ${current.border}` // Ayrımı netleştirmek için ince çizgi
+                    }}>
                 <p className="m-0 fw-bold">{TEXT[lang].municipality}</p>
                 <p className="m-0">{TEXT[lang].department} - Developed by {TEXT[lang].developer} © 2026</p>
             </footer>
