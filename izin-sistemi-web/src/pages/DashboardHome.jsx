@@ -64,7 +64,6 @@ export default function DashboardHome() {
             border: '#e5e7eb',
             shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01)',
             chartGrid: '#e5e7eb',
-            // Mavi Banner Rengi (Daha koyu ve okunaklı ton)
             accentGradient: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', 
         },
         dark: { 
@@ -89,7 +88,6 @@ export default function DashboardHome() {
         if (storedUser) { 
             try { 
                 const u = JSON.parse(storedUser);
-                // Eğer isim yoksa varsayılan ata
                 if(!u.ad) u.ad = 'Personel';
                 setKullanici(u); 
             } catch (e) {} 
@@ -100,7 +98,6 @@ export default function DashboardHome() {
             .then(res => {
                 const data = res.data;
                 
-                // İstatistik Mantığı (TAMAMLANDI Dahil)
                 setStats({
                     toplam: data.length,
                     onayli: data.filter(x => x.durum === 'IK_ONAYLADI' || x.durum === 'TAMAMLANDI').length,
@@ -120,7 +117,6 @@ export default function DashboardHome() {
             });
     }, [lang]);
 
-    // Selamlama Fonksiyonu (Düzeltildi)
     const getGreeting = () => {
         const h = new Date().getHours();
         if (h < 12) return 'morning';
@@ -165,6 +161,22 @@ export default function DashboardHome() {
             </div>
         </div>
     );
+
+    // --- BİLEŞENLER (TOOLTIP VS) ---
+    const CustomTooltip = ({ active, payload, label }) => {
+        if (active && payload && payload.length) {
+            return (
+                <div style={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: `1px solid ${current.border}`, color: current.text }} className="p-3 rounded-3 shadow-lg">
+                    <p className="m-0 fw-bold small opacity-75">{label}</p>
+                    <div className="d-flex align-items-center gap-2">
+                        <span className="p-1 rounded-circle bg-primary"></span>
+                        <p className="m-0 fw-bold fs-6">{payload[0].value} Adet</p>
+                    </div>
+                </div>
+            );
+        }
+        return null;
+    };
 
     return (
         <div className="container-fluid p-4 p-lg-5" style={{backgroundColor: current.bg, minHeight: '100vh', transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily: "'Inter', sans-serif"}}>
@@ -227,7 +239,7 @@ export default function DashboardHome() {
                             <img src={logoMbb} alt="MBB" className="rounded-circle p-1" style={{width: '100%', height: '100%', objectFit:'contain'}} />
                         </div>
                         <div>
-                            {/* 🚀 DÜZELTME BURADA: BEYAZ ZEMİN, MAVİ YAZI */}
+                            {/* 🚀 DÜZELTME 1: BEYAZ ZEMİN, MAVİ YAZI (YÜKSEK KONTRAST) */}
                             <div className="d-flex align-items-center gap-2 mb-2">
                                 <span className="badge bg-white text-primary px-3 py-2 rounded-pill shadow-sm fw-bold border-0" style={{fontSize:'12px', letterSpacing:'0.5px'}}>
                                     {TEXT[lang].municipality.toUpperCase()}
@@ -240,9 +252,10 @@ export default function DashboardHome() {
                         </div>
                     </div>
 
-                    <div className="text-md-end text-center bg-white bg-opacity-20 p-3 rounded-4 border border-white border-opacity-20 backdrop-blur shadow-sm">
-                        <div className="display-5 fw-bold text-white">{new Date().getDate()}</div>
-                        <div className="text-uppercase fw-bold text-white text-opacity-90 small" style={{letterSpacing:'1px'}}>
+                    {/* 🚀 DÜZELTME 2: TARİH KISMI ARTIK ŞEFFAF DEĞİL, BEYAZ KART ŞEKLİNDE (OKUNABİLİR) */}
+                    <div className="text-md-end text-center bg-white p-3 rounded-4 shadow-sm border-0" style={{minWidth: '120px'}}>
+                        <div className="display-5 fw-bold text-primary">{new Date().getDate()}</div>
+                        <div className="text-uppercase fw-bold text-dark text-opacity-75 small" style={{letterSpacing:'1px', fontSize:'11px'}}>
                             {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', { month: 'long', weekday: 'long' })}
                         </div>
                     </div>
@@ -351,7 +364,7 @@ export default function DashboardHome() {
                         <div className="card-body p-3">
                             <div className="d-flex flex-column gap-3">
                                 {sonHareketler.map((item, index) => {
-                                    // Durum kontrolü (TAMAMLANDI da eklendi)
+                                    // ✅ DÜZELTME: TAMAMLANDI durumu da ONAYLI sayılıyor.
                                     const isApproved = item.durum === 'IK_ONAYLADI' || item.durum === 'TAMAMLANDI';
                                     const isRejected = item.durum === 'REDDEDILDI' || item.durum === 'IPTAL_EDILDI';
                                     
