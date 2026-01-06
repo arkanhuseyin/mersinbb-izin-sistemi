@@ -138,9 +138,10 @@ export default function DashboardHome() {
         return null;
     };
 
+    // İSTATİSTİK KARTI (h-100 silindi)
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
-            <div className="card h-100 rounded-4 position-relative overflow-hidden border-0 hover-glass"
+            <div className="card rounded-4 position-relative overflow-hidden border-0 hover-glass"
                  style={{ backgroundColor: current.cardBg, backdropFilter: 'blur(12px)', boxShadow: current.shadow, border: `1px solid ${current.border}` }}>
                 <div className="position-absolute end-0 bottom-0 opacity-10" style={{transform: 'translate(20%, 20%)'}}>
                     <Icon size={80} color={color} />
@@ -175,11 +176,11 @@ export default function DashboardHome() {
     );
 
     return (
-        // ✅ 1. FLEX LAYOUT (Sayfanın tamamını kaplar)
+        // ✅ 1. h-100 / min-height: 100vh SİLİNDİ
+        // İçerik ne kadar yer kaplarsa o kadar uzasın.
         <div style={{
             display: 'flex',
             flexDirection: 'column',
-            minHeight: '100vh',
             backgroundColor: current.bg,
             transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
             fontFamily: "'Inter', sans-serif"
@@ -193,8 +194,7 @@ export default function DashboardHome() {
                 .glass-panel { background: ${current.glass}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid ${current.border}; }
             `}</style>
 
-            {/* ✅ 2. İÇERİK ALANI (flex-grow-1 ve pb-5 ile alt boşluk garantilenir) */}
-            <div className="container-fluid p-3 p-lg-4 flex-grow-1 pb-5">
+            <div className="container-fluid p-3 p-lg-4 flex-grow-1">
 
                 {/* TOP BAR */}
                 <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 fade-in-up" style={{animationDelay: '0ms'}}>
@@ -261,13 +261,13 @@ export default function DashboardHome() {
                     <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
                 </div>
 
-                {/* GRAFİKLER */}
+                {/* GRAFİKLER (h-100 SİLİNDİ) */}
                 <div className="row g-3">
                     {/* SOL SÜTUN */}
                     <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
                         
                         {/* Area Chart */}
-                        <div className="card border-0 shadow-sm h-100 rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
+                        <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent d-flex justify-content-between align-items-center">
                                 <div>
                                     <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.trend}</h6>
@@ -293,7 +293,7 @@ export default function DashboardHome() {
                             </div>
                         </div>
 
-                        {/* Bar Chart - Bu kısım footer ile karışıyordu, şimdi düzeldi */}
+                        {/* Bar Chart */}
                         <div className="card border-0 shadow-sm rounded-4 overflow-hidden glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent">
                                 <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h6>
@@ -315,6 +315,7 @@ export default function DashboardHome() {
                     {/* SAĞ SÜTUN */}
                     <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                         
+                        {/* Donut Chart */}
                         <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent">
                                 <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.status}</h6>
@@ -343,7 +344,8 @@ export default function DashboardHome() {
                             </div>
                         </div>
 
-                        <div className="card border-0 shadow-sm rounded-4 h-100 glass-panel" style={{ backgroundColor: current.cardBg }}>
+                        {/* Son İşlemler (h-100 Silindi, kendi boyunu alacak) */}
+                        <div className="card border-0 shadow-sm rounded-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 pb-2 bg-transparent d-flex justify-content-between align-items-center">
                                 <h6 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: current.text}}>
                                     <BellRing size={16} className="text-warning" /> {TEXT[lang].activity.title}
@@ -386,13 +388,13 @@ export default function DashboardHome() {
                 </div>
             </div>
             
-            {/* ✅ 3. FOOTER (En Altta, İçerikten Bağımsız, mt-auto ile itilir) */}
+            {/* ✅ FOOTER (En Altta, İçerikten Bağımsız, mt-auto ile itilir) */}
             <footer className="text-center py-4 opacity-50 fade-in-up mt-auto" 
                     style={{
                         animationDelay: '900ms', 
                         color: current.subText, 
                         fontSize: '11px',
-                        borderTop: `1px solid ${current.border}` // Ayrımı netleştirmek için ince çizgi
+                        borderTop: `1px solid ${current.border}` 
                     }}>
                 <p className="m-0 fw-bold">{TEXT[lang].municipality}</p>
                 <p className="m-0">{TEXT[lang].department} - Developed by {TEXT[lang].developer} © 2026</p>
