@@ -20,7 +20,7 @@ export default function DashboardHome() {
     const [kullanici, setKullanici] = useState({ ad: 'Misafir', soyad: '' });
     const [darkMode, setDarkMode] = useState(false);
     const [lang, setLang] = useState('tr');
-    const [loaded, setLoaded] = useState(false); // Animasyon tetikleyicisi
+    const [loaded, setLoaded] = useState(false); 
     const navigate = useNavigate();
 
     // --- DİL AYARLARI ---
@@ -53,7 +53,7 @@ export default function DashboardHome() {
         }
     };
 
-    // --- RENK PALETİ (LIGHT / DARK) ---
+    // --- RENK PALETİ ---
     const THEME = {
         light: { 
             bg: '#f0f2f5', 
@@ -81,7 +81,7 @@ export default function DashboardHome() {
     const COLORS = { primary: '#4f46e5', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
 
     useEffect(() => {
-        setLoaded(true); // Sayfa yüklenince animasyon başlasın
+        setLoaded(true); 
         const storedUser = localStorage.getItem('user');
         if (storedUser) { try { setKullanici(JSON.parse(storedUser)); } catch (e) {} }
 
@@ -89,9 +89,11 @@ export default function DashboardHome() {
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 const data = res.data;
+                
+                // ✅ DÜZELTME 1: İstatistik hesaplarken 'TAMAMLANDI' statüsünü de ONAYLI kabul ediyoruz.
                 setStats({
                     toplam: data.length,
-                    onayli: data.filter(x => x.durum === 'IK_ONAYLADI').length,
+                    onayli: data.filter(x => x.durum === 'IK_ONAYLADI' || x.durum === 'TAMAMLANDI').length,
                     bekleyen: data.filter(x => x.durum.includes('BEK') || x.durum.includes('AMIR') || x.durum.includes('YAZICI')).length,
                     reddedilen: data.filter(x => x.durum === 'REDDEDILDI').length
                 });
@@ -108,7 +110,6 @@ export default function DashboardHome() {
             });
     }, [lang]);
 
-    // Selamlama Mantığı
     const getGreeting = () => {
         const h = new Date().getHours();
         if (h < 12) return TEXT[lang].greeting.morning;
@@ -116,7 +117,6 @@ export default function DashboardHome() {
         return TEXT[lang].greeting.evening;
     };
 
-    // ✨ Özel Bileşenler
     const CustomTooltip = ({ active, payload, label }) => {
         if (active && payload && payload.length) {
             return (
@@ -141,7 +141,6 @@ export default function DashboardHome() {
                         <div className={`p-3 rounded-4`} style={{ background: `${color}20`, color: color }}>
                             <Icon size={24} strokeWidth={2.5} />
                         </div>
-                        {/* Mini Sparkline Chart Süslemesi */}
                         <div style={{width: 60, height: 30}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={[{v:5}, {v:10}, {v:8}, {v:15}, {v:12}, {v:20}]}>
@@ -161,28 +160,16 @@ export default function DashboardHome() {
 
     return (
         <div className="container-fluid p-4 p-lg-5" style={{backgroundColor: current.bg, minHeight: '100vh', transition: 'all 0.5s ease', fontFamily: "'Inter', sans-serif"}}>
-            
-            {/* CSS ANIMASYONLARI VE STİLLER */}
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
-                
                 .fade-in-up { opacity: 0; animation: fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
-                
                 .hover-glass { transition: transform 0.3s ease, box-shadow 0.3s ease; }
                 .hover-glass:hover { transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15) !important; }
-                
-                .glass-header {
-                    background: ${darkMode ? 'rgba(15, 23, 42, 0.6)' : 'rgba(255, 255, 255, 0.6)'};
-                    backdrop-filter: blur(20px);
-                    border-bottom: 1px solid ${current.border};
-                }
-                
                 .custom-scroll::-webkit-scrollbar { width: 6px; }
                 .custom-scroll::-webkit-scrollbar-thumb { background: ${darkMode ? '#334155' : '#cbd5e1'}; border-radius: 10px; }
             `}</style>
 
-            {/* --- TOP BAR (KONTROL PANELİ) --- */}
             <div className="d-flex justify-content-end mb-4 gap-3 fade-in-up" style={{animationDelay: '0ms'}}>
                 <div className="d-flex align-items-center gap-2 p-1 rounded-pill shadow-sm" 
                      style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}` }}>
@@ -203,14 +190,12 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* 🔥 HERO SECTION (KARTVİZİT & SELAMLAMA) */}
             <div className="card border-0 shadow-lg rounded-5 mb-5 overflow-hidden fade-in-up position-relative" 
                  style={{ 
                      background: current.accentGradient,
                      color: '#fff',
                      animationDelay: '100ms'
                  }}>
-                {/* Arka Plan Deseni (Süsleme) */}
                 <div className="position-absolute top-0 end-0 p-5 opacity-10">
                     <Sparkles size={200} strokeWidth={0.5} />
                 </div>
@@ -240,7 +225,6 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* İSTATİSTİK KARTLARI */}
             <div className="row g-4 mb-5">
                 <StatCard title={TEXT[lang].cards.total} value={stats.toplam} icon={Users} color={COLORS.primary} delay="200ms" />
                 <StatCard title={TEXT[lang].cards.approved} value={stats.onayli} icon={FileCheck} color={COLORS.success} delay="300ms" />
@@ -248,13 +232,8 @@ export default function DashboardHome() {
                 <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
             </div>
 
-            {/* ANA İÇERİK (GRAFİKLER) */}
             <div className="row g-4">
-                
-                {/* SOL SÜTUN */}
                 <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
-                    
-                    {/* Alan Grafiği */}
                     <div className="card border-0 shadow-sm h-100 rounded-5 mb-4" 
                          style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent d-flex justify-content-between align-items-center">
@@ -282,32 +261,9 @@ export default function DashboardHome() {
                             </ResponsiveContainer>
                         </div>
                     </div>
-
-                    {/* Bar Grafiği */}
-                    <div className="card border-0 shadow-sm rounded-5 overflow-hidden" 
-                         style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
-                        <div className="card-header border-0 pt-4 ps-4 bg-transparent">
-                            <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h5>
-                        </div>
-                        <div className="card-body" style={{height: 300}}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={izinTurleri} barSize={50}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.border} />
-                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText}} />
-                                    <Tooltip content={<CustomTooltip />} cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} />
-                                    <Bar dataKey="value" fill={COLORS.primary} radius={[12, 12, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
                 </div>
 
-                {/* SAĞ SÜTUN */}
                 <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
-                    
-                    {/* Donut Chart */}
                     <div className="card border-0 shadow-sm rounded-5 mb-4" 
                          style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent">
@@ -337,7 +293,6 @@ export default function DashboardHome() {
                         </div>
                     </div>
 
-                    {/* Son İşlemler */}
                     <div className="card border-0 shadow-sm rounded-5 h-100" 
                          style={{ backgroundColor: current.cardBg, border: `1px solid ${current.border}`, boxShadow: current.shadow }}>
                         <div className="card-header border-0 pt-4 ps-4 pb-2 bg-transparent d-flex justify-content-between align-items-center">
@@ -350,25 +305,31 @@ export default function DashboardHome() {
                         </div>
                         <div className="card-body p-3">
                             <div className="d-flex flex-column gap-3">
-                                {sonHareketler.map((item, index) => (
-                                    <div key={index} className="d-flex align-items-center p-3 rounded-4 hover-glass border"
-                                         style={{ 
-                                             backgroundColor: darkMode ? 'rgba(255,255,255,0.03)' : '#fff', 
-                                             borderColor: current.border 
-                                         }}>
-                                        <div className="rounded-circle d-flex align-items-center justify-content-center me-3 text-white fw-bold shadow-sm flex-shrink-0" 
-                                             style={{width:'48px', height:'48px', background: `linear-gradient(135deg, ${COLORS.primary}, #8b5cf6)`}}>
-                                            {item.ad[0]}{item.soyad[0]}
+                                {sonHareketler.map((item, index) => {
+                                    // ✅ DÜZELTME 2: 'TAMAMLANDI' veya 'IK_ONAYLADI' ise ONAYLI kabul et.
+                                    const isApproved = item.durum === 'IK_ONAYLADI' || item.durum === 'TAMAMLANDI';
+                                    const isRejected = item.durum === 'REDDEDILDI';
+                                    
+                                    return (
+                                        <div key={index} className="d-flex align-items-center p-3 rounded-4 hover-glass border"
+                                             style={{ 
+                                                 backgroundColor: darkMode ? 'rgba(255,255,255,0.03)' : '#fff', 
+                                                 borderColor: current.border 
+                                             }}>
+                                            <div className="rounded-circle d-flex align-items-center justify-content-center me-3 text-white fw-bold shadow-sm flex-shrink-0" 
+                                                 style={{width:'48px', height:'48px', background: `linear-gradient(135deg, ${COLORS.primary}, #8b5cf6)`}}>
+                                                {item.ad[0]}{item.soyad[0]}
+                                            </div>
+                                            <div className="flex-grow-1">
+                                                <div className="fw-bold" style={{color: current.text}}>{item.ad} {item.soyad}</div>
+                                                <div className="small opacity-75" style={{color: current.text}}>{item.izin_turu}</div>
+                                            </div>
+                                            <span className={`badge rounded-pill px-3 py-2 fw-bold ${isApproved ? 'bg-success bg-opacity-10 text-success' : isRejected ? 'bg-danger bg-opacity-10 text-danger' : 'bg-warning bg-opacity-10 text-warning'}`}>
+                                                {isApproved ? TEXT[lang].status.approved : isRejected ? TEXT[lang].status.rejected : TEXT[lang].status.pending}
+                                            </span>
                                         </div>
-                                        <div className="flex-grow-1">
-                                            <div className="fw-bold" style={{color: current.text}}>{item.ad} {item.soyad}</div>
-                                            <div className="small opacity-75" style={{color: current.text}}>{item.izin_turu}</div>
-                                        </div>
-                                        <span className={`badge rounded-pill px-3 py-2 fw-bold ${item.durum === 'IK_ONAYLADI' ? 'bg-success bg-opacity-10 text-success' : item.durum === 'REDDEDILDI' ? 'bg-danger bg-opacity-10 text-danger' : 'bg-warning bg-opacity-10 text-warning'}`}>
-                                            {item.durum === 'IK_ONAYLADI' ? TEXT[lang].status.approved : item.durum === 'REDDEDILDI' ? TEXT[lang].status.rejected : TEXT[lang].status.pending}
-                                        </span>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                                 {sonHareketler.length === 0 && <div className="text-center py-5 opacity-50" style={{color: current.text}}>{TEXT[lang].activity.empty}</div>}
                             </div>
                         </div>
@@ -377,7 +338,6 @@ export default function DashboardHome() {
                 </div>
             </div>
             
-            {/* FOOTER İMZA */}
             <div className="text-center mt-5 mb-4 opacity-50 fade-in-up" style={{animationDelay: '900ms', color: current.subText, fontSize: '12px'}}>
                 <p className="m-0 fw-bold">{TEXT[lang].municipality}</p>
                 <p className="m-0">{TEXT[lang].department} - Developed by {TEXT[lang].developer} © 2026</p>
