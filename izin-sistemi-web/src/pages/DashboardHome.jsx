@@ -64,8 +64,8 @@ export default function DashboardHome() {
             border: '#e5e7eb',
             shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01)',
             chartGrid: '#e5e7eb',
-            accentGradient: 'linear-gradient(135deg, #2563eb 0%, #3b82f6 100%)', 
-            successGradient: 'linear-gradient(135deg, #059669 0%, #10b981 100%)'
+            // Mavi Banner Rengi (Daha koyu ve okunaklı ton)
+            accentGradient: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', 
         },
         dark: { 
             bg: '#0f172a', 
@@ -76,8 +76,7 @@ export default function DashboardHome() {
             border: 'rgba(255,255,255,0.08)',
             shadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
             chartGrid: '#374151',
-            accentGradient: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
-            successGradient: 'linear-gradient(135deg, #059669 0%, #34d399 100%)'
+            accentGradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 100%)',
         }
     };
     
@@ -87,14 +86,21 @@ export default function DashboardHome() {
     useEffect(() => {
         setLoaded(true); 
         const storedUser = localStorage.getItem('user');
-        if (storedUser) { try { setKullanici(JSON.parse(storedUser)); } catch (e) {} }
+        if (storedUser) { 
+            try { 
+                const u = JSON.parse(storedUser);
+                // Eğer isim yoksa varsayılan ata
+                if(!u.ad) u.ad = 'Personel';
+                setKullanici(u); 
+            } catch (e) {} 
+        }
 
         const token = localStorage.getItem('token');
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 const data = res.data;
                 
-                // ✅ DÜZELTME: 'TAMAMLANDI' durumu da artık 'ONAYLI' olarak sayılacak.
+                // İstatistik Mantığı (TAMAMLANDI Dahil)
                 setStats({
                     toplam: data.length,
                     onayli: data.filter(x => x.durum === 'IK_ONAYLADI' || x.durum === 'TAMAMLANDI').length,
@@ -114,27 +120,12 @@ export default function DashboardHome() {
             });
     }, [lang]);
 
-    // ✅ DÜZELTME: Burası artık direkt metin değil, "key" (anahtar kelime) döndürüyor.
+    // Selamlama Fonksiyonu (Düzeltildi)
     const getGreeting = () => {
         const h = new Date().getHours();
         if (h < 12) return 'morning';
         if (h < 18) return 'afternoon';
         return 'evening';
-    };
-
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div style={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: `1px solid ${current.border}`, color: current.text }} className="p-3 rounded-3 shadow-lg">
-                    <p className="m-0 fw-bold small opacity-75">{label}</p>
-                    <div className="d-flex align-items-center gap-2">
-                        <span className="p-1 rounded-circle bg-primary"></span>
-                        <p className="m-0 fw-bold fs-6">{payload[0].value} Adet</p>
-                    </div>
-                </div>
-            );
-        }
-        return null;
     };
 
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
@@ -187,6 +178,7 @@ export default function DashboardHome() {
                 .glass-panel { background: ${current.glass}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid ${current.border}; }
             `}</style>
 
+            {/* TOP BAR */}
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-5 fade-in-up" style={{animationDelay: '0ms'}}>
                 <div className="d-flex align-items-center gap-3 mb-3 mb-md-0">
                     <div className="p-2 rounded-circle bg-primary bg-opacity-10 text-primary">
@@ -213,36 +205,44 @@ export default function DashboardHome() {
                 </div>
             </div>
 
-            {/* HERO SECTION */}
+            {/* 🔥 HERO SECTION (BANNER) */}
             <div className="card border-0 shadow-lg rounded-5 mb-5 overflow-hidden fade-in-up position-relative" 
                  style={{ 
                      background: current.accentGradient,
                      color: '#fff',
                      animationDelay: '100ms'
                  }}>
+                
+                {/* Arka Plan Süslemeleri */}
                 <div className="position-absolute top-0 end-0 p-5 opacity-10">
                     <Sparkles size={250} strokeWidth={0.5} />
                 </div>
-                
+                <div className="position-absolute bottom-0 start-0 w-100 opacity-25" style={{lineHeight:0}}>
+                    <svg viewBox="0 0 1440 320" xmlns="http://www.w3.org/2000/svg"><path fill="#fff" fillOpacity="1" d="M0,224L48,213.3C96,203,192,181,288,181.3C384,181,480,203,576,224C672,245,768,267,864,250.7C960,235,1056,181,1152,165.3C1248,149,1344,171,1392,181.3L1440,192L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>
+                </div>
+
                 <div className="card-body p-4 p-lg-5 d-flex flex-column flex-md-row align-items-center justify-content-between gap-4 position-relative z-1">
                     <div className="d-flex align-items-center gap-4">
-                        <div className="p-1 rounded-circle bg-white bg-opacity-25 shadow-lg" style={{backdropFilter:'blur(10px)'}}>
-                            <img src={logoMbb} alt="MBB" className="rounded-circle bg-white p-2" style={{width: 90, height: 90, objectFit:'contain'}} />
+                        <div className="p-1 rounded-circle bg-white shadow-lg" style={{width: 90, height: 90}}>
+                            <img src={logoMbb} alt="MBB" className="rounded-circle p-1" style={{width: '100%', height: '100%', objectFit:'contain'}} />
                         </div>
                         <div>
-                            <div className="d-flex align-items-center gap-2 mb-1">
-                                <span className="badge bg-white bg-opacity-20 fw-normal px-3 py-1 rounded-pill border border-white border-opacity-25" style={{backdropFilter:'blur(5px)'}}>
-                                    {TEXT[lang].municipality}
+                            {/* 🚀 DÜZELTME BURADA: BEYAZ ZEMİN, MAVİ YAZI */}
+                            <div className="d-flex align-items-center gap-2 mb-2">
+                                <span className="badge bg-white text-primary px-3 py-2 rounded-pill shadow-sm fw-bold border-0" style={{fontSize:'12px', letterSpacing:'0.5px'}}>
+                                    {TEXT[lang].municipality.toUpperCase()}
                                 </span>
                             </div>
-                            <h1 className="fw-bolder m-0 display-6 text-white">{TEXT[lang].greeting[getGreeting()]}, {kullanici.ad}!</h1>
-                            <p className="m-0 text-white text-opacity-80 fs-6 mt-1">{TEXT[lang].department}</p>
+                            <h1 className="fw-bolder m-0 display-6 text-white text-shadow">
+                                {TEXT[lang].greeting[getGreeting()]}, {kullanici.ad}!
+                            </h1>
+                            <p className="m-0 text-white text-opacity-90 fs-6 mt-1">{TEXT[lang].department}</p>
                         </div>
                     </div>
 
-                    <div className="text-md-end text-center bg-white bg-opacity-10 p-3 rounded-4 border border-white border-opacity-10" style={{backdropFilter:'blur(5px)'}}>
+                    <div className="text-md-end text-center bg-white bg-opacity-20 p-3 rounded-4 border border-white border-opacity-20 backdrop-blur shadow-sm">
                         <div className="display-5 fw-bold text-white">{new Date().getDate()}</div>
-                        <div className="text-uppercase fw-bold text-white text-opacity-75 small" style={{letterSpacing:'1px'}}>
+                        <div className="text-uppercase fw-bold text-white text-opacity-90 small" style={{letterSpacing:'1px'}}>
                             {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', { month: 'long', weekday: 'long' })}
                         </div>
                     </div>
@@ -257,10 +257,10 @@ export default function DashboardHome() {
                 <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
             </div>
 
+            {/* ANA İÇERİK */}
             <div className="row g-4">
-                
-                {/* SOL SÜTUN */}
                 <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
+                    {/* ALAN GRAFİĞİ */}
                     <div className="card border-0 shadow-sm h-100 rounded-5 mb-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent d-flex justify-content-between align-items-center">
                             <div>
@@ -281,13 +281,14 @@ export default function DashboardHome() {
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} />
-                                    <Tooltip content={<CustomTooltip />} />
+                                    <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', backgroundColor: current.cardBg, color: current.text }} />
                                     <Area type="monotone" dataKey="talep" stroke={COLORS.primary} strokeWidth={4} fill="url(#colorTalep)" />
                                 </AreaChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
 
+                    {/* BAR GRAFİĞİ */}
                     <div className="card border-0 shadow-sm rounded-5 overflow-hidden glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent">
                             <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h5>
@@ -298,7 +299,7 @@ export default function DashboardHome() {
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
                                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:12}} dy={10} />
                                     <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText}} />
-                                    <Tooltip content={<CustomTooltip />} cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} />
+                                    <Tooltip cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} contentStyle={{ borderRadius: '10px', border: 'none', backgroundColor: current.cardBg, color: current.text }}/>
                                     <Bar dataKey="value" fill={COLORS.primary} radius={[12, 12, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
@@ -306,9 +307,9 @@ export default function DashboardHome() {
                     </div>
                 </div>
 
-                {/* SAĞ SÜTUN */}
                 <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                     
+                    {/* DONUT CHART */}
                     <div className="card border-0 shadow-sm rounded-5 mb-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 bg-transparent">
                             <h5 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.status}</h5>
@@ -326,7 +327,7 @@ export default function DashboardHome() {
                                     >
                                         <Cell fill={COLORS.success} /> <Cell fill={COLORS.warning} /> <Cell fill={COLORS.danger} />
                                     </Pie>
-                                    <Tooltip content={<CustomTooltip />} />
+                                    <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', backgroundColor: current.cardBg, color: current.text }}/>
                                     <Legend verticalAlign="bottom" height={36} iconType="circle"/>
                                 </PieChart>
                             </ResponsiveContainer>
@@ -337,6 +338,7 @@ export default function DashboardHome() {
                         </div>
                     </div>
 
+                    {/* SON İŞLEMLER */}
                     <div className="card border-0 shadow-sm rounded-5 h-100 glass-panel" style={{ backgroundColor: current.cardBg }}>
                         <div className="card-header border-0 pt-4 ps-4 pb-2 bg-transparent d-flex justify-content-between align-items-center">
                             <h5 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: current.text}}>
@@ -349,7 +351,7 @@ export default function DashboardHome() {
                         <div className="card-body p-3">
                             <div className="d-flex flex-column gap-3">
                                 {sonHareketler.map((item, index) => {
-                                    // ✅ DÜZELTME: 'TAMAMLANDI' durumu da 'ONAYLI' olarak görünecek.
+                                    // Durum kontrolü (TAMAMLANDI da eklendi)
                                     const isApproved = item.durum === 'IK_ONAYLADI' || item.durum === 'TAMAMLANDI';
                                     const isRejected = item.durum === 'REDDEDILDI' || item.durum === 'IPTAL_EDILDI';
                                     
