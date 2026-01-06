@@ -1,3 +1,4 @@
+import HakedisAyarlari from './HakedisAyarlari'; // Dosya yoluna dikkat et
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
@@ -439,6 +440,22 @@ export default function Settings() {
                             </div>
                         </div>
                     )}
+					{/* ✅ TAB: HAKEDİŞ AYARLARI */}
+{activeTab === 'hakedis' && isYetkili && (
+    <div className="pt-4">
+        <HakedisAyarlari />
+    </div>
+)}
+						{isYetkili && (
+								<li className="nav-item">
+								<button 
+							className={`nav-link px-4 fw-bold ${activeTab === 'hakedis' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
+							onClick={() => setActiveTab('hakedis')}
+																			>
+											📅 İzin Hakediş Ayarları
+													</button>
+												</li>
+															)}
 
                     {/* TAB: PERSONEL LİSTESİ */}
                     {activeTab === 'users' && isYetkili && (

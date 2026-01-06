@@ -15,7 +15,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const izinRoutes = require('./src/routes/izinRoutes');
 const personelRoutes = require('./src/routes/personelRoutes');
 const yetkiRoutes = require('./src/routes/yetkiRoutes');
-
+const ayarRoutes = require('./src/routes/ayarRoutes');
 const app = express();
 
 // --- MIDDLEWARE (Ara Katmanlar) ---
@@ -43,6 +43,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/izin', izinRoutes);        
 app.use('/api/personel', personelRoutes); 
 app.use('/api/yetki', yetkiRoutes);  
+app.use('/api/ayar', ayarRoutes);
 
 // Test Rotası
 app.get('/', (req, res) => {
