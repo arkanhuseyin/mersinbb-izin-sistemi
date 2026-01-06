@@ -38,17 +38,17 @@ exports.login = async (req, res) => {
             return res.status(401).json({ mesaj: 'Hatalı şifre!' });
         }
 
-        // --- YETKİLERİ ÇEK ---
+        // ✅ YETKİLERİ ÇEK (Yetkilendirme Paneli İçin)
         const yetkiResult = await pool.query('SELECT * FROM yetkiler WHERE personel_id = $1', [user.personel_id]);
         const yetkiler = yetkiResult.rows;
 
-        // 🔥 İŞTE EKSİK OLAN PARÇA BURASIYDI: birim eklendi! 🔥
+        // Token Oluştur (Birim ID ve Rol Bilgisi Dahil)
         const token = jwt.sign(
             { 
                 id: user.personel_id, 
                 tc: user.tc_no, 
                 rol: user.rol_adi.toLowerCase(), // Rolü küçük harf yap
-                birim: user.birim_id             // ✅ BU SATIR EKSİKTİ! Artık amir kendi birimini bilecek.
+                birim: user.birim_id             // Birim amirleri için gerekli
             },
             process.env.JWT_SECRET || 'gizli_anahtar',
             { expiresIn: '12h' }
@@ -61,14 +61,14 @@ exports.login = async (req, res) => {
         const userObj = {
             ...user,
             rol: user.rol_adi.toLowerCase(),
-            yetkiler: yetkiler
+            yetkiler: yetkiler // Frontend (Sidebar) burayı okuyarak menüleri gizleyecek
         };
 
         res.json({
             mesaj: 'Giriş başarılı',
             token,
-            user: userObj,       // Yeni Web Sitesi bunu kullanır
-            kullanici: userObj   // Eski Mobil Uygulama bunu kullanır
+            user: userObj,       // Web
+            kullanici: userObj   // Mobil uyumluluğu için
         });
 
     } catch (err) {
@@ -133,8 +133,9 @@ exports.register = async (req, res) => {
     }
 };
 
-// 5. TÜM KULLANICILARI LİSTELE
+// 5. TÜM KULLANICILARI LİSTELE (Ayarlar/Yetkilendirme Sayfası İçin)
 exports.getUsers = async (req, res) => {
+    // Sadece belirli roller görebilir
     if (!['admin', 'ik', 'yazici', 'filo'].includes(req.user.rol)) {
         return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
     }
