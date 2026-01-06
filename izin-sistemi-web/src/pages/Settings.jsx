@@ -1,4 +1,4 @@
-import HakedisAyarlari from './HakedisAyarlari'; // Dosya yoluna dikkat et
+import HakedisAyarlari from '../components/HakedisAyarlari';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
