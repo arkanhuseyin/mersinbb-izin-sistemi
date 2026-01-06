@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const auth = require('../middleware/auth'); // Sadece adminler yapabilsin diye
+const auth = require('../middleware/auth');
 
 // 1. Bir personelin yetkilerini getir
 router.get('/:personel_id', auth, async (req, res) => {
@@ -16,30 +16,39 @@ router.get('/:personel_id', auth, async (req, res) => {
     }
 });
 
-// 2. Yetkileri Kaydet / Güncelle
+// 2. Yetkileri Kaydet (SİL VE YENİDEN YAZ MANTIĞI)
 router.post('/kaydet', auth, async (req, res) => {
-    const { personel_id, yetkiler } = req.body; // yetkiler bir dizi olacak
+    const { personel_id, yetkiler } = req.body; 
     
-    // Güvenlik: İşlemi yapan admin mi? (Middleware zaten kontrol ediyor ama ekstra kontrol eklenebilir)
-
+    const client = await pool.connect();
+    
     try {
-        // Önce bu personelin eski yetkilerini temizle (En temiz yöntem silip tekrar yazmaktır)
-        await pool.query('DELETE FROM yetkiler WHERE personel_id = $1', [personel_id]);
+        await client.query('BEGIN'); // İşlemi başlat
 
-        // Seçili yetkileri döngüyle ekle
+        // 1. ADIM: Bu personelin TÜM yetki kayıtlarını sil (Temiz sayfa)
+        // Böylece tikini kaldırdıklarınız veritabanından tamamen uçar.
+        await client.query('DELETE FROM yetkiler WHERE personel_id = $1', [personel_id]);
+
+        // 2. ADIM: Sadece "açık" olan veya "içi dolu" olan yetkileri ekle
         for (const yetki of yetkiler) {
-            // Eğer hepsi false ise veritabanına eklemeye gerek yok (yer kaplamasın)
-            if (yetki.goruntule || yetki.ekle_duzenle || yetki.sil) {
-                await pool.query(
+            // Eğer herhangi bir yetki (Görüntüle, Ekle/İndir, Sil) true ise kaydet
+            if (yetki.goruntule === true || yetki.ekle_duzenle === true || yetki.sil === true) {
+                await client.query(
                     'INSERT INTO yetkiler (personel_id, modul_adi, goruntule, ekle_duzenle, sil) VALUES ($1, $2, $3, $4, $5)',
                     [personel_id, yetki.modul_adi, yetki.goruntule, yetki.ekle_duzenle, yetki.sil]
                 );
             }
         }
+
+        await client.query('COMMIT'); // İşlemi onayla
         res.json({ mesaj: 'Yetkiler başarıyla güncellendi!' });
+
     } catch (error) {
-        console.error(error);
+        await client.query('ROLLBACK'); // Hata varsa geri al
+        console.error("Yetki Kayıt Hatası:", error);
         res.status(500).json({ error: 'Kaydedilemedi' });
+    } finally {
+        client.release();
     }
 });
 

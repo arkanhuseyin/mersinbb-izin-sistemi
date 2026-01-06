@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck, File, FolderDown } from 'lucide-react';
 import logoMbb from '../assets/logombb.png'; 
 
 export default function Sidebar() {
@@ -11,7 +11,7 @@ export default function Sidebar() {
         user = JSON.parse(localStorage.getItem('user'));
     } catch (e) { console.error("Kullanıcı verisi okunamadı"); }
 
-    // Dashboard ile aynı renk paleti
+    // Dashboard ile aynı renk paleti (Active State)
     const activeStyle = {
         background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
         color: '#fff',
@@ -23,31 +23,35 @@ export default function Sidebar() {
         background: 'transparent'
     };
 
-   // --- 🔥 YETKİ KONTROL MEKANİZMASI 🔥 ---
+   // --- 🔥 GÜNCELLENMİŞ YETKİ KONTROLÜ 🔥 ---
     const checkPermission = (modulKey) => {
         // 1. Admin ise her yeri görsün (Süper Yetki)
+        // authController'da 'rol' olarak küçük harfle gönderiyoruz.
         if (user?.rol === 'admin') return true;
 
         // 2. Kullanıcının veritabanından gelen yetkilerine bak
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
 
-        // 3. Eğer veritabanında bu modülle ilgili kayıt varsa onun değerini döndür
+        // 3. Eğer veritabanında kayıt varsa, oradaki 'goruntule' değerini döndür (True/False)
         if (permission) {
             return permission.goruntule === true; 
         }
 
-        // 4. Kayıt Yoksa Varsayılan Davranışlar:
-        // Dashboard ve İzin Talebi herkese açık olsun (aksi belirtilmedikçe)
-        if (modulKey === 'dashboard') return true;
-        if (modulKey === 'izin_talep') return true;
+        // 4. KAYIT YOKSA (Varsayılan Davranış - F5 Sorunu Çözümü)
+        // Veritabanında tikli değilse veya kayıt silinmişse KAPALI olsun.
         
-        // Diğerleri kapalı olsun
+        // İstisna: Dashboard herkese açık olsun
+        if (modulKey === 'dashboard') return true;
+        
+        // İstisna: Personel rolündekiler 'İzin Talebi'ni varsayılan olarak görsün
+        if (modulKey === 'izin_talep' && user?.rol === 'personel') return true;
+
+        // Diğer her şey (Ayarlar, Rapor, Formlar vb.) varsayılan olarak GİZLİ.
         return false; 
     };
 
-    // --- MENÜ ELEMANLARI ---
-    // Buradaki 'key'ler Yetkilendirme.jsx'teki 'key'ler ile AYNIDIR.
+    // --- MENÜ ELEMANLARI (Yetkilendirme.jsx ile Birebir Uyumlu) ---
     const menuItems = [
         { 
             title: 'Genel Bakış', 
@@ -65,32 +69,44 @@ export default function Sidebar() {
             title: 'İzin Talepleri', 
             path: '/dashboard/leaves', 
             icon: <FileText size={20}/>, 
-            // 'izin_onay' yetkisi olanlar veya sadece 'talep' yetkisi olanlar (kendi talepleri için)
-            show: checkPermission('izin_onay') || checkPermission('izin_talep')
+            // Onay yetkisi olanlar VEYA talep yetkisi olanlar (kendi geçmişini görmek için)
+            show: checkPermission('izin_onay') || checkPermission('izin_talep') 
         },
         { 
             title: 'İzin Takip Raporu', 
             path: '/dashboard/reports', 
             icon: <FileBarChart size={20}/>, 
-            show: checkPermission('izin_onay') // Sadece onaycılar rapor görsün
+            show: checkPermission('rapor') // ✅ 'izin_onay'dan ayrıldı, kendi yetkisine bağlandı
         },
         { 
-            title: 'Personel Yönetimi',  // 'Profil Onayları' yerine genel isim
+            title: 'Form 1 İşlemleri', 
+            path: '/dashboard/form1', 
+            icon: <File size={20}/>, 
+            show: checkPermission('form1') // ✅ Yeni Eklendi
+        },
+        { 
+            title: 'Form 2 İşlemleri', 
+            path: '/dashboard/form2', 
+            icon: <FolderDown size={20}/>, 
+            show: checkPermission('form2') // ✅ Yeni Eklendi
+        },
+        { 
+            title: 'Personel Yönetimi', 
             path: '/dashboard/profile-requests', 
             icon: <UserCog size={20}/>, 
-            show: checkPermission('personel_yonetim') // ✅ Yetkiye bağlandı
+            show: checkPermission('personel_yonetim') 
         },
         { 
             title: 'Ayarlar', 
             path: '/dashboard/settings', 
             icon: <Settings size={20}/>, 
-            show: checkPermission('ayarlar') // ✅ Yetkiye bağlandı
+            show: checkPermission('ayarlar') 
         },
         { 
             title: 'Yetkilendirme', 
             path: '/dashboard/yetkilendirme', 
             icon: <ShieldCheck size={20}/>, 
-            show: checkPermission('yetkilendirme') // ✅ Yetkiye bağlandı
+            show: checkPermission('yetkilendirme') 
         }
     ];
 
@@ -107,9 +123,11 @@ export default function Sidebar() {
             <style>{`
                 .sidebar-btn:hover { background-color: #f1f5f9 !important; color: #1e293b !important; transform: translateX(5px); }
                 .sidebar-active:hover { transform: none !important; }
+                .custom-scroll::-webkit-scrollbar { width: 5px; }
+                .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
             `}</style>
 
-            {/* HEADER */}
+            {/* --- HEADER --- */}
             <div className="p-4 pb-2 text-center border-bottom border-light bg-light bg-opacity-25">
                 <div className="mb-3 d-inline-block p-2 rounded-circle bg-white shadow-sm border">
                     <img src={logoMbb} alt="MBB Logo" style={{width: '70px', height: '70px', objectFit:'contain'}} />
@@ -122,7 +140,7 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* MENÜ */}
+            {/* --- MENÜ LİSTESİ --- */}
             <div className="flex-grow-1 overflow-auto p-3 custom-scroll">
                 <div className="d-flex flex-column gap-2">
                     <small className="text-uppercase fw-bold text-muted ps-3 mb-1" style={{fontSize:'10px', letterSpacing:'1px'}}>Menü</small>
@@ -145,7 +163,7 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* FOOTER */}
+            {/* --- FOOTER: KULLANICI KARTI --- */}
             <div className="p-3 mt-auto bg-light bg-opacity-50">
                 <div className="bg-white p-3 rounded-4 shadow-sm border d-flex align-items-center gap-3 mb-3">
                     <div className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm flex-shrink-0" 
