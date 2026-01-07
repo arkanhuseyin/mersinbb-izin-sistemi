@@ -10,7 +10,7 @@ export default function LeaveRequests() {
     const [secilenTalep, setSecilenTalep] = useState(null);
     const [timeline, setTimeline] = useState([]);
     
-    // ✅ EKLENDİ: Bakiye State
+    // Bakiye State
     const [bakiye, setBakiye] = useState(null);
 
     const [activeTab, setActiveTab] = useState('pending');
@@ -27,7 +27,10 @@ export default function LeaveRequests() {
     useEffect(() => {
         const token = localStorage.getItem('token');
         const userStr = localStorage.getItem('user');
-        if (userStr) { setKullanici(JSON.parse(userStr)); verileriGetir(token); }
+        if (userStr) { 
+            setKullanici(JSON.parse(userStr)); 
+            verileriGetir(token); 
+        }
     }, []);
 
     useEffect(() => {
@@ -46,12 +49,23 @@ export default function LeaveRequests() {
             setIzinler(response.data);
             setFilteredIzinler(response.data);
 
-            // ✅ EKLENDİ: Bakiye Çekme
+            // Bakiye Çekme
             axios.get('https://mersinbb-izin-sistemi.onrender.com/api/personel/bakiye', { 
                 headers: { Authorization: `Bearer ${token}` } 
             }).then(res => setBakiye(res.data.kalan_izin)).catch(console.error);
 
         } catch (error) { console.error(error); }
+    };
+
+    // --- 🔥 DİNAMİK YETKİ KONTROLÜ (YENİ) 🔥 ---
+    const checkDownloadPermission = (key) => {
+        if (!kullanici) return false;
+        // Admin her şeyi yapar
+        if (kullanici.rol === 'admin') return true;
+
+        // Yetkilendirme tablosunda "Ekle/Düzenle/İndir" sütununa bakıyoruz
+        const yetki = kullanici.yetkiler?.find(y => y.modul_adi === key);
+        return yetki ? yetki.ekle_duzenle === true : false;
     };
 
     const incele = async (izin) => {
@@ -86,7 +100,6 @@ export default function LeaveRequests() {
         } catch (error) { alert('Hata oluştu!'); }
     };
 
-    // --- YENİ: ISLAK İMZA İŞLEMİ (GELDİ / GELMEDİ) ---
     const islakImzaIslemi = async (durum) => {
         const mesaj = durum === 'GELDI' 
             ? "Personel ıslak imzayı attı mı? İşlem TAMAMLANACAK." 
@@ -142,7 +155,6 @@ export default function LeaveRequests() {
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <div><h3 className="fw-bold text-dark m-0">📅 İzin Talepleri</h3></div>
                 
-                {/* ✅ EKLENDİ: BAKİYE VE TOPLAM KUTUCUKLARI */}
                 <div className="d-flex gap-3">
                     <div className="bg-success bg-opacity-10 p-2 px-3 rounded shadow-sm border border-success">
                         <small className="d-block text-success fw-bold" style={{fontSize:'10px'}}>KALAN İZİN</small>
@@ -190,8 +202,21 @@ export default function LeaveRequests() {
                     {!['IK_ONAYLADI', 'REDDEDILDI', 'TAMAMLANDI', 'IPTAL_EDILDI'].includes(secilenTalep.durum) && (<div className="mt-3"><label className="form-label fw-bold text-primary mb-2">Lütfen İmza Atınız:</label><div className="border rounded-3 bg-white mx-auto shadow-sm overflow-hidden" style={{width: '100%', height: 200}}><SignatureCanvas ref={sigCanvas} penColor='black' canvasProps={{className: 'sigCanvas w-100 h-100'}} /></div><div className="text-end mt-2"><button className="btn btn-link text-danger text-decoration-none btn-sm p-0" onClick={() => sigCanvas.current.clear()}>Temizle</button></div></div>)}
                 </div>
                 <div className="modal-footer bg-light border-top p-3"><div className="d-flex justify-content-between w-100 align-items-center"><div className="d-flex gap-2">
-                    <a href={`https://mersinbb-izin-sistemi.onrender.com/api/izin/pdf/form1/${secilenTalep.talep_id}`} target="_blank" className="btn btn-outline-dark btn-sm fw-bold"><Printer size={16} className="me-1"/> Form 1</a>
-                    {['ik', 'admin', 'filo', 'yazici'].includes(kullanici.rol) && <button className="btn btn-outline-danger btn-sm fw-bold" onClick={() => setPrintModalOpen(true)}><Download size={16} className="me-1"/> Form 2</button>}
+                    
+                    {/* ✅ FORM 1 BUTONU (Yetki Kontrollü) */}
+                    {checkDownloadPermission('form1') && (
+                        <a href={`https://mersinbb-izin-sistemi.onrender.com/api/izin/pdf/form1/${secilenTalep.talep_id}`} target="_blank" className="btn btn-outline-dark btn-sm fw-bold">
+                            <Printer size={16} className="me-1"/> Form 1
+                        </a>
+                    )}
+
+                    {/* ✅ FORM 2 BUTONU (Yetki Kontrollü - Yazıcı engellenebilir) */}
+                    {checkDownloadPermission('form2') && (
+                        <button className="btn btn-outline-danger btn-sm fw-bold" onClick={() => setPrintModalOpen(true)}>
+                            <Download size={16} className="me-1"/> Form 2
+                        </button>
+                    )}
+
                 </div>
                 
                 <div className="d-flex flex-column gap-2 align-items-end">
@@ -202,7 +227,7 @@ export default function LeaveRequests() {
                         {(['ik', 'admin', 'filo'].includes(kullanici.rol)) && secilenTalep.durum === 'YAZICI_ONAYLADI' && <><button className="btn btn-danger" onClick={reddet}>Reddet</button><button className="btn btn-success fw-bold" onClick={() => onayla('IK')}>İK Onayı</button></>}
                     </div>
 
-                    {/* YENİ EKLENEN: ISLAK İMZA KONTROL BUTONLARI */}
+                    {/* ISLAK İMZA KONTROL BUTONLARI */}
                     {(['ik', 'admin'].includes(kullanici.rol)) && secilenTalep.durum === 'IK_ONAYLADI' && (
                         <div className="d-flex gap-2 mt-2">
                             <button className="btn btn-success fw-bold d-flex align-items-center gap-1" onClick={() => islakImzaIslemi('GELDI')}>

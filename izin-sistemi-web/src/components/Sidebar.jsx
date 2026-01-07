@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck, File, FolderDown } from 'lucide-react';
+import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck } from 'lucide-react';
 import logoMbb from '../assets/logombb.png'; 
 
 export default function Sidebar() {
@@ -22,7 +22,7 @@ export default function Sidebar() {
         background: 'transparent'
     };
 
-   // --- 🔥 KESİN YETKİ KONTROLÜ 🔥 ---
+   // --- 🔥 YETKİ KONTROLÜ 🔥 ---
     const checkPermission = (modulKey) => {
         // 1. Admin her şeyi görür
         if (user?.rol === 'admin') return true;
@@ -33,18 +33,14 @@ export default function Sidebar() {
 
         // 3. Eğer veritabanında bu modül için kayıt VARSA:
         if (permission) {
-            // Veritabanındaki değer neyse (true/false) onu döndür.
-            // Bu sayede "false" ise menüden kalkar.
             return permission.goruntule === true; 
         }
 
-        // 4. Eğer veritabanında kayıt YOKSA (Yani hiç yetki tanımlanmamışsa):
-        
-        // Sadece Dashboard ve İzin Talebi (Personel için) varsayılan açık olsun.
+        // 4. Eğer veritabanında kayıt YOKSA (Varsayılanlar):
         if (modulKey === 'dashboard') return true;
         if (modulKey === 'izin_talep' && user?.rol === 'personel') return true;
 
-        // Diğer her şey (Raporlar, Ayarlar vb.) varsayılan olarak KAPALI olsun.
+        // Diğer her şey varsayılan olarak KAPALI.
         return false; 
     };
 
@@ -72,20 +68,10 @@ export default function Sidebar() {
             title: 'İzin Takip Raporu', 
             path: '/dashboard/reports', 
             icon: <FileBarChart size={20}/>, 
-            show: checkPermission('rapor') // ✅ Burası önemli: 'rapor' yetkisine bakıyor
+            show: checkPermission('rapor') 
         },
-        { 
-            title: 'Form 1 İşlemleri', 
-            path: '/dashboard/form1', 
-            icon: <File size={20}/>, 
-            show: checkPermission('form1') 
-        },
-        { 
-            title: 'Form 2 İşlemleri', 
-            path: '/dashboard/form2', 
-            icon: <FolderDown size={20}/>, 
-            show: checkPermission('form2') 
-        },
+        // ❌ Form 1 ve Form 2 linkleri buradan SİLİNDİ (Menüde görünmeyecek)
+        // Ancak altyapıda yetkileri çalışmaya devam edecek.
         { 
             title: 'Personel Yönetimi', 
             path: '/dashboard/profile-requests', 
