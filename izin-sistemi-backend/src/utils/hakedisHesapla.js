@@ -1,38 +1,13 @@
 const pool = require('../config/db');
 
-const dinamikHakedisHesapla = async (personelId) => {
-    // 1. Personel Giriş Tarihini Bul
-    const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personelId]);
-    if (pRes.rows.length === 0) return 0; 
-
-    const girisTarihi = new Date(pRes.rows[0].ise_giris_tarihi);
-    const girisYili = girisTarihi.getFullYear();
-    
-    // 2. Kıdem Yılını Hesapla (Tam Yıl)
-    const bugun = new Date();
-    const farkMs = bugun - girisTarihi;
-    const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
-
-    // 3. Veritabanındaki Kuralları Tara
-    // KURAL: Giriş yılı aralığa uyacak VE kıdem yılı aralığa uyacak
-    const kuralRes = await pool.query(`
-        SELECT gun_sayisi 
-        FROM hakedis_kurallari 
-        WHERE $1 BETWEEN baslangic_yili AND bitis_yili
-        AND $2 BETWEEN kidem_alt AND kidem_ust
-        ORDER BY baslangic_yili DESC, kidem_alt ASC
-        LIMIT 1
-    `, [girisYili, kidemYili]);
-
-    // Eğer veritabanında kural varsa onu döndür
-    if (kuralRes.rows.length > 0) {
-        return kuralRes.rows[0].gun_sayisi;
-    }
-
-    // --- 4. KURAL YOKSA: STANDART (EXCEL) MANTIĞINI UYGULA (YEDEK) ---
-    // Burası Frontend'deki Settings.jsx ile BİREBİR AYNI olmalı.
-    
+// ========================================================
+// 1. ESKİ SİSTEM (EXCEL MANTIĞI - YEDEK PLAN)
+// Veritabanında özel kural bulunamazsa (2025 ve öncesi) bu çalışır.
+// ========================================================
+const hesaplaEskiSistem = (girisYili, kidemYili) => {
     let hak = 0;
+
+    // 1 yıldan az hizmet (Genel Kural)
     if (kidemYili < 1) return 0;
 
     // 2018'den önce işe başlayanlar
@@ -54,22 +29,65 @@ const dinamikHakedisHesapla = async (personelId) => {
             else hak = 30;
         }
     }
-    // 2024 ve sonrası
+    // 2024 ve 2025 (Mevcut Son Durum)
     else {
         if (girisYili < 2025) { // 2024
             if (kidemYili <= 3) hak = 16;
             else if (kidemYili <= 5) hak = 18;
             else if (kidemYili <= 15) hak = 25;
             else hak = 30;
-        } else { // 2025 ve sonrası
+        } else { // 2025
             if (kidemYili <= 3) hak = 18;
             else if (kidemYili <= 5) hak = 20;
             else if (kidemYili <= 15) hak = 27;
             else hak = 32;
         }
     }
-    
     return hak;
+};
+
+// ========================================================
+// 2. ANA HESAPLAMA FONKSİYONU (DIŞARIYA AÇILAN)
+// ========================================================
+const dinamikHakedisHesapla = async (personelId) => {
+    // A. Personel Bilgisini Çek
+    const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personelId]);
+    if (pRes.rows.length === 0) return 0; // Personel yoksa 0
+
+    const girisTarihi = new Date(pRes.rows[0].ise_giris_tarihi);
+    const girisYili = girisTarihi.getFullYear();
+    
+    // B. Kıdem Yılı Hesapla
+    const bugun = new Date();
+    const farkMs = bugun - girisTarihi;
+    const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
+
+    // 🛑 KURAL: 1 Yılını Doldurmayan İzin Alamaz (Tüm Yıllar İçin Geçerli)
+    if (kidemYili < 1) {
+        return 0;
+    }
+
+    // C. ÖNCE VERİTABANINA BAK (Dinamik Kural Var mı?)
+    // Ayarlar sayfasından girdiğiniz kurallar burada aranır.
+    // Örn: Giriş Yılı 2026 ve Kıdemi 2 olan bir kural var mı?
+    const kuralRes = await pool.query(`
+        SELECT gun_sayisi 
+        FROM hakedis_kurallari 
+        WHERE $1 BETWEEN baslangic_yili AND bitis_yili
+        AND $2 BETWEEN kidem_alt AND kidem_ust
+        ORDER BY baslangic_yili DESC
+        LIMIT 1
+    `, [girisYili, kidemYili]);
+
+    if (kuralRes.rows.length > 0) {
+        // ✅ EVET VAR: Veritabanındaki yeni kuralı uygula (2026 ve sonrası için)
+        // Burası sizin panelden girdiğiniz "1. Yıl: 15 Gün" kuralını döndürür.
+        return kuralRes.rows[0].gun_sayisi;
+    }
+
+    // D. YOKSA -> ESKİ SİSTEMİ ÇALIŞTIR (2025 ve Öncesi İçin)
+    // Veritabanında kural bulamazsa (yani eski personel ise), sizin attığınız kod çalışır.
+    return hesaplaEskiSistem(girisYili, kidemYili);
 };
 
 module.exports = dinamikHakedisHesapla;

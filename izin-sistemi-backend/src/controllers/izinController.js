@@ -29,6 +29,7 @@ const hesaplaBakiye = async (personel_id) => {
     const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis);
 
     // B. Bu Yıl Hakediş (✅ ARTIK BURASI DİNAMİK - VERİTABANINDAN)
+    // personel_id'yi gönderiyoruz, fonksiyon veritabanına bakıp hesaplıyor.
     const buYilHakedis = await dinamikHakedisHesapla(personel_id);
 
     // C. Bu Yıl Kullanılan (Onaylı) İzinler
@@ -298,7 +299,7 @@ exports.izinDurumRaporu = async (req, res) => {
         const rapor = await Promise.all(result.rows.map(async (p) => {
             const netKalan = await hesaplaBakiye(p.personel_id);
             
-            // Gerçek Devreden İzni Hesapla (Tablodan)
+            // Gerçek Devreden İzni Hesapla
             const gRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as top FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [p.personel_id]);
             const devreden = parseInt(gRes.rows[0].top);
 
@@ -307,7 +308,7 @@ exports.izinDurumRaporu = async (req, res) => {
 
             return { 
                 ...p, 
-                devreden_izin: devreden, // Doğru devreden izni göster
+                devreden_izin: devreden, 
                 bu_yil_hakedis: buYilHak, 
                 kalan: netKalan, 
                 uyari: netKalan > 40 
@@ -321,47 +322,28 @@ exports.izinDurumRaporu = async (req, res) => {
 exports.getPersonelIzinDetay = async (req, res) => {
     const { id } = req.params; 
     try {
-        // A. Personel Temel Bilgileri
-        const pRes = await pool.query(`
-            SELECT p.*, b.birim_adi, r.rol_adi 
-            FROM personeller p 
-            LEFT JOIN birimler b ON p.birim_id = b.birim_id 
-            LEFT JOIN roller r ON p.rol_id = r.rol_id
-            WHERE p.personel_id = $1
-        `, [id]);
-
+        const pRes = await pool.query(`SELECT p.*, b.birim_adi, r.rol_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id LEFT JOIN roller r ON p.rol_id = r.rol_id WHERE p.personel_id = $1`, [id]);
         if (pRes.rows.length === 0) return res.status(404).json({ mesaj: 'Personel bulunamadı' });
 
-        // B. Manuel Girilen Geçmiş Yıl Bakiyeleri
-        const gecmisRes = await pool.query(`
-            SELECT * FROM izin_gecmis_bakiyeler 
-            WHERE personel_id = $1 
-            ORDER BY yil ASC
-        `, [id]);
+        const gecmisRes = await pool.query(`SELECT * FROM izin_gecmis_bakiyeler WHERE personel_id = $1 ORDER BY yil ASC`, [id]);
 
-        // C. Onaylanmış İzin Talepleri
-        const izinRes = await pool.query(`
-            SELECT * FROM izin_talepleri 
-            WHERE personel_id = $1 
-            AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI')
-            ORDER BY baslangic_tarihi ASC
-        `, [id]);
+        const izinRes = await pool.query(`SELECT * FROM izin_talepleri WHERE personel_id = $1 AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') ORDER BY baslangic_tarihi ASC`, [id]);
 
-        // --- HESAPLAMA KISMI ---
         let toplamKullanilan = 0;
         izinRes.rows.forEach(izin => {
-            if (izin.izin_turu === 'YILLIK İZİN') {
-                toplamKullanilan += parseInt(izin.kac_gun);
-            }
+            if (izin.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(izin.kac_gun);
         });
 
-        // 2. Kalan Bakiyeyi Hesapla
         const netKalan = await hesaplaBakiye(id);
         
+        // Bu Yıl Hakedişi Çek
+        const buYilHak = await dinamikHakedisHesapla(id);
+
         const personelVerisi = {
             ...pRes.rows[0],
             kullanilan: toplamKullanilan, 
-            kalan: netKalan
+            kalan: netKalan,
+            bu_yil_hak: buYilHak // Detayda göstermek için
         };
 
         res.json({

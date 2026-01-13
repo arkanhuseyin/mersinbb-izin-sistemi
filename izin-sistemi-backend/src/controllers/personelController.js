@@ -5,14 +5,12 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-// ✅ YENİ: Dinamik Hakediş Hesaplama Modülünü Çağırıyoruz
+// ✅ YENİ: Dinamik Hakediş Hesaplama Modülü
 const dinamikHakedisHesapla = require('../utils/hakedisHesapla');
 
 const formatNull = (val) => (val === '' || val === undefined || val === 'null' ? null : val);
 
-// ============================================================
-// 🛠️ YARDIMCI: Tarih Formatla
-// ============================================================
+// --- YARDIMCI: Tarih Formatla ---
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     if (tarihStr.includes('-')) return tarihStr;
@@ -23,25 +21,24 @@ const tarihFormatla = (tarihStr) => {
     return tarihStr;
 };
 
-// ❌ ESKİ MATRİS VE ESKİ HESAPLAMA FONKSİYONU SİLİNDİ.
-// Artık veritabanından ve hakedisHesapla.js'den okuyor.
+// ❌ ESKİ MATRİS VE HESAPLAMA FONKSİYONLARI SİLİNDİ
 
 // ============================================================
-// 🛠️ YARDIMCI: Net Bakiye Hesaplama (GÜNCELLENDİ)
+// 🛠️ YARDIMCI: Net Bakiye Hesaplama
 // ============================================================
 const hesaplaBakiye = async (personel_id) => {
-    // 1. Personel var mı kontrolü
+    // 1. Personel var mı?
     const pRes = await pool.query("SELECT 1 FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
 
-    // 2. Geçmiş Yılların Toplamı (Tablodan)
+    // 2. Geçmiş Yılların Toplamı (izin_gecmis_bakiyeler tablosundan)
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const devreden = parseInt(gecmisRes.rows[0].toplam) || 0;
 
-    // 3. Bu Yıl Hakediş (✅ ARTIK DİNAMİK - backend/utils/hakedisHesapla.js kullanıyor)
+    // 3. Bu Yıl Hakediş (✅ DİNAMİK SİSTEM)
     const buYilHak = await dinamikHakedisHesapla(personel_id);
 
-    // 4. Kullanılanlar (İK Onaylı ve Tamamlananlar)
+    // 4. Kullanılanlar
     const izinRes = await pool.query(`
         SELECT SUM(kac_gun) as toplam 
         FROM izin_talepleri 
@@ -371,7 +368,7 @@ exports.personelGuncelle = async (req, res) => {
         if (rolId) { query += `, rol_id=$${pIdx++}`; values.push(rolId); }
         if (fotograf_yolu) { query += `, fotograf_yolu=$${pIdx++}`; values.push(fotograf_yolu); }
         
-        // Şifre güncelleme isteği varsa
+        // Şifre (Sadece girildiyse)
         if (body.sifre && body.sifre.length >= 6) {
             const hash = await bcrypt.hash(body.sifre, 10);
             query += `, sifre_hash=$${pIdx++}`;
@@ -566,7 +563,7 @@ exports.getPersonelBakiye = async (req, res) => {
         // 3. Bu yılki hakedişi hesapla (✅ ARTIK DİNAMİK)
         const buYilHak = await dinamikHakedisHesapla(pid);
 
-        // 4. Kullanılan YILLIK İzinleri Topla (Sadece İK Onaylılar ve Tamamlananlar)
+        // 4. Kullanılan YILLIK İzinleri Topla
         const izinRes = await client.query(`
             SELECT SUM(kac_gun) as toplam 
             FROM izin_talepleri 

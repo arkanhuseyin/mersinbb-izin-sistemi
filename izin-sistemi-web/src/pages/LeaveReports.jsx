@@ -8,7 +8,7 @@ export default function LeaveReports() {
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
 
-    // 🔥 DİNAMİK KURALLAR STATE'İ
+    // 🔥 DİNAMİK KURALLAR STATE'İ (Veritabanından gelecek)
     const [hakedisKurallari, setHakedisKurallari] = useState([]);
 
     // Modal ve Detay State'leri
@@ -39,7 +39,7 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 🔥 DİNAMİK HESAPLAMA MOTORU (AYARLAR SAYFASI İLE AYNI) 🔥 ---
+    // --- 🔥 DİNAMİK HESAPLAMA MOTORU (BACKEND İLE BİREBİR AYNI) 🔥 ---
     const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
         if (!iseGirisTarihi) return 0;
         
@@ -49,7 +49,10 @@ export default function LeaveReports() {
         const farkMs = bugun - giris;
         const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
 
-        // 1. Veritabanındaki Kuralları Kontrol Et
+        // 🛑 KURAL: 1 Yılını Doldurmayan İzin Alamaz
+        if (kidemYili < 1) return 0;
+
+        // 1. ÖNCE VERİTABANINA BAK (Yeni Kurallar)
         const uygunKural = hakedisKurallari.find(k => 
             girisYili >= k.baslangic_yili && 
             girisYili <= k.bitis_yili && 
@@ -61,23 +64,40 @@ export default function LeaveReports() {
             return uygunKural.gun_sayisi;
         }
 
-        // 2. Kural Yoksa: Eski Standart (Yedek)
+        // 2. KURAL YOKSA: ESKİ SİSTEM (EXCEL MANTIĞI - YEDEK)
         let hak = 0;
-        if (kidemYili < 1) return 0;
-
+        
+        // 2018'den önce işe başlayanlar
         if (girisYili < 2018) {
-            if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25;
-        } else if (girisYili < 2024) {
-            if (girisYili < 2019) {
-                if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25;
-            } else {
-                if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30;
+            if (kidemYili <= 5) hak = 14;
+            else if (kidemYili <= 15) hak = 19;
+            else hak = 25;
+        }
+        // 2018-2023 arası işe başlayanlar
+        else if (girisYili < 2024) {
+            if (girisYili < 2019) { // 2018
+                if (kidemYili <= 5) hak = 14;
+                else if (kidemYili <= 15) hak = 19;
+                else hak = 25;
+            } else { // 2019-2023
+                if (kidemYili <= 3) hak = 16;
+                else if (kidemYili <= 5) hak = 18;
+                else if (kidemYili <= 15) hak = 25;
+                else hak = 30;
             }
-        } else {
-            if (girisYili < 2025) {
-                if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30;
-            } else {
-                if (kidemYili <= 3) hak = 18; else if (kidemYili <= 5) hak = 20; else if (kidemYili <= 15) hak = 27; else hak = 32;
+        }
+        // 2024 ve sonrası
+        else {
+            if (girisYili < 2025) { // 2024
+                if (kidemYili <= 3) hak = 16;
+                else if (kidemYili <= 5) hak = 18;
+                else if (kidemYili <= 15) hak = 25;
+                else hak = 30;
+            } else { // 2025 ve sonrası
+                if (kidemYili <= 3) hak = 18;
+                else if (kidemYili <= 5) hak = 20;
+                else if (kidemYili <= 15) hak = 27;
+                else hak = 32;
             }
         }
         return hak;
@@ -114,7 +134,7 @@ export default function LeaveReports() {
             izinHavuzu.push({ yil: g.yil, hak: g.gun_sayisi, kalan: g.gun_sayisi });
         });
 
-        // ✅ DİNAMİK HESAPLAMA ÇAĞRISI
+        // ✅ DİNAMİK HESAPLAMA ÇAĞRISI (Yeni Sisteme Göre)
         const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         const buYil = new Date().getFullYear();
         
@@ -237,7 +257,7 @@ export default function LeaveReports() {
                 const farkMs = bugun - giris;
                 const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
                 
-                // ✅ DİNAMİK HAKEDİŞ ÇAĞRISI
+                // ✅ DİNAMİK HAKEDİŞ ÇAĞRISI (Hibrit Sistem)
                 const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
                 const toplamHavuz = toplamGecmis + buYilHak;
 
