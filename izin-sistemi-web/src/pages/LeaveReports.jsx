@@ -8,7 +8,7 @@ export default function LeaveReports() {
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
 
-    // 🔥 DİNAMİK KURALLAR STATE'İ (Veritabanından gelecek)
+    // 🔥 DİNAMİK KURALLAR STATE'İ
     const [hakedisKurallari, setHakedisKurallari] = useState([]);
 
     // Modal ve Detay State'leri
@@ -39,7 +39,7 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 🔥 DİNAMİK HESAPLAMA MOTORU (BACKEND İLE BİREBİR AYNI) 🔥 ---
+    // --- 🔥 DİNAMİK HESAPLAMA MOTORU 🔥 ---
     const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
         if (!iseGirisTarihi) return 0;
         
@@ -64,36 +64,33 @@ export default function LeaveReports() {
             return uygunKural.gun_sayisi;
         }
 
-        // 2. KURAL YOKSA: ESKİ SİSTEM (EXCEL MANTIĞI - YEDEK)
+        // 2. KURAL YOKSA: ESKİ SİSTEM (YEDEK)
         let hak = 0;
         
-        // 2018'den önce işe başlayanlar
         if (girisYili < 2018) {
             if (kidemYili <= 5) hak = 14;
             else if (kidemYili <= 15) hak = 19;
             else hak = 25;
         }
-        // 2018-2023 arası işe başlayanlar
         else if (girisYili < 2024) {
-            if (girisYili < 2019) { // 2018
+            if (girisYili < 2019) { 
                 if (kidemYili <= 5) hak = 14;
                 else if (kidemYili <= 15) hak = 19;
                 else hak = 25;
-            } else { // 2019-2023
+            } else { 
                 if (kidemYili <= 3) hak = 16;
                 else if (kidemYili <= 5) hak = 18;
                 else if (kidemYili <= 15) hak = 25;
                 else hak = 30;
             }
         }
-        // 2024 ve sonrası
         else {
-            if (girisYili < 2025) { // 2024
+            if (girisYili < 2025) { 
                 if (kidemYili <= 3) hak = 16;
                 else if (kidemYili <= 5) hak = 18;
                 else if (kidemYili <= 15) hak = 25;
                 else hak = 30;
-            } else { // 2025 ve sonrası
+            } else { 
                 if (kidemYili <= 3) hak = 18;
                 else if (kidemYili <= 5) hak = 20;
                 else if (kidemYili <= 15) hak = 27;
@@ -128,40 +125,54 @@ export default function LeaveReports() {
         const gecmis = [...personelDetay.gecmisBakiyeler]; 
         const izinler = personelDetay.izinler;
 
-        // 1. Havuz Oluştur
+        // 1. Havuz Oluştur (Geçmiş + Bu Yıl)
         let izinHavuzu = [];
         gecmis.forEach(g => {
             izinHavuzu.push({ yil: g.yil, hak: g.gun_sayisi, kalan: g.gun_sayisi });
         });
 
-        // ✅ DİNAMİK HESAPLAMA ÇAĞRISI (Yeni Sisteme Göre)
+        // ✅ DİNAMİK HESAPLAMA ÇAĞRISI
         const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         const buYil = new Date().getFullYear();
         
+        // Bu yılın hakedişini havuza ekle
         izinHavuzu.push({ yil: buYil, hak: buYilHak, kalan: buYilHak });
 
-        // 2. İzinleri Düş (FIFO Mantığı)
+        // 2. İzinleri Düş (FIFO Mantığı - Eskiden Yeniye)
+        // Eğer bakiye yetmezse "Eksiye Düştü" DEME, son yıldan düşmeye devam et.
         const islenenIzinler = izinler.map(izin => {
             if (izin.izin_turu !== 'YILLIK İZİN') {
                 return { ...izin, dusumAciklamasi: 'Yıllık izin bakiyesinden düşülmez.' };
             }
 
-            let dusulecekGun = izin.kac_gun;
+            let dusulecekGun = parseInt(izin.kac_gun);
             let dusumKaydi = [];
 
-            for (let h of izinHavuzu) {
+            for (let i = 0; i < izinHavuzu.length; i++) {
+                let h = izinHavuzu[i];
                 if (dusulecekGun <= 0) break;
+
+                // Bakiyesi varsa kullan
                 if (h.kalan > 0) {
                     let alinan = Math.min(h.kalan, dusulecekGun);
                     h.kalan -= alinan;
                     dusulecekGun -= alinan;
-                    dusumKaydi.push(`${h.yil} yılı bakiyesinden ${alinan} gün`);
+                    dusumKaydi.push(`${h.yil} yılından ${alinan} gün`);
+                }
+
+                // EĞER SON YILA GELDİYSEK VE HÂLÂ DÜŞÜLECEK GÜN VARSA
+                // (Yani geçmiş bitti, bu yıl bitti, ama izin devam ediyor)
+                // "Eksiye düştü" deme, bu yıldan (veya gelecekten) kullanılmış say.
+                if (i === izinHavuzu.length - 1 && dusulecekGun > 0) {
+                    h.kalan -= dusulecekGun; // Matematiksel olarak eksi yap (Takip için)
+                    dusumKaydi.push(`${h.yil} yılından ${dusulecekGun} gün`);
+                    dusulecekGun = 0;
                 }
             }
 
             let sonucYazisi = dusumKaydi.length > 0 
                 ? `${dusumKaydi.join(', ')} kullanıldı.` 
-                : 'Yetersiz bakiye veya eksiye düşüldü.';
+                : 'Hesaplanamadı.';
             
             return { ...izin, dusumAciklamasi: sonucYazisi };
         });
@@ -182,12 +193,16 @@ export default function LeaveReports() {
         ];
 
         izinHavuzu.forEach(h => {
-            wsData.push([h.yil, `${h.hak} Gün`, `${h.kalan} Gün`, h.kalan === 0 ? "Tükendi" : "Mevcut"]);
+            let durumMetni = "Mevcut";
+            if (h.kalan === 0) durumMetni = "Tükendi";
+            if (h.kalan < 0) durumMetni = "Limit Aşımı (Avans)"; // Eksi kelimesi yerine Avans/Limit Aşımı
+
+            wsData.push([h.yil, `${h.hak} Gün`, `${h.kalan} Gün`, durumMetni]);
         });
 
         wsData.push([""]);
         wsData.push(["KULLANILAN İZİN GEÇMİŞİ VE DÜŞÜM DETAYLARI"]);
-        wsData.push(["İzin Türü", "Başlangıç", "Bitiş", "Gün", "Hakedişten Düşüm Açıklaması (Sistem Analizi)"]);
+        wsData.push(["İzin Türü", "Başlangıç", "Bitiş", "Gün", "Hakedişten Düşüm Açıklaması"]);
 
         islenenIzinler.forEach(iz => {
             wsData.push([
@@ -216,9 +231,9 @@ export default function LeaveReports() {
         XLSX.writeFile(wb, `${p.ad}_${p.soyad}_Detayli_Izin_Raporu.xlsx`);
     };
 
-    // --- 🌍 TOPLU EXCEL RAPORU (TÜM PERSONEL - GÜNCELLENMİŞ HESAPLAMA) ---
+    // --- 🌍 TOPLU EXCEL RAPORU (TÜM PERSONEL) ---
     const downloadBulkExcel = async () => {
-        const confirm = window.confirm("Tüm aktif personelin detaylı raporu oluşturulacak. Bu işlem birkaç saniye sürebilir. Onaylıyor musunuz?");
+        const confirm = window.confirm("Tüm aktif personelin detaylı raporu oluşturulacak. Onaylıyor musunuz?");
         if (!confirm) return;
 
         setYukleniyor(true); 
@@ -257,7 +272,7 @@ export default function LeaveReports() {
                 const farkMs = bugun - giris;
                 const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
                 
-                // ✅ DİNAMİK HAKEDİŞ ÇAĞRISI (Hibrit Sistem)
+                // ✅ DİNAMİK HAKEDİŞ ÇAĞRISI
                 const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
                 const toplamHavuz = toplamGecmis + buYilHak;
 
@@ -267,7 +282,11 @@ export default function LeaveReports() {
 
                 // D. Sonuç
                 const kalan = toplamHavuz - toplamKullanilan;
-                const durum = kalan < 0 ? "EKSİ BAKİYE" : (kalan < 5 ? "KRİTİK" : "NORMAL");
+                
+                // Durum Metni (Eksi kelimesi yok)
+                let durum = "NORMAL";
+                if (kalan < 5 && kalan >= 0) durum = "KRİTİK (AZ)";
+                if (kalan < 0) durum = "LİMİT AŞIMI"; 
 
                 // E. Excel Satırını Ekle
                 excelRows.push([
@@ -319,7 +338,6 @@ export default function LeaveReports() {
 
     return (
         <div className="container-fluid p-4 p-lg-5">
-            
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <div>
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
@@ -374,47 +392,56 @@ export default function LeaveReports() {
                             <tbody>
                                 {yukleniyor ? (
                                     <tr><td colSpan="9" className="text-center py-5">Yükleniyor...</td></tr>
-                                ) : filtered.map((p, i) => (
-                                    <tr key={i} className={p.uyari ? 'table-danger cursor-pointer' : 'cursor-pointer'} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer'}}>
-                                        <td className="ps-4">
-                                            <div className="fw-bold text-dark">{p.ad} {p.soyad}</div>
-                                            <small className="text-muted font-monospace">{p.tc_no}</small>
-                                        </td>
-                                        <td><span className="badge bg-light text-dark border fw-normal">{p.birim_adi}</span></td>
-                                        <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
-                                        
-                                        <td className="text-center bg-warning-subtle text-dark font-monospace">
-                                            {p.devreden_izin > 0 ? `+${p.devreden_izin}` : '-'}
-                                        </td>
-                                        {/* ✅ RAPOR EKRANINDAKİ DEĞERLER (BACKEND'DEN GELDİ) */}
-                                        <td className="text-center bg-info-subtle text-dark font-monospace">
-                                            {p.bu_yil_hakedis}
-                                        </td>
-                                        <td className="text-center fw-bold fs-6">
-                                            {p.devreden_izin + p.bu_yil_hakedis}
-                                        </td>
+                                ) : filtered.map((p, i) => {
+                                    // GÖSTERİM HESAPLAMASI
+                                    const toplamHavuz = (p.devreden_izin || 0) + (p.bu_yil_hakedis || 0);
+                                    const toplamKullanilan = p.bu_yil_kullanilan || 0; // Bu aslında toplam kullanılan olmalı
+                                    const kalan = p.kalan;
 
-                                        <td className="text-center text-muted">{p.bu_yil_kullanilan}</td>
-                                        
-                                        <td className="text-center">
-                                            <span className={`badge ${p.kalan < 5 ? 'bg-danger' : 'bg-primary'} fs-6 rounded-pill px-3`}>
-                                                {p.kalan} Gün
-                                            </span>
-                                        </td>
-                                        
-                                        <td className="text-end pe-4">
-                                            {p.uyari ? (
-                                                <span className="badge bg-danger text-white px-3 py-2 rounded-pill">
-                                                    <AlertTriangle size={14} className="me-1"/> BİRİKEN
+                                    return (
+                                        <tr key={i} className={p.uyari ? 'table-danger cursor-pointer' : 'cursor-pointer'} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer'}}>
+                                            <td className="ps-4">
+                                                <div className="fw-bold text-dark">{p.ad} {p.soyad}</div>
+                                                <small className="text-muted font-monospace">{p.tc_no}</small>
+                                            </td>
+                                            <td><span className="badge bg-light text-dark border fw-normal">{p.birim_adi}</span></td>
+                                            <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
+                                            
+                                            <td className="text-center bg-warning-subtle text-dark font-monospace">
+                                                {p.devreden_izin > 0 ? `+${p.devreden_izin}` : '-'}
+                                            </td>
+                                            <td className="text-center bg-info-subtle text-dark font-monospace">
+                                                {p.bu_yil_hakedis}
+                                            </td>
+                                            <td className="text-center fw-bold fs-6">
+                                                {toplamHavuz}
+                                            </td>
+
+                                            <td className="text-center text-muted">
+                                                {/* Kullanılan = Toplam - Kalan */}
+                                                {toplamHavuz - kalan}
+                                            </td>
+                                            
+                                            <td className="text-center">
+                                                <span className={`badge ${kalan < 5 ? 'bg-danger' : 'bg-primary'} fs-6 rounded-pill px-3`}>
+                                                    {kalan} Gün
                                                 </span>
-                                            ) : (
-                                                <span className="badge bg-success-subtle text-success px-3 py-2 rounded-pill">
-                                                    <CheckCircle size={14} className="me-1"/> Normal
-                                                </span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                            
+                                            <td className="text-end pe-4">
+                                                {p.uyari ? (
+                                                    <span className="badge bg-danger text-white px-3 py-2 rounded-pill">
+                                                        <AlertTriangle size={14} className="me-1"/> BİRİKEN
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge bg-success-subtle text-success px-3 py-2 rounded-pill">
+                                                        <CheckCircle size={14} className="me-1"/> Normal
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
