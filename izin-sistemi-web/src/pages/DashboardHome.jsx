@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { 
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area, LineChart, Line 
 } from 'recharts';
 import { 
     FileCheck, Clock, FileX, Users, Calendar, TrendingUp, 
-    Activity, ArrowUpRight, Moon, Sun, Globe, BellRing, Sparkles, LayoutDashboard 
+    Activity, ArrowUpRight, Moon, Sun, Globe, BellRing, Sparkles, LayoutDashboard,
+    BarChart2, PieChart as IconPie, LineChart as IconLine
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import logoMbb from '../assets/logombb.png'; 
@@ -22,6 +23,10 @@ export default function DashboardHome() {
     const [lang, setLang] = useState('tr');
     const [loaded, setLoaded] = useState(false); 
     const navigate = useNavigate();
+
+    // ✅ GRAFİK TÜRÜ STATE'LERİ
+    const [trendChartType, setTrendChartType] = useState('area'); // Seçenekler: area, bar, line
+    const [typeChartType, setTypeChartType] = useState('bar');   // Seçenekler: bar, pie
 
     // --- DİL AYARLARI ---
     const TEXT = {
@@ -81,6 +86,7 @@ export default function DashboardHome() {
     
     const current = darkMode ? THEME.dark : THEME.light;
     const COLORS = { primary: '#3b82f6', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
+    const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
     useEffect(() => {
         setLoaded(true); 
@@ -123,22 +129,7 @@ export default function DashboardHome() {
         return 'evening';
     };
 
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div style={{ backgroundColor: darkMode ? '#1e293b' : '#fff', border: `1px solid ${current.border}`, color: current.text }} className="p-3 rounded-3 shadow-lg">
-                    <p className="m-0 fw-bold small opacity-75">{label}</p>
-                    <div className="d-flex align-items-center gap-2">
-                        <span className="p-1 rounded-circle bg-primary"></span>
-                        <p className="m-0 fw-bold fs-6">{payload[0].value} Adet</p>
-                    </div>
-                </div>
-            );
-        }
-        return null;
-    };
-
-    // İSTATİSTİK KARTI (h-100 silindi)
+    // İSTATİSTİK KARTI
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
             <div className="card rounded-4 position-relative overflow-hidden border-0 hover-glass"
@@ -175,9 +166,16 @@ export default function DashboardHome() {
         </div>
     );
 
+    // --- YARDIMCI KOMPONENT: BUTON GRUBU ---
+    const ChartToggleBtn = ({ icon: Icon, active, onClick }) => (
+        <button onClick={onClick} 
+            className={`btn btn-sm p-1 px-2 rounded-3 border-0 transition-all ${active ? 'bg-primary text-white shadow-sm' : 'bg-transparent text-secondary hover-bg-light'}`}
+            style={{transition: '0.2s'}}>
+            <Icon size={16} />
+        </button>
+    );
+
     return (
-        // ✅ 1. h-100 / min-height: 100vh SİLİNDİ
-        // İçerik ne kadar yer kaplarsa o kadar uzasın.
         <div style={{
             display: 'flex',
             flexDirection: 'column',
@@ -192,6 +190,7 @@ export default function DashboardHome() {
                 .hover-glass { transition: transform 0.3s ease, box-shadow 0.3s ease; }
                 .hover-glass:hover { transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15) !important; }
                 .glass-panel { background: ${current.glass}; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid ${current.border}; }
+                .hover-bg-light:hover { background-color: rgba(0,0,0,0.05); }
             `}</style>
 
             <div className="container-fluid p-3 p-lg-4 flex-grow-1">
@@ -261,52 +260,98 @@ export default function DashboardHome() {
                     <StatCard title={TEXT[lang].cards.rejected} value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
                 </div>
 
-                {/* GRAFİKLER (h-100 SİLİNDİ) */}
+                {/* GRAFİKLER BÖLÜMÜ */}
                 <div className="row g-3">
-                    {/* SOL SÜTUN */}
+                    {/* SOL SÜTUN (TREND GRAFİĞİ) */}
                     <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
-                        
-                        {/* Area Chart */}
                         <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
-                            <div className="card-header border-0 pt-3 ps-3 bg-transparent d-flex justify-content-between align-items-center">
+                            <div className="card-header border-0 pt-3 ps-3 pe-3 bg-transparent d-flex justify-content-between align-items-center">
                                 <div>
                                     <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.trend}</h6>
                                     <p className="small m-0 opacity-50" style={{color: current.text, fontSize:'11px'}}>Aylık veri analizi</p>
                                 </div>
+                                {/* ✅ GRAFİK TÜRÜ DEĞİŞTİRME BUTONLARI */}
+                                <div className="d-flex bg-light rounded-3 p-1 gap-1 border">
+                                    <ChartToggleBtn icon={Activity} active={trendChartType==='area'} onClick={()=>setTrendChartType('area')} />
+                                    <ChartToggleBtn icon={BarChart2} active={trendChartType==='bar'} onClick={()=>setTrendChartType('bar')} />
+                                    <ChartToggleBtn icon={IconLine} active={trendChartType==='line'} onClick={()=>setTrendChartType('line')} />
+                                </div>
                             </div>
                             <div className="card-body p-2" style={{height: 250}}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={aylikData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                                        <defs>
-                                            <linearGradient id="colorTalep" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.5}/>
-                                                <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0}/>
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} dy={10} />
-                                        <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} />
-                                        <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', backgroundColor: current.cardBg, color: current.text }} />
-                                        <Area type="monotone" dataKey="talep" stroke={COLORS.primary} strokeWidth={3} fill="url(#colorTalep)" />
-                                    </AreaChart>
+                                    {trendChartType === 'area' && (
+                                        <AreaChart data={aylikData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                            <defs>
+                                                <linearGradient id="colorTalep" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.5}/>
+                                                    <stop offset="95%" stopColor={COLORS.primary} stopOpacity={0}/>
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} />
+                                            <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', backgroundColor: current.cardBg, color: current.text }} />
+                                            <Area type="monotone" dataKey="talep" stroke={COLORS.primary} strokeWidth={3} fill="url(#colorTalep)" />
+                                        </AreaChart>
+                                    )}
+                                    {trendChartType === 'bar' && (
+                                        <BarChart data={aylikData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} />
+                                            <Tooltip cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} contentStyle={{ borderRadius: '10px', border: 'none', backgroundColor: current.cardBg, color: current.text }} />
+                                            <Bar dataKey="talep" fill={COLORS.primary} radius={[6, 6, 0, 0]} barSize={40} />
+                                        </BarChart>
+                                    )}
+                                    {trendChartType === 'line' && (
+                                        <LineChart data={aylikData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} />
+                                            <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', backgroundColor: current.cardBg, color: current.text }} />
+                                            <Line type="monotone" dataKey="talep" stroke={COLORS.primary} strokeWidth={4} dot={{r:4, fill:COLORS.primary}} activeDot={{r:6}} />
+                                        </LineChart>
+                                    )}
                                 </ResponsiveContainer>
                             </div>
                         </div>
 
-                        {/* Bar Chart */}
+                        {/* TÜR DAĞILIMI (Bar / Pie Seçenekli) */}
                         <div className="card border-0 shadow-sm rounded-4 overflow-hidden glass-panel" style={{ backgroundColor: current.cardBg }}>
-                            <div className="card-header border-0 pt-3 ps-3 bg-transparent">
+                            <div className="card-header border-0 pt-3 ps-3 pe-3 bg-transparent d-flex justify-content-between align-items-center">
                                 <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.type}</h6>
+                                <div className="d-flex bg-light rounded-3 p-1 gap-1 border">
+                                    <ChartToggleBtn icon={BarChart2} active={typeChartType==='bar'} onClick={()=>setTypeChartType('bar')} />
+                                    <ChartToggleBtn icon={IconPie} active={typeChartType==='pie'} onClick={()=>setTypeChartType('pie')} />
+                                </div>
                             </div>
                             <div className="card-body p-2" style={{height: 220}}>
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={izinTurleri} barSize={40}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} dy={10} />
-                                        <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText}} />
-                                        <Tooltip cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} contentStyle={{ borderRadius: '10px', border: 'none', backgroundColor: current.cardBg, color: current.text }}/>
-                                        <Bar dataKey="value" fill={COLORS.primary} radius={[10, 10, 0, 0]} />
-                                    </BarChart>
+                                    {typeChartType === 'bar' ? (
+                                        <BarChart data={izinTurleri} barSize={40}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={current.chartGrid} strokeOpacity={0.5} />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: current.subText, fontSize:11}} dy={10} />
+                                            <YAxis axisLine={false} tickLine={false} tick={{fill: current.subText}} />
+                                            <Tooltip cursor={{fill: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)'}} contentStyle={{ borderRadius: '10px', border: 'none', backgroundColor: current.cardBg, color: current.text }}/>
+                                            <Bar dataKey="value" fill={COLORS.primary} radius={[10, 10, 0, 0]}>
+                                                {izinTurleri.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    ) : (
+                                        <PieChart>
+                                            <Pie 
+                                                data={izinTurleri} innerRadius={50} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none"
+                                            >
+                                                {izinTurleri.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', backgroundColor: current.cardBg, color: current.text }}/>
+                                            <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle"/>
+                                        </PieChart>
+                                    )}
                                 </ResponsiveContainer>
                             </div>
                         </div>
@@ -315,7 +360,7 @@ export default function DashboardHome() {
                     {/* SAĞ SÜTUN */}
                     <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                         
-                        {/* Donut Chart */}
+                        {/* Donut Chart (Durum) */}
                         <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 bg-transparent">
                                 <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.status}</h6>
@@ -344,7 +389,7 @@ export default function DashboardHome() {
                             </div>
                         </div>
 
-                        {/* Son İşlemler (h-100 Silindi, kendi boyunu alacak) */}
+                        {/* Son İşlemler */}
                         <div className="card border-0 shadow-sm rounded-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <div className="card-header border-0 pt-3 ps-3 pb-2 bg-transparent d-flex justify-content-between align-items-center">
                                 <h6 className="fw-bold m-0 d-flex align-items-center gap-2" style={{color: current.text}}>
@@ -388,7 +433,7 @@ export default function DashboardHome() {
                 </div>
             </div>
             
-            {/* ✅ FOOTER (En Altta, İçerikten Bağımsız, mt-auto ile itilir) */}
+            {/* FOOTER */}
             <footer className="text-center py-4 opacity-50 fade-in-up mt-auto" 
                     style={{
                         animationDelay: '900ms', 
