@@ -1,9 +1,9 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
 const dinamikHakedisHesapla = require('../utils/hakedisHesapla'); 
-const PDFDocument = require('pdfkit'); // ✅ EKLENDİ
-const fs = require('fs'); // ✅ EKLENDİ
-const path = require('path'); // ✅ EKLENDİ
+const PDFDocument = require('pdfkit'); 
+const fs = require('fs'); 
+const path = require('path'); 
 
 // ============================================================
 // 🛠️ YARDIMCI FONKSİYONLAR
@@ -21,7 +21,7 @@ const tarihFormatla = (tarihStr) => {
 
 const hesaplaBakiye = async (personel_id) => {
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
-    const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis);
+    const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis) || 0;
 
     const buYilHakedis = await dinamikHakedisHesapla(personel_id);
 
@@ -33,7 +33,7 @@ const hesaplaBakiye = async (personel_id) => {
         AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
     `, [personel_id]); 
 
-    const toplamKullanilan = parseInt(uRes.rows[0].used);
+    const toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
     const totalBalance = (devredenToplam + buYilHakedis) - toplamKullanilan;
     return totalBalance;
 };
@@ -46,10 +46,7 @@ exports.gecmisBakiyeEkle = async (req, res) => {
     const { personel_id, yil, gun_sayisi } = req.body;
     try {
         await pool.query('BEGIN');
-        await pool.query(
-            "INSERT INTO izin_gecmis_bakiyeler (personel_id, yil, gun_sayisi) VALUES ($1, $2, $3)",
-            [personel_id, yil, gun_sayisi]
-        );
+        await pool.query("INSERT INTO izin_gecmis_bakiyeler (personel_id, yil, gun_sayisi) VALUES ($1, $2, $3)", [personel_id, yil, gun_sayisi]);
         const sumRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
         const yeniDevreden = parseInt(sumRes.rows[0].toplam);
         await pool.query("UPDATE personeller SET devreden_izin = $1 WHERE personel_id = $2", [yeniDevreden, personel_id]);
@@ -269,7 +266,7 @@ exports.getSystemLogs = async (req, res) => {
 };
 
 // ============================================================
-// 📄 1. TOPLU PDF RAPORU (BACKEND TARAFINDAN OLUŞTURULAN)
+// 📄 1. TOPLU PDF RAPORU
 // ============================================================
 exports.topluPdfRaporu = async (req, res) => {
     if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).send('Yetkisiz işlem');
@@ -309,10 +306,16 @@ exports.topluPdfRaporu = async (req, res) => {
             const p = personeller[i];
             const pGecmis = gRes.rows.filter(g => g.personel_id === p.personel_id);
             const pIzinler = iRes.rows.filter(iz => iz.personel_id === p.personel_id);
-            let devreden = 0; pGecmis.forEach(g => devreden += g.gun_sayisi);
+            
+            let devreden = 0; 
+            pGecmis.forEach(g => devreden += parseInt(g.gun_sayisi) || 0); // ✅ parseInt eklendi
+            
             const buYilHak = await dinamikHakedisHesapla(p.personel_id);
             const toplamHavuz = devreden + buYilHak;
-            let kullanilan = 0; pIzinler.forEach(iz => kullanilan += iz.kac_gun);
+            
+            let kullanilan = 0; 
+            pIzinler.forEach(iz => kullanilan += parseInt(iz.kac_gun) || 0); // ✅ parseInt eklendi
+            
             const kalan = toplamHavuz - kullanilan;
             const giris = new Date(p.ise_giris_tarihi);
             const kidem = Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
@@ -332,7 +335,7 @@ exports.topluPdfRaporu = async (req, res) => {
             rowData.forEach((data, index) => {
                 if (index === 10) doc.fillColor(durumRenk).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold');
                 else doc.fillColor('#333').font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
-                doc.text(data, rowX + 5, y, { width: colWidths[index] });
+                doc.text(String(data || '-'), rowX + 5, y, { width: colWidths[index] }); // ✅ String çevrimi ve null check
                 rowX += colWidths[index];
             });
             y += 20;
@@ -350,6 +353,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         const pRes = await pool.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id WHERE p.personel_id = $1`, [id]);
         if(pRes.rows.length === 0) return res.status(404).send('Personel bulunamadı');
         const p = pRes.rows[0];
+
         const gRes = await pool.query(`SELECT * FROM izin_gecmis_bakiyeler WHERE personel_id = $1`, [id]);
         const iRes = await pool.query(`SELECT * FROM izin_talepleri WHERE personel_id = $1 AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') ORDER BY baslangic_tarihi DESC`, [id]);
 
@@ -359,7 +363,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
 
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=${p.ad}_${p.soyad}_Detayli_Rapor.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=${p.ad.replace(/ /g, '_')}_Detayli_Rapor.pdf`);
         doc.pipe(res);
 
         doc.fontSize(16).fillColor('#1a3c6e').text('MERSİN BÜYÜKŞEHİR BELEDİYESİ', { align: 'center' });
@@ -370,13 +374,21 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.fillColor('#000').fontSize(10);
         let y = doc.y + 15;
         doc.text(`Adı Soyadı: ${p.ad} ${p.soyad}`, 50, y); doc.text(`TC Kimlik No: ${p.tc_no}`, 300, y); y+=20;
-        doc.text(`Sicil No: ${p.sicil_no || '-'}`, 50, y); doc.text(`Birim: ${p.birim_adi}`, 300, y); y+=20;
-        doc.text(`Kadro: ${p.kadro_tipi}`, 50, y); doc.text(`İşe Giriş: ${new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}`, 300, y);
+        doc.text(`Sicil No: ${p.sicil_no || '-'}`, 50, y); doc.text(`Birim: ${p.birim_adi || '-'}`, 300, y); y+=20;
+        doc.text(`Kadro: ${p.kadro_tipi || '-'}`, 50, y); 
+        
+        const girisTarihi = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-';
+        doc.text(`İşe Giriş: ${girisTarihi}`, 300, y);
         doc.moveDown(4);
 
-        let devreden = 0; gRes.rows.forEach(g => devreden += g.gun_sayisi);
+        let devreden = 0; 
+        gRes.rows.forEach(g => devreden += parseInt(g.gun_sayisi) || 0); // ✅ parseInt
+        
         const buYilHak = await dinamikHakedisHesapla(id);
-        let kullanilan = 0; iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') kullanilan += iz.kac_gun; });
+        
+        let kullanilan = 0; 
+        iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') kullanilan += parseInt(iz.kac_gun) || 0; }); // ✅ parseInt
+        
         const toplamHavuz = devreden + buYilHak;
         const kalan = toplamHavuz - kullanilan;
 
@@ -391,6 +403,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.fillColor('#000').fontSize(12).text('İZİN HAREKETLERİ');
         doc.moveDown(0.5);
         let tableY = doc.y;
+        
         doc.rect(40, tableY, 515, 20).fill('#333');
         doc.fillColor('#fff').fontSize(9);
         doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
@@ -400,13 +413,19 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         iRes.rows.forEach((iz, i) => {
             if (tableY > 750) { doc.addPage(); tableY = 40; }
             if (i % 2 === 0) doc.rect(40, tableY, 515, 20).fill('#eee');
-            doc.text(iz.izin_turu, 50, tableY + 6);
-            doc.text(new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR'), 200, tableY + 6);
-            doc.text(new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR'), 300, tableY + 6);
-            doc.text(iz.kac_gun + ' Gün', 400, tableY + 6);
+            
+            const baslangic = iz.baslangic_tarihi ? new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR') : '-';
+            const bitis = iz.bitis_tarihi ? new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR') : '-';
+
+            doc.text(String(iz.izin_turu || '-'), 50, tableY + 6);
+            doc.text(baslangic, 200, tableY + 6);
+            doc.text(bitis, 300, tableY + 6);
+            doc.text(String(iz.kac_gun || 0) + ' Gün', 400, tableY + 6);
             doc.text('ONAYLI', 480, tableY + 6);
             tableY += 20;
         });
+
         doc.end();
-    } catch (err) { console.error(err); res.status(500).send("PDF Hatası"); }
+
+    } catch (err) { console.error("PDF Hatası:", err); res.status(500).send("PDF Hatası"); }
 };

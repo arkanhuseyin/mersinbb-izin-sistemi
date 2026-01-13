@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
-import { Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
 
 // Varsayılan Profil Resmi
@@ -38,7 +38,19 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 🧮 HESAPLAMA MOTORLARI (Sadece Görüntüleme İçin) ---
+    // --- 📸 FOTOĞRAF URL DÜZELTİCİ ---
+    const getPhotoUrl = (path) => {
+        if (!path) return DEFAULT_PHOTO;
+        // Eğer zaten tam bir URL ise (örn: http://...) aynen döndür
+        if (path.startsWith('http')) return path;
+        
+        // Windows yollarını (\) düzelt (/) ve başına API URL ekle
+        // Örn: uploads\personel\resim.jpg -> https://api.com/uploads/personel/resim.jpg
+        const cleanPath = path.replace(/\\/g, '/'); 
+        return `${API_URL}/${cleanPath}`;
+    };
+
+    // --- 🧮 HESAPLAMA MOTORLARI ---
     const getSingleYearRights = (girisYili, hesaplanacakYil, kidemYili) => {
         const uygunKural = hakedisKurallari.find(k => hesaplanacakYil >= k.baslangic_yili && hesaplanacakYil <= k.bitis_yili && kidemYili >= k.kidem_alt && kidemYili <= k.kidem_ust);
         if (uygunKural) return uygunKural.gun_sayisi;
@@ -86,14 +98,14 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (Veri Odaklı - Frontend) ---
+    // --- 📄 EXCEL ÇIKTILARI ---
     const generateDetailExcel = () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
         const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         
         const wsData = [
-            ["TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ - PERSONEL İZİN DETAY RAPORU"], [" "],
+            ["Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU"], [" "],
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
             ["Kümülatif Hak", hesaplaKumulatifHakedis(p.ise_giris_tarihi)],
@@ -114,7 +126,7 @@ export default function LeaveReports() {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, { headers: { Authorization: `Bearer ${token}` } });
             const { personeller, gecmisBakiyeler, izinler } = res.data;
-            const excelRows = [["TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ"], ["GENEL İZİN RAPORU"], [" "],
+            const excelRows = [["Toplu Taşıma Şube Müdürlüğü"], ["GENEL İZİN RAPORU"], [" "],
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]];
             personeller.forEach((p) => {
                 const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
@@ -136,15 +148,12 @@ export default function LeaveReports() {
     };
 
     // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN) ---
-    
-    // 1. KİŞİSEL DETAYLI PDF (Backend API Çağrısı)
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
         const token = localStorage.getItem('token');
 
         try {
-            // Backend'deki yeni rotaya istek atıyoruz
             const response = await axios.get(`${API_URL}/api/izin/rapor/pdf-detay/${p.personel_id}`, { 
                 headers: { Authorization: `Bearer ${token}` }, 
                 responseType: 'blob' 
@@ -153,7 +162,7 @@ export default function LeaveReports() {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${p.ad}_${p.soyad}_Izin_Raporu.pdf`);
+            link.setAttribute('download', `${p.ad}_${p.soyad}_Detayli_Rapor.pdf`);
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -163,7 +172,6 @@ export default function LeaveReports() {
         }
     };
 
-    // 2. TOPLU PDF (Backend API Çağrısı)
     const downloadBulkPDF = async () => {
         if(!confirm("Toplu PDF raporu oluşturulsun mu?")) return; 
         setYukleniyor(true);
@@ -254,11 +262,11 @@ export default function LeaveReports() {
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered">
                         <div className="modal-content shadow-lg border-0 rounded-4">
-                            {/* --- MODAL BAŞLIĞI (FOTOĞRAFLI) --- */}
+                            {/* --- MODAL BAŞLIĞI (FOTOĞRAFLI - DÜZELTİLDİ) --- */}
                             <div className="modal-header bg-primary text-white p-4 align-items-center">
                                 <div className="d-flex align-items-center gap-3">
                                     <img 
-                                        src={secilenPersonel.fotograf_yolu || DEFAULT_PHOTO} 
+                                        src={getPhotoUrl(secilenPersonel.fotograf_yolu)} 
                                         alt={secilenPersonel.ad}
                                         className="rounded-circle border border-3 border-white shadow-sm"
                                         style={{width: '64px', height: '64px', objectFit: 'cover'}}
