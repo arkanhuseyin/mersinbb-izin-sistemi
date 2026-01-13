@@ -1,45 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, User, X, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
-
-// ============================================================
-// 📋 HAKEDİŞ MATRİSİ (FRONTEND TARAFI İÇİN - Rapor Hesaplaması)
-// ============================================================
-const HAKEDIS_MATRISI = {
-    // --- GRUP 1: 2007 - 2015 ARASI VE ÖNCESİ ---
-    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
-    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
-    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
-    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
-    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-
-    // --- GRUP 2: 2016 VE SONRASI ---
-    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
-    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
-    "2021": { 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2022": { 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2023": { 2023: 25, 2024: 27, 2025: 27 },
-    "2024": { 2024: 27, 2025: 27 },
-    "2025": { 2025: 27 }
-};
 
 export default function LeaveReports() {
     const [rapor, setRapor] = useState([]);
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
 
+    // 🔥 DİNAMİK KURALLAR STATE'İ
+    const [hakedisKurallari, setHakedisKurallari] = useState([]);
+
     // Modal ve Detay State'leri
     const [secilenPersonel, setSecilenPersonel] = useState(null);
     const [detayYukleniyor, setDetayYukleniyor] = useState(false);
     const [personelDetay, setPersonelDetay] = useState(null);
+
+    const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
 
     useEffect(() => {
         verileriGetir();
@@ -47,18 +24,65 @@ export default function LeaveReports() {
 
     const verileriGetir = () => {
         const token = localStorage.getItem('token');
-        axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/durum', { 
-            headers: { Authorization: `Bearer ${token}` } 
-        })
-        .then(res => {
-            setRapor(res.data);
+        
+        // Hem Raporu Hem Kuralları Çek
+        Promise.all([
+            axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } }),
+            axios.get(`${API_URL}/api/ayar/hakedis-listele`, { headers: { Authorization: `Bearer ${token}` } })
+        ]).then(([raporRes, kuralRes]) => {
+            setRapor(raporRes.data);
+            setHakedisKurallari(kuralRes.data);
             setYukleniyor(false);
-        })
-        .catch(err => {
+        }).catch(err => {
             console.error(err);
             setYukleniyor(false);
         });
     };
+
+    // --- 🔥 DİNAMİK HESAPLAMA MOTORU (AYARLAR SAYFASI İLE AYNI) 🔥 ---
+    const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
+        if (!iseGirisTarihi) return 0;
+        
+        const giris = new Date(iseGirisTarihi);
+        const girisYili = giris.getFullYear();
+        const bugun = new Date();
+        const farkMs = bugun - giris;
+        const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
+
+        // 1. Veritabanındaki Kuralları Kontrol Et
+        const uygunKural = hakedisKurallari.find(k => 
+            girisYili >= k.baslangic_yili && 
+            girisYili <= k.bitis_yili && 
+            kidemYili >= k.kidem_alt && 
+            kidemYili <= k.kidem_ust
+        );
+
+        if (uygunKural) {
+            return uygunKural.gun_sayisi;
+        }
+
+        // 2. Kural Yoksa: Eski Standart (Yedek)
+        let hak = 0;
+        if (kidemYili < 1) return 0;
+
+        if (girisYili < 2018) {
+            if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25;
+        } else if (girisYili < 2024) {
+            if (girisYili < 2019) {
+                if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25;
+            } else {
+                if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30;
+            }
+        } else {
+            if (girisYili < 2025) {
+                if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30;
+            } else {
+                if (kidemYili <= 3) hak = 18; else if (kidemYili <= 5) hak = 20; else if (kidemYili <= 15) hak = 27; else hak = 32;
+            }
+        }
+        return hak;
+
+    }, [hakedisKurallari]);
 
     // Personel Satırına Tıklanınca
     const handlePersonelClick = async (personel) => {
@@ -66,7 +90,7 @@ export default function LeaveReports() {
         setDetayYukleniyor(true);
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get(`https://mersinbb-izin-sistemi.onrender.com/api/izin/personel-detay/${personel.personel_id}`, {
+            const res = await axios.get(`${API_URL}/api/izin/personel-detay/${personel.personel_id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setPersonelDetay(res.data);
@@ -76,13 +100,12 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 🚀 AKILLI EXCEL RAPORU OLUŞTURMA (TEK KİŞİ - FIFO MANTIĞI) ---
-    // (Burası sadece döküm almak için, hesaplamayı zaten Backend yaptı, buradaki sadece liste oluşturuyor)
+    // --- 🚀 AKILLI EXCEL RAPORU OLUŞTURMA (TEK KİŞİ) ---
     const generateDetailExcel = () => {
         if (!personelDetay) return;
 
         const p = personelDetay.personel;
-        const gecmis = [...personelDetay.gecmisBakiyeler]; // Kopya al
+        const gecmis = [...personelDetay.gecmisBakiyeler]; 
         const izinler = personelDetay.izinler;
 
         // 1. Havuz Oluştur
@@ -91,30 +114,13 @@ export default function LeaveReports() {
             izinHavuzu.push({ yil: g.yil, hak: g.gun_sayisi, kalan: g.gun_sayisi });
         });
 
-        const giris = new Date(p.ise_giris_tarihi);
-        const bugun = new Date();
-        const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
+        // ✅ DİNAMİK HESAPLAMA ÇAĞRISI
+        const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
+        const buYil = new Date().getFullYear();
         
-        // --- BURADA DA TABLO MANTIĞINA GEÇELİM (Tutarlılık İçin) ---
-        const girisYili = giris.getFullYear();
-        const buYil = bugun.getFullYear();
-        let arananGirisYili = girisYili;
-        if (girisYili < 2007) arananGirisYili = 2007;
-
-        let buYilHak = 0;
-        if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
-            buYilHak = HAKEDIS_MATRISI[arananGirisYili][buYil];
-        } else {
-            if (kidemYili >= 1) {
-                if (kidemYili <= 5) buYilHak = 14;
-                else if (kidemYili < 15) buYilHak = 20;
-                else buYilHak = 26;
-            }
-        }
-
         izinHavuzu.push({ yil: buYil, hak: buYilHak, kalan: buYilHak });
 
-        // 2. İzinleri Düş
+        // 2. İzinleri Düş (FIFO Mantığı)
         const islenenIzinler = izinler.map(izin => {
             if (izin.izin_turu !== 'YILLIK İZİN') {
                 return { ...izin, dusumAciklamasi: 'Yıllık izin bakiyesinden düşülmez.' };
@@ -140,7 +146,7 @@ export default function LeaveReports() {
             return { ...izin, dusumAciklamasi: sonucYazisi };
         });
 
-        // 3. Excel Oluştur
+        // 3. Excel Verisini Hazırla
         const wb = XLSX.utils.book_new();
         const wsData = [
             ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - ULAŞIM DAİRESİ BAŞKANLIĞI"],
@@ -199,8 +205,7 @@ export default function LeaveReports() {
 
         try {
             const token = localStorage.getItem('token');
-            // Backend'den toplu veriyi çek
-            const res = await axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/rapor/tum-personel-detay', {
+            const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
@@ -229,26 +234,11 @@ export default function LeaveReports() {
 
                 const giris = new Date(p.ise_giris_tarihi);
                 const bugun = new Date();
-                const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
+                const farkMs = bugun - giris;
+                const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
                 
-                // --- MATRİS HESAPLAMA (YENİ SİSTEM) ---
-                const girisYili = giris.getFullYear();
-                const buYil = bugun.getFullYear();
-                let arananGirisYili = girisYili;
-                if (girisYili < 2007) arananGirisYili = 2007;
-
-                let buYilHak = 0;
-                if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
-                    buYilHak = HAKEDIS_MATRISI[arananGirisYili][buYil];
-                } else {
-                    // Tabloda yoksa standart hesap
-                    if (kidemYili >= 1) {
-                        if (kidemYili <= 5) buYilHak = 14;
-                        else if (kidemYili < 15) buYilHak = 20;
-                        else buYilHak = 26;
-                    }
-                }
-
+                // ✅ DİNAMİK HAKEDİŞ ÇAĞRISI
+                const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
                 const toplamHavuz = toplamGecmis + buYilHak;
 
                 // C. Kullanılan Hesabı (Sadece Yıllık İzin)
@@ -269,11 +259,11 @@ export default function LeaveReports() {
                     p.kadro_tipi,
                     new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'),
                     kidemYili,
-                    toplamGecmis,     // Devreden
-                    buYilHak,         // Bu Yıl
-                    toplamHavuz,      // Toplam
-                    toplamKullanilan, // Kullanılan
-                    kalan,            // Kalan
+                    toplamGecmis,      // Devreden
+                    buYilHak,          // Bu Yıl (Dinamik)
+                    toplamHavuz,       // Toplam
+                    toplamKullanilan,  // Kullanılan
+                    kalan,             // Kalan
                     durum
                 ]);
             });
@@ -296,7 +286,6 @@ export default function LeaveReports() {
             console.error(error);
             alert("Rapor oluşturulurken hata çıktı.");
         } finally {
-            // Yükleniyor durumunu kapat, verileri tekrar çek (UI tazelensin)
             verileriGetir(); 
         }
     };
@@ -318,7 +307,6 @@ export default function LeaveReports() {
                     </h2>
                     <p className="text-muted m-0">Personele tıklayarak detaylı geçmiş ve bakiye analizi yapabilirsiniz.</p>
                 </div>
-                {/* YENİ EKLENEN TOPLU İNDİRME BUTONU */}
                 <div>
                     <button 
                         className="btn btn-success d-flex align-items-center gap-2 shadow-sm" 
@@ -378,14 +366,15 @@ export default function LeaveReports() {
                                         <td className="text-center bg-warning-subtle text-dark font-monospace">
                                             {p.devreden_izin > 0 ? `+${p.devreden_izin}` : '-'}
                                         </td>
+                                        {/* ✅ RAPOR EKRANINDAKİ DEĞERLER (BACKEND'DEN GELDİ) */}
                                         <td className="text-center bg-info-subtle text-dark font-monospace">
                                             {p.bu_yil_hakedis}
                                         </td>
                                         <td className="text-center fw-bold fs-6">
-                                            {p.toplam_havuz}
+                                            {p.devreden_izin + p.bu_yil_hakedis}
                                         </td>
 
-                                        <td className="text-center text-muted">{p.kullanilan}</td>
+                                        <td className="text-center text-muted">{p.bu_yil_kullanilan}</td>
                                         
                                         <td className="text-center">
                                             <span className={`badge ${p.kalan < 5 ? 'bg-danger' : 'bg-primary'} fs-6 rounded-pill px-3`}>
@@ -443,13 +432,11 @@ export default function LeaveReports() {
                                                     </div>
                                                     <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                                                         <span>Toplam Kullanılan:</span>
-                                                        {/* DÜZELTME UYGULANDI */}
                                                         <span className="fw-bold text-danger">
                                                             {personelDetay.personel.kullanilan > 0 ? `-${personelDetay.personel.kullanilan}` : '0'}
                                                         </span>
                                                     </div>
                                                     <div className="alert alert-primary mb-0 text-center fw-bold fs-5">
-                                                        {/* DÜZELTME UYGULANDI */}
                                                         Net Kalan: {personelDetay.personel.kalan} Gün
                                                     </div>
                                                 </div>

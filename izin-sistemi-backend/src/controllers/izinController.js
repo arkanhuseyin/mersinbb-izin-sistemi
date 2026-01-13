@@ -1,6 +1,9 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
 
+// ✅ YENİ: Dinamik Hakediş Hesaplama Modülünü Çağır
+const dinamikHakedisHesapla = require('../utils/hakedisHesapla'); 
+
 // ============================================================
 // 🛠️ YARDIMCI FONKSİYONLAR
 // ============================================================
@@ -16,74 +19,19 @@ const tarihFormatla = (tarihStr) => {
     return tarihStr;
 };
 
-// 2. ÖZEL HAKEDİŞ MATRİSİ (DÜZELTİLDİ)
-const HAKEDIS_MATRISI = {
-    // --- GRUP 1: 2007 - 2015 ARASI VE ÖNCESİ ---
-    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
-    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
-    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
-    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
-    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
-    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+// ❌ ESKİ MATRİS VE HESAPLAMA FONKSİYONLARI SİLİNDİ
+// (HAKEDIS_MATRISI ve getYillikHakedis artık yok, hakedisHesapla.js kullanılıyor)
 
-    // --- GRUP 2: 2016 VE SONRASI (DÜZELTİLDİ) ---
-    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
-    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
-    
-    // DÜZELTİLEN YILLAR:
-    "2021": { 2021: 16, 2022: 16, 2023: 16, 2024: 20, 2025: 20 },
-    "2022": { 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
-    "2023": { 2023: 16, 2024: 18, 2025: 18 },
-    "2024": { 2024: 18, 2025: 18 },
-    "2025": { 2025: 18 }
-};
-
-// 3. Yıllık İzin Hakediş Hesaplama
-const getYillikHakedis = (iseGirisTarihi) => {
-    if (!iseGirisTarihi) return 0;
-
-    const giris = new Date(iseGirisTarihi);
-    const girisYili = giris.getFullYear(); 
-    const buYil = new Date().getFullYear();
-
-    let arananGirisYili = girisYili < 2007 ? 2007 : girisYili;
-
-    if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
-        return HAKEDIS_MATRISI[arananGirisYili][buYil];
-    }
-
-    // Yedek Plan (Standart Kanun)
-    const diffTime = Math.abs(new Date() - giris);
-    const kidemYili = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 365.25));
-
-    if (kidemYili < 1) return 0;
-    if (kidemYili <= 5) return 14;
-    if (kidemYili < 15) return 20;
-    return 26;
-};
-
-// 4. Yıllık İzin Bakiyesi Hesapla (GÜNCELLENDİ - GEÇMİŞ TABLODAN TOPLUYOR)
+// 4. Yıllık İzin Bakiyesi Hesapla (GÜNCELLENDİ)
 const hesaplaBakiye = async (personel_id) => {
-    // A. Personel bilgilerini çek
-    const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
-    if (pRes.rows.length === 0) return 0;
-    
-    // B. Manuel Eklenen Geçmiş Yılların Toplamını Çek (BU KISIM DÜZELTİLDİ)
-    // Artık 'personeller.devreden_izin' yerine 'izin_gecmis_bakiyeler' tablosunu topluyoruz.
+    // A. Manuel Eklenen Geçmiş Yılların Toplamını Çek
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis);
 
-    // C. Bu Yıl Hakedişi
-    const iseGirisTarihi = pRes.rows[0].ise_giris_tarihi;
-    const buYilHakedis = getYillikHakedis(iseGirisTarihi);
+    // B. Bu Yıl Hakediş (✅ ARTIK BURASI DİNAMİK - VERİTABANINDAN)
+    const buYilHakedis = await dinamikHakedisHesapla(personel_id);
 
-    // D. Bu Yıl Kullanılan (Onaylı) İzinler
+    // C. Bu Yıl Kullanılan (Onaylı) İzinler
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -94,7 +42,7 @@ const hesaplaBakiye = async (personel_id) => {
 
     const toplamKullanilan = parseInt(uRes.rows[0].used);
     
-    // E. Sonuç
+    // D. Sonuç
     const totalBalance = (devredenToplam + buYilHakedis) - toplamKullanilan;
     return totalBalance;
 };
@@ -103,7 +51,7 @@ const hesaplaBakiye = async (personel_id) => {
 // 🚀 GEÇMİŞ BAKİYE YÖNETİMİ
 // ============================================================
 
-// A. Geçmiş Bakiye Ekle (Hem Tabloya Ekle Hem Personeli Güncelle)
+// A. Geçmiş Bakiye Ekle
 exports.gecmisBakiyeEkle = async (req, res) => {
     const { personel_id, yil, gun_sayisi } = req.body;
     try {
@@ -114,7 +62,7 @@ exports.gecmisBakiyeEkle = async (req, res) => {
             [personel_id, yil, gun_sayisi]
         );
 
-        // Personel Tablosunu da Güncelle (Tutarlılık İçin)
+        // Personel Tablosunu Güncelle (Cache mantığı)
         const sumRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
         const yeniDevreden = parseInt(sumRes.rows[0].toplam);
         await pool.query("UPDATE personeller SET devreden_izin = $1 WHERE personel_id = $2", [yeniDevreden, personel_id]);
@@ -142,16 +90,12 @@ exports.gecmisBakiyeSil = async (req, res) => {
     const { id } = req.params;
     try {
         await pool.query('BEGIN');
-
-        // Önce personeli bul
         const kayitRes = await pool.query("SELECT personel_id FROM izin_gecmis_bakiyeler WHERE id = $1", [id]);
         if(kayitRes.rows.length === 0) { await pool.query('ROLLBACK'); return res.status(404).json({mesaj:'Bulunamadı'}); }
         const pid = kayitRes.rows[0].personel_id;
 
-        // Sil
         await pool.query("DELETE FROM izin_gecmis_bakiyeler WHERE id = $1", [id]);
 
-        // Personeli Güncelle
         const sumRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [pid]);
         const yeniDevreden = parseInt(sumRes.rows[0].toplam);
         await pool.query("UPDATE personeller SET devreden_izin = $1 WHERE personel_id = $2", [yeniDevreden, pid]);
@@ -168,7 +112,21 @@ exports.gecmisBakiyeSil = async (req, res) => {
 // 🚀 TEMEL İŞLEVLER
 // ============================================================
 
-// 1. YENİ İZİN TALEBİ OLUŞTUR (BAKİYE KONTROLLÜ)
+// 1. PERSONEL LİSTESİ
+exports.personelListesi = async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT p.*, b.birim_adi, r.rol_adi 
+            FROM personeller p 
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id 
+            LEFT JOIN roller r ON p.rol_id = r.rol_id
+            ORDER BY p.ad ASC
+        `);
+        res.json(result.rows);
+    } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
+};
+
+// 2. YENİ İZİN TALEBİ OLUŞTUR (BAKİYE KONTROLLÜ)
 exports.talepOlustur = async (req, res) => {
     let { 
         baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, 
@@ -178,13 +136,13 @@ exports.talepOlustur = async (req, res) => {
     const belge_yolu = req.file ? req.file.path : null;
     const personel_id = req.user.id; 
     
-    const pRes = await pool.query("SELECT ad, soyad, rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
-    const { ad, soyad, rol_id, gorev } = pRes.rows[0];
-    const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [rol_id]);
-    const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
-    const userGorev = gorev || '';
-
     try {
+        const pRes = await pool.query("SELECT ad, soyad, rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
+        const { ad, soyad, rol_id, gorev } = pRes.rows[0];
+        const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [rol_id]);
+        const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
+        const userGorev = gorev || '';
+
         // Bakiye Kontrolü
         if (izin_turu === 'YILLIK İZİN') {
             const kalanHak = await hesaplaBakiye(personel_id);
@@ -203,7 +161,9 @@ exports.talepOlustur = async (req, res) => {
         let baslangicDurumu = 'ONAY_BEKLIYOR'; 
         if (userRole === 'amir') baslangicDurumu = 'AMIR_ONAYLADI';
         else if (userRole === 'yazici') baslangicDurumu = 'YAZICI_ONAYLADI';
+        if (userRole === 'ik') baslangicDurumu = 'YAZICI_ONAYLADI';
 
+        // Yazıcı onayı gerektiren görevler
         const ofisGorevleri = [
             'Memur', 'Büro Personeli', 'Genel Evrak', 'Muhasebe', 'Bilgisayar Mühendisi', 
             'Makine Mühendisi', 'Ulaştırma Mühendisi', 'Bilgisayar Teknikeri', 'Harita Teknikeri', 
@@ -217,7 +177,6 @@ exports.talepOlustur = async (req, res) => {
         if (ofisGorevleri.some(g => userGorev.includes(g)) || userGorev.includes('Şef') || userGorev.includes('Şube Müdürü')) {
             baslangicDurumu = 'YAZICI_ONAYLADI'; 
         }
-        if (userRole === 'ik') baslangicDurumu = 'YAZICI_ONAYLADI';
 
         const yeniTalep = await pool.query(
             `INSERT INTO izin_talepleri 
@@ -240,7 +199,7 @@ exports.talepOlustur = async (req, res) => {
     }
 };
 
-// 2. İZİNLERİ LİSTELE
+// 3. İZİNLERİ LİSTELE
 exports.izinleriGetir = async (req, res) => {
     try {
         let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.gorev FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
@@ -262,7 +221,7 @@ exports.izinleriGetir = async (req, res) => {
     } catch (err) { res.status(500).json({ mesaj: 'Veri çekilemedi' }); }
 };
 
-// 3. TALEBİ ONAYLA
+// 4. TALEBİ ONAYLA
 exports.talepOnayla = async (req, res) => {
     const { talep_id, imza_data, yeni_durum } = req.body;
     const onaylayan_id = req.user.id;
@@ -315,7 +274,7 @@ exports.talepOnayla = async (req, res) => {
     } finally { client.release(); }
 };
 
-// 4. RAPORLAMA (GÜNCELLENDİ: Yeni Hesaplama Motoruyla)
+// 5. RAPORLAMA (GÜNCELLENDİ: Yeni Hesaplama Motoruyla)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
 
@@ -343,7 +302,8 @@ exports.izinDurumRaporu = async (req, res) => {
             const gRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as top FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [p.personel_id]);
             const devreden = parseInt(gRes.rows[0].top);
 
-            const buYilHak = getYillikHakedis(p.ise_giris_tarihi);
+            // ✅ YENİ: Dinamik Hakedişi Çek
+            const buYilHak = await dinamikHakedisHesapla(p.personel_id);
 
             return { 
                 ...p, 
@@ -357,71 +317,7 @@ exports.izinDurumRaporu = async (req, res) => {
     } catch (err) { res.status(500).send('Rapor hatası'); }
 };
 
-// 5. ISLAK İMZA DURUMU
-exports.islakImzaDurumu = async (req, res) => {
-    if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
-    const { talep_id, durum } = req.body; 
-    
-    const client = await pool.connect(); 
-
-    try {
-        await client.query('BEGIN');
-
-        const talepRes = await client.query(
-            'SELECT t.personel_id, t.baslangic_tarihi, p.ad, p.soyad FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE t.talep_id = $1', 
-            [talep_id]
-        );
-        
-        if(talepRes.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({mesaj: 'Bulunamadı'});
-        }
-        
-        const p = talepRes.rows[0];
-        const baslangicTarihi = new Date(p.baslangic_tarihi).toLocaleDateString('tr-TR');
-
-        if (durum === 'GELDI') {
-            await client.query("UPDATE izin_talepleri SET durum = 'TAMAMLANDI' WHERE talep_id = $1", [talep_id]);
-            const mesaj = `Sayın Personelimiz ${p.ad} ${p.soyad}, ${baslangicTarihi} başlangıç tarihli izin talebiniz onaylanmıştır. İyi Tatiller.`;
-            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '🎉 İyi Tatiller', mesaj]);
-            await client.query('COMMIT');
-            res.json({ mesaj: 'Personel izne ayrıldı.' });
-
-        } else if (durum === 'GELMEDI') {
-            await client.query("UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE talep_id = $1", [talep_id]);
-            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '⚠️ İPTAL', 'Islak imzaya gelinmediği için izin talebiniz iptal edilmiştir.']);
-            await client.query('COMMIT');
-            res.json({ mesaj: 'İzin iptal edildi.' });
-        }
-    } catch (e) { 
-        await client.query('ROLLBACK');
-        console.error(e);
-        res.status(500).send('Hata'); 
-    } finally { client.release(); }
-};
-
-// 6. LOG & TIMELINE
-exports.getTimeline = async (req, res) => {
-    try {
-        const result = await pool.query(`SELECT h.*, p.ad, p.soyad, r.rol_adi FROM izin_hareketleri h JOIN personeller p ON h.islem_yapan_id = p.personel_id JOIN roller r ON p.rol_id = r.rol_id WHERE h.talep_id = $1 ORDER BY h.tarih ASC`, [req.params.talep_id]);
-        res.json(result.rows);
-    } catch (e) { res.status(500).send('Hata'); }
-};
-exports.getSystemLogs = async (req, res) => {
-    try {
-        const result = await pool.query(`SELECT l.*, p.ad, p.soyad, p.tc_no FROM sistem_loglari l LEFT JOIN personeller p ON l.personel_id = p.personel_id ORDER BY l.tarih DESC LIMIT 100`);
-        res.json(result.rows);
-    } catch (e) { res.status(500).send('Hata'); }
-};
-exports.getPersonelGecmis = async (req, res) => {
-    const { tc_no } = req.query;
-    try {
-        const result = await pool.query(`SELECT t.*, p.ad, p.soyad, p.tc_no FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE p.tc_no LIKE $1 ORDER BY t.olusturma_tarihi DESC`, [`%${tc_no}%`]);
-        res.json(result.rows);
-    } catch(e) { res.status(500).send('Hata'); }
-};
-
-// 7. PERSONEL DETAYLI İZİN BİLGİSİ (Modal ve Rapor İçin - GÜNCELLENMİŞ)
+// 6. PERSONEL DETAYLI İZİN BİLGİSİ (Modal ve Rapor İçin - GÜNCELLENMİŞ)
 exports.getPersonelIzinDetay = async (req, res) => {
     const { id } = req.params; 
     try {
@@ -480,31 +376,14 @@ exports.getPersonelIzinDetay = async (req, res) => {
     }
 };
 
-// 8. TÜM PERSONEL İÇİN DETAYLI VERİ (Toplu Excel Raporu İçin)
+// 7. TOPLU VERİ (Excel Raporu İçin)
 exports.tumPersonelDetayliVeri = async (req, res) => {
-    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) {
-        return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
-    }
+    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
 
     try {
-        // 1. Tüm Aktif Personeller
-        const pRes = await pool.query(`
-            SELECT p.personel_id, p.tc_no, p.ad, p.soyad, p.sicil_no, p.ise_giris_tarihi, p.kadro_tipi, b.birim_adi
-            FROM personeller p
-            LEFT JOIN birimler b ON p.birim_id = b.birim_id
-            WHERE p.aktif = TRUE
-            ORDER BY p.ad ASC
-        `);
-
-        // 2. Tüm Geçmiş Bakiyeler
+        const pRes = await pool.query(`SELECT p.personel_id, p.tc_no, p.ad, p.soyad, p.sicil_no, p.ise_giris_tarihi, p.kadro_tipi, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id WHERE p.aktif = TRUE ORDER BY p.ad ASC`);
         const gRes = await pool.query(`SELECT * FROM izin_gecmis_bakiyeler ORDER BY yil ASC`);
-
-        // 3. Tüm Onaylı Yıllık İzinler
-        const iRes = await pool.query(`
-            SELECT * FROM izin_talepleri 
-            WHERE durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
-            AND izin_turu = 'YILLIK İZİN'
-        `);
+        const iRes = await pool.query(`SELECT * FROM izin_talepleri WHERE durum IN ('IK_ONAYLADI', 'TAMAMLANDI') AND izin_turu = 'YILLIK İZİN'`);
 
         res.json({
             personeller: pRes.rows,
@@ -516,4 +395,61 @@ exports.tumPersonelDetayliVeri = async (req, res) => {
         console.error(e);
         res.status(500).json({ mesaj: 'Toplu veri çekilemedi.' });
     }
+};
+
+// --- ISLAK İMZA, TIMELINE, LOG vb. fonksiyonlar aynen kalabilir ---
+exports.islakImzaDurumu = async (req, res) => {
+    if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
+    const { talep_id, durum } = req.body; 
+    
+    const client = await pool.connect(); 
+
+    try {
+        await client.query('BEGIN');
+
+        const talepRes = await client.query(
+            'SELECT t.personel_id, t.baslangic_tarihi, p.ad, p.soyad FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id WHERE t.talep_id = $1', 
+            [talep_id]
+        );
+        
+        if(talepRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({mesaj: 'Bulunamadı'});
+        }
+        
+        const p = talepRes.rows[0];
+        const baslangicTarihi = new Date(p.baslangic_tarihi).toLocaleDateString('tr-TR');
+
+        if (durum === 'GELDI') {
+            await client.query("UPDATE izin_talepleri SET durum = 'TAMAMLANDI' WHERE talep_id = $1", [talep_id]);
+            const mesaj = `Sayın Personelimiz ${p.ad} ${p.soyad}, ${baslangicTarihi} başlangıç tarihli izin talebiniz onaylanmıştır. İyi Tatiller.`;
+            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '🎉 İyi Tatiller', mesaj]);
+            await client.query('COMMIT');
+            res.json({ mesaj: 'Personel izne ayrıldı.' });
+
+        } else if (durum === 'GELMEDI') {
+            await client.query("UPDATE izin_talepleri SET durum = 'IPTAL_EDILDI' WHERE talep_id = $1", [talep_id]);
+            await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '⚠️ İPTAL', 'Islak imzaya gelinmediği için izin talebiniz iptal edilmiştir.']);
+            await client.query('COMMIT');
+            res.json({ mesaj: 'İzin iptal edildi.' });
+        }
+    } catch (e) { 
+        await client.query('ROLLBACK');
+        console.error(e);
+        res.status(500).send('Hata'); 
+    } finally { client.release(); }
+};
+
+exports.getTimeline = async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT h.*, p.ad, p.soyad, r.rol_adi FROM izin_hareketleri h JOIN personeller p ON h.islem_yapan_id = p.personel_id JOIN roller r ON p.rol_id = r.rol_id WHERE h.talep_id = $1 ORDER BY h.tarih ASC`, [req.params.talep_id]);
+        res.json(result.rows);
+    } catch (e) { res.status(500).send('Hata'); }
+};
+
+exports.getSystemLogs = async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT l.*, p.ad, p.soyad, p.tc_no FROM sistem_loglari l LEFT JOIN personeller p ON l.personel_id = p.personel_id ORDER BY l.tarih DESC LIMIT 100`);
+        res.json(result.rows);
+    } catch (e) { res.status(500).send('Hata'); }
 };
