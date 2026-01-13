@@ -247,7 +247,7 @@ export default function DashboardHome() {
                         <div className="text-md-end text-center bg-white p-2 rounded-3 shadow-sm border-0" style={{minWidth: '100px'}}>
                             <div className="h4 fw-bold text-primary m-0">{new Date().getDate()}</div>
                             <div className="text-uppercase fw-bold text-dark text-opacity-75" style={{fontSize:'10px'}}>
-                                {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', { month: 'short', weekday: 'long' })}
+                                {new Date().toLocaleDateString(lang === 'tr' ? 'tr-TR' : 'en-US', { month: 'long', weekday: 'long' })}
                             </div>
                         </div>
                     </div>
