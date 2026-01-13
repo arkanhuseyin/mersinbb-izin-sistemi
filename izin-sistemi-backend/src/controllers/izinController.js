@@ -308,13 +308,13 @@ exports.topluPdfRaporu = async (req, res) => {
             const pIzinler = iRes.rows.filter(iz => iz.personel_id === p.personel_id);
             
             let devreden = 0; 
-            pGecmis.forEach(g => devreden += parseInt(g.gun_sayisi) || 0); // ✅ parseInt eklendi
+            pGecmis.forEach(g => devreden += parseInt(g.gun_sayisi) || 0);
             
             const buYilHak = await dinamikHakedisHesapla(p.personel_id);
             const toplamHavuz = devreden + buYilHak;
             
             let kullanilan = 0; 
-            pIzinler.forEach(iz => kullanilan += parseInt(iz.kac_gun) || 0); // ✅ parseInt eklendi
+            pIzinler.forEach(iz => kullanilan += parseInt(iz.kac_gun) || 0);
             
             const kalan = toplamHavuz - kullanilan;
             const giris = new Date(p.ise_giris_tarihi);
@@ -335,7 +335,7 @@ exports.topluPdfRaporu = async (req, res) => {
             rowData.forEach((data, index) => {
                 if (index === 10) doc.fillColor(durumRenk).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold');
                 else doc.fillColor('#333').font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
-                doc.text(String(data || '-'), rowX + 5, y, { width: colWidths[index] }); // ✅ String çevrimi ve null check
+                doc.text(String(data || '-'), rowX + 5, y, { width: colWidths[index] });
                 rowX += colWidths[index];
             });
             y += 20;
@@ -345,7 +345,7 @@ exports.topluPdfRaporu = async (req, res) => {
 };
 
 // ============================================================
-// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU
+// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Null Check)
 // ============================================================
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
@@ -373,21 +373,23 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.rect(40, doc.y, 515, 80).fill('#f8f9fa').stroke('#ddd');
         doc.fillColor('#000').fontSize(10);
         let y = doc.y + 15;
-        doc.text(`Adı Soyadı: ${p.ad} ${p.soyad}`, 50, y); doc.text(`TC Kimlik No: ${p.tc_no}`, 300, y); y+=20;
-        doc.text(`Sicil No: ${p.sicil_no || '-'}`, 50, y); doc.text(`Birim: ${p.birim_adi || '-'}`, 300, y); y+=20;
-        doc.text(`Kadro: ${p.kadro_tipi || '-'}`, 50, y); 
-        
+        // ⚠️ DÜZELTME BURADA: String() kontrolü eklendi
+        doc.text(`Adı Soyadı: ${p.ad} ${p.soyad}`, 50, y); 
+        doc.text(`TC Kimlik No: ${String(p.tc_no || '-')}`, 300, y); y+=20;
+        doc.text(`Sicil No: ${String(p.sicil_no || '-')}`, 50, y); 
+        doc.text(`Birim: ${String(p.birim_adi || '-')}`, 300, y); y+=20;
+        doc.text(`Kadro: ${String(p.kadro_tipi || '-')}`, 50, y); 
         const girisTarihi = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-';
         doc.text(`İşe Giriş: ${girisTarihi}`, 300, y);
         doc.moveDown(4);
 
         let devreden = 0; 
-        gRes.rows.forEach(g => devreden += parseInt(g.gun_sayisi) || 0); // ✅ parseInt
+        gRes.rows.forEach(g => devreden += parseInt(g.gun_sayisi) || 0);
         
         const buYilHak = await dinamikHakedisHesapla(id);
         
         let kullanilan = 0; 
-        iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') kullanilan += parseInt(iz.kac_gun) || 0; }); // ✅ parseInt
+        iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') kullanilan += parseInt(iz.kac_gun) || 0; });
         
         const toplamHavuz = devreden + buYilHak;
         const kalan = toplamHavuz - kullanilan;
@@ -403,7 +405,6 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.fillColor('#000').fontSize(12).text('İZİN HAREKETLERİ');
         doc.moveDown(0.5);
         let tableY = doc.y;
-        
         doc.rect(40, tableY, 515, 20).fill('#333');
         doc.fillColor('#fff').fontSize(9);
         doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
@@ -417,6 +418,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
             const baslangic = iz.baslangic_tarihi ? new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR') : '-';
             const bitis = iz.bitis_tarihi ? new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR') : '-';
 
+            // ⚠️ DÜZELTME BURADA: Null/Undefined kontrolü
             doc.text(String(iz.izin_turu || '-'), 50, tableY + 6);
             doc.text(baslangic, 200, tableY + 6);
             doc.text(bitis, 300, tableY + 6);
@@ -427,5 +429,5 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
 
         doc.end();
 
-    } catch (err) { console.error("PDF Hatası:", err); res.status(500).send("PDF Hatası"); }
+    } catch (err) { console.error("PDF Hatası Detaylı:", err); res.status(500).send("PDF Hatası"); }
 };
