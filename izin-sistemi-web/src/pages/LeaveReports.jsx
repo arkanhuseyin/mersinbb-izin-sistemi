@@ -46,6 +46,8 @@ export default function LeaveReports() {
     };
 
     // --- 📸 FOTOĞRAF URL DÜZELTİCİ (AKILLI VERSİYON) ---
+    // Bu fonksiyon, veritabanındaki karmaşık dosya yollarını (C:\Users\...) 
+    // sunucunun anlayacağı web adresine (https://.../uploads/...) çevirir.
     const getPhotoUrl = (path) => {
         if (!path) return DEFAULT_PHOTO;
         
@@ -68,6 +70,7 @@ export default function LeaveReports() {
     };
 
     // --- 🧮 HESAPLAMA MOTORLARI (Sadece Arayüzde Gösterim İçin) ---
+    // Not: PDF hesaplaması artık Backend tarafında yapılıyor. Burası sadece ekranda anlık görmek için.
     const getSingleYearRights = (girisYili, hesaplanacakYil, kidemYili) => {
         const uygunKural = hakedisKurallari.find(k => hesaplanacakYil >= k.baslangic_yili && hesaplanacakYil <= k.bitis_yili && kidemYili >= k.kidem_alt && kidemYili <= k.kidem_ust);
         if (uygunKural) return uygunKural.gun_sayisi;
@@ -93,9 +96,8 @@ export default function LeaveReports() {
         let toplamHak = 0; let currentCalcDate = new Date(giris);
         currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
         while (currentCalcDate <= bugun) {
-            const hesapYili = currentCalcDate.getFullYear();
             const oAnkiKidem = Math.floor((currentCalcDate - giris) / (1000 * 60 * 60 * 24 * 365.25));
-            if (oAnkiKidem >= 1) toplamHak += getSingleYearRights(girisYili, hesapYili, oAnkiKidem);
+            if (oAnkiKidem >= 1) toplamHak += getSingleYearRights(girisYili, currentCalcDate.getFullYear(), oAnkiKidem);
             currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
         }
         return toplamHak;
@@ -122,7 +124,7 @@ export default function LeaveReports() {
         const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         
         const wsData = [
-            ["Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU"], [" "],
+            ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - PERSONEL İZİN DETAY RAPORU"], [" "],
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
             ["Kümülatif Hak", hesaplaKumulatifHakedis(p.ise_giris_tarihi)],
@@ -143,7 +145,7 @@ export default function LeaveReports() {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, { headers: { Authorization: `Bearer ${token}` } });
             const { personeller, gecmisBakiyeler, izinler } = res.data;
-            const excelRows = [["Toplu Taşıma Şube Müdürlüğü"], ["GENEL İZİN RAPORU"], [" "],
+            const excelRows = [["MERSİN BÜYÜKŞEHİR BELEDİYESİ"], ["GENEL İZİN RAPORU"], [" "],
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]];
             personeller.forEach((p) => {
                 const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
@@ -164,7 +166,8 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata"); } finally { setYukleniyor(false); }
     };
 
-    // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN) ---
+    // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN - BLOB) ---
+    
     // 1. KİŞİSEL DETAYLI PDF
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
@@ -172,6 +175,7 @@ export default function LeaveReports() {
         const token = localStorage.getItem('token');
 
         try {
+            // Settings.jsx'teki aynı blob indirme mantığı
             const response = await axios.get(`${API_URL}/api/izin/rapor/pdf-detay/${p.personel_id}`, { 
                 headers: { Authorization: `Bearer ${token}` }, 
                 responseType: 'blob' 
@@ -180,7 +184,8 @@ export default function LeaveReports() {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `${p.ad}_${p.soyad}_Detayli_Rapor.pdf`);
+            // Türkçe karakter sorununu önlemek için basit isimlendirme
+            link.setAttribute('download', `Personel_Izin_Detay_${p.tc_no}.pdf`);
             document.body.appendChild(link);
             link.click();
             link.remove();

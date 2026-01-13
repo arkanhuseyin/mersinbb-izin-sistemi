@@ -11,7 +11,7 @@ const path = require('path');
 
 // Tarih Formatlayıcı (Hata önleyici)
 const tarihFormatla = (tarihStr) => {
-    if (!tarihStr) return null;
+    if (!tarihStr) return '-';
     try {
         const d = new Date(tarihStr);
         if(isNaN(d.getTime())) return '-';
@@ -28,15 +28,76 @@ const turkceKarakterTemizle = (str) => {
               .replace(/ı/g, 'i').replace(/İ/g, 'I')
               .replace(/ö/g, 'o').replace(/Ö/g, 'O')
               .replace(/ç/g, 'c').replace(/Ç/g, 'C')
-              .replace(/[^a-zA-Z0-9]/g, '_'); // Diğer özel karakterleri alt çizgi yap
+              .replace(/[^a-zA-Z0-9]/g, '_'); 
 };
 
+// 🗓️ ÖMÜR BOYU KÜMÜLATİF HAK HESAPLAMA (BACKEND VERSİYONU)
+// Bu fonksiyon, personelin işe girişinden bugüne kadar kazandığı toplam hakkı hesaplar.
+const hesaplaKumulatifHakBackend = async (girisTarihi) => {
+    if (!girisTarihi) return 0;
+    
+    // Veritabanındaki kuralları çek
+    const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
+    const kurallar = kuralRes.rows;
+
+    const giris = new Date(girisTarihi);
+    const bugun = new Date();
+    let toplamHak = 0;
+    
+    // Döngü: İşe giriş tarihinden başla, her yıl dönümünde hak ekle
+    let currentCalcDate = new Date(giris);
+    currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1); // 1. yıl dolduğunda hak kazanılır
+
+    while (currentCalcDate <= bugun) {
+        const hesapYili = currentCalcDate.getFullYear();
+        // O tarihteki kıdemi (Yıl olarak)
+        const oAnkiKidem = Math.floor((currentCalcDate - giris) / (1000 * 60 * 60 * 24 * 365.25));
+
+        if (oAnkiKidem >= 1) {
+            let hak = 0;
+            // 1. Veritabanı kuralı var mı?
+            const uygunKural = kurallar.find(k => 
+                hesapYili >= k.baslangic_yili && 
+                hesapYili <= k.bitis_yili && 
+                oAnkiKidem >= k.kidem_alt && 
+                oAnkiKidem <= k.kidem_ust
+            );
+
+            if (uygunKural) {
+                hak = uygunKural.gun_sayisi;
+            } else {
+                // 2. Kural yoksa varsayılan Excel mantığı (Yedek)
+                let bazYil = giris.getFullYear(); 
+                if(bazYil < 2007) bazYil = 2007;
+
+                if (bazYil < 2018) {
+                    if (oAnkiKidem <= 5) hak = 14; else if (oAnkiKidem <= 15) hak = 19; else hak = 25;
+                } else if (bazYil < 2024) {
+                    if (bazYil < 2019) { if (oAnkiKidem <= 5) hak = 14; else if (oAnkiKidem <= 15) hak = 19; else hak = 25; }
+                    else { if (oAnkiKidem <= 3) hak = 16; else if (oAnkiKidem <= 5) hak = 18; else if (oAnkiKidem <= 15) hak = 25; else hak = 30; }
+                } else {
+                    if (bazYil < 2025) { if (oAnkiKidem <= 3) hak = 16; else if (oAnkiKidem <= 5) hak = 18; else if (oAnkiKidem <= 15) hak = 25; else hak = 30; }
+                    else { if (oAnkiKidem <= 3) hak = 18; else if (oAnkiKidem <= 5) hak = 20; else if (oAnkiKidem <= 15) hak = 27; else hak = 32; }
+                }
+            }
+            toplamHak += hak;
+        }
+        // Bir sonraki yıla geç
+        currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
+    }
+    return toplamHak;
+};
+
+// Genel Bakiye Hesaplama (Dashboard vb. için)
 const hesaplaBakiye = async (personel_id) => {
+    // Manuel eklenen geçmiş bakiyeler (Varsa)
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis) || 0;
 
+    // Dinamik hakediş (Bu yılki hak)
     const buYilHakedis = await dinamikHakedisHesapla(personel_id);
 
+    // Kullanılanlar
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -46,6 +107,7 @@ const hesaplaBakiye = async (personel_id) => {
     `, [personel_id]); 
 
     const toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
+    // Formül: (Devreden + Bu Yıl) - Kullanılan
     const totalBalance = (devredenToplam + buYilHakedis) - toplamKullanilan;
     return totalBalance;
 };
@@ -128,12 +190,7 @@ exports.talepOlustur = async (req, res) => {
             }
         }
 
-        // Veritabanı için tarih formatı düzeltme
-        const formatDBDate = (str) => {
-            if(!str) return null;
-            if(str.includes('T')) return str.split('T')[0]; // ISO formatından temizle
-            return str;
-        }
+        const formatDBDate = (str) => { if(!str) return null; if(str.includes('T')) return str.split('T')[0]; return str; }
 
         let baslangicDurumu = 'ONAY_BEKLIYOR'; 
         if (userRole === 'amir') baslangicDurumu = 'AMIR_ONAYLADI';
@@ -372,11 +429,12 @@ exports.topluPdfRaporu = async (req, res) => {
 };
 
 // ============================================================
-// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Türkçe Karakter ve Null Check)
+// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Türkçe Karakter, Null Check, Fotoğraf, Matematik)
 // ============================================================
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
     try {
+        // 1. Veri Çekme
         const pRes = await pool.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id WHERE p.personel_id = $1`, [id]);
         if(pRes.rows.length === 0) return res.status(404).send('Personel bulunamadı');
         const p = pRes.rows[0];
@@ -384,75 +442,142 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         const gRes = await pool.query(`SELECT * FROM izin_gecmis_bakiyeler WHERE personel_id = $1`, [id]);
         const iRes = await pool.query(`SELECT * FROM izin_talepleri WHERE personel_id = $1 AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') ORDER BY baslangic_tarihi DESC`, [id]);
 
+        // 2. PDF Ayarları
         const doc = new PDFDocument({ margin: 40, size: 'A4' });
         const fontPath = path.join(__dirname, '../../templates/font.ttf');
         if (fs.existsSync(fontPath)) doc.registerFont('TrFont', fontPath);
         doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
 
-        // GÜVENLİ DOSYA İSMİ (Türkçe karakter temizlendi)
         const safeFilename = turkceKarakterTemizle(p.ad + '_' + p.soyad) + '_Detayli_Rapor.pdf';
-
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
         doc.pipe(res);
 
-        doc.fontSize(16).fillColor('#1a3c6e').text('MERSİN BÜYÜKŞEHİR BELEDİYESİ', { align: 'center' });
-        doc.fontSize(12).fillColor('#555').text('TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ - PERSONEL İZİN DETAYI', { align: 'center' });
-        doc.moveDown(2);
-
-        doc.rect(40, doc.y, 515, 80).fill('#f8f9fa').stroke('#ddd');
-        doc.fillColor('#000').fontSize(10);
-        let y = doc.y + 15;
+        // --- 1. ÜST BİLGİ (FOTOĞRAF VE BAŞLIK) ---
+        const photoX = 40;
+        const photoY = 40;
+        const photoW = 80;
+        const photoH = 100;
         
-        // Verileri String() ile korumaya aldık
+        // Fotoğrafı sunucudan bul
+        let photoFound = false;
+        if (p.fotograf_yolu) {
+            const relativePath = p.fotograf_yolu.replace(/\\/g, '/');
+            const absolutePath = path.join(__dirname, '../../', relativePath);
+            if (fs.existsSync(absolutePath)) {
+                try {
+                    doc.image(absolutePath, photoX, photoY, { width: photoW, height: photoH, fit: [photoW, photoH] });
+                    doc.rect(photoX, photoY, photoW, photoH).stroke(); 
+                    photoFound = true;
+                } catch (err) { console.log("Fotoğraf eklenemedi:", err.message); }
+            }
+        }
+        if (!photoFound) {
+            doc.rect(photoX, photoY, photoW, photoH).stroke();
+            doc.text("FOTO", photoX + 25, photoY + 45);
+        }
+
+        const textStartX = 140;
+        doc.fontSize(16).fillColor('#1a3c6e').text('MERSİN BÜYÜKŞEHİR BELEDİYESİ', textStartX, 50);
+        doc.fontSize(12).fillColor('#555').text('TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ - PERSONEL İZİN DETAYI', textStartX, 70);
+        doc.moveDown(4);
+
+        // --- 2. PERSONEL BİLGİLERİ ---
+        let y = doc.y + 20;
+        doc.rect(40, y - 10, 515, 65).fill('#f8f9fa').stroke('#ddd');
+        doc.fillColor('#000').fontSize(10);
+        
         doc.text(`Adı Soyadı: ${p.ad} ${p.soyad}`, 50, y); 
         doc.text(`TC Kimlik No: ${String(p.tc_no || '-')}`, 300, y); y+=20;
         doc.text(`Sicil No: ${String(p.sicil_no || '-')}`, 50, y); 
         doc.text(`Birim: ${String(p.birim_adi || '-')}`, 300, y); y+=20;
         doc.text(`Kadro: ${String(p.kadro_tipi || '-')}`, 50, y); 
         doc.text(`İşe Giriş: ${tarihFormatla(p.ise_giris_tarihi)}`, 300, y);
+        doc.y = y + 40;
+
+        // --- 3. BAKİYE ÖZETİ (Ömür Boyu Mantığı) ---
+        const kumulatifHak = await hesaplaKumulatifHakBackend(p.ise_giris_tarihi);
+        
+        // Manuel Eklenen Geçmiş Bakiyeler (Opsiyonel: Eğer ömür boyu hesabına dahil edilecekse burayı aç)
+        // let manuelGecmis = 0;
+        // gRes.rows.forEach(g => manuelGecmis += parseInt(g.gun_sayisi) || 0);
+        
+        // Toplam Kullanılan (Sadece Yıllık İzin)
+        let toplamKullanilan = 0;
+        iRes.rows.forEach(iz => { 
+            if(iz.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(iz.kac_gun) || 0; 
+        });
+
+        const kalanIzin = kumulatifHak - toplamKullanilan;
+
+        doc.fontSize(12).fillColor('#1a3c6e').text('BAKİYE ÖZETİ (Ömür Boyu)', { underline: false });
+        doc.rect(40, doc.y + 5, 515, 2).fill('#1a3c6e');
+        doc.moveDown(1);
+        const ozetY = doc.y;
+        doc.fontSize(11).fillColor('#000');
+        
+        doc.text(`• Toplam Hakedilen (Ömür Boyu):`, 50, ozetY);
+        doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold').text(`${kumulatifHak} Gün`, 250, ozetY);
+        doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
+
+        doc.text(`• Toplam Kullanılan:`, 50, ozetY + 20);
+        doc.fillColor('#c0392b').text(`- ${toplamKullanilan} Gün`, 250, ozetY + 20);
+
+        doc.rect(40, ozetY + 45, 515, 30).fill(kalanIzin < 0 ? '#fadbd8' : '#d4efdf');
+        doc.fillColor('#000').fontSize(12).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold');
+        doc.text(`KALAN BAKİYE: ${kalanIzin} Gün`, 50, ozetY + 53, { align: 'center', width: 515 });
+        doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
+
         doc.moveDown(4);
 
-        let devreden = 0; 
-        gRes.rows.forEach(g => devreden += parseInt(g.gun_sayisi) || 0);
-        
-        const buYilHak = await dinamikHakedisHesapla(id);
-        
-        let kullanilan = 0; 
-        iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') kullanilan += parseInt(iz.kac_gun) || 0; });
-        
-        const toplamHavuz = devreden + buYilHak;
-        const kalan = toplamHavuz - kullanilan;
-
-        doc.fontSize(12).text('BAKİYE ÖZETİ', { underline: true });
-        doc.fontSize(10).moveDown(0.5);
-        doc.text(`• Geçmişten Devreden: +${devreden} Gün`);
-        doc.text(`• Bu Yıl Hakediş: +${buYilHak} Gün`);
-        doc.text(`• Toplam Kullanılan: -${kullanilan} Gün`);
-        doc.fillColor(kalan < 0 ? '#e74c3c' : '#2ecc71').fontSize(12).text(`• GÜNCEL KALAN BAKİYE: ${kalan} Gün`, { indent: 20 });
-        doc.moveDown(2);
-
-        doc.fillColor('#000').fontSize(12).text('İZİN HAREKETLERİ');
+        // --- 4. İZİN HAREKETLERİ LİSTESİ ---
+        doc.fontSize(12).fillColor('#000').text('GEÇMİŞ İZİN HAREKETLERİ', 40, doc.y);
         doc.moveDown(0.5);
+
         let tableY = doc.y;
-        doc.rect(40, tableY, 515, 20).fill('#333');
+        doc.rect(40, tableY, 515, 20).fill('#2c3e50');
         doc.fillColor('#fff').fontSize(9);
-        doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
-        doc.text("Gün", 400, tableY + 6); doc.text("Durum", 480, tableY + 6);
-        tableY += 20; doc.fillColor('#333');
+        doc.text("İzin Türü", 50, tableY + 6); 
+        doc.text("Başlangıç", 200, tableY + 6); 
+        doc.text("Bitiş", 300, tableY + 6);
+        doc.text("Gün", 400, tableY + 6); 
+        doc.text("Durum", 480, tableY + 6);
+        
+        tableY += 20;
+        doc.fillColor('#000'); // Siyah renk (Soluk olmaması için)
 
         iRes.rows.forEach((iz, i) => {
-            if (tableY > 750) { doc.addPage(); tableY = 40; }
-            if (i % 2 === 0) doc.rect(40, tableY, 515, 20).fill('#eee');
+            if (tableY > 750) { 
+                doc.addPage(); 
+                tableY = 40; 
+                doc.rect(40, tableY, 515, 20).fill('#2c3e50');
+                doc.fillColor('#fff');
+                doc.text("İzin Türü", 50, tableY + 6); 
+                doc.text("Başlangıç", 200, tableY + 6); 
+                doc.text("Bitiş", 300, tableY + 6);
+                doc.text("Gün", 400, tableY + 6); 
+                doc.text("Durum", 480, tableY + 6);
+                tableY += 20;
+                doc.fillColor('#000');
+            }
+
+            if (i % 2 === 0) doc.rect(40, tableY, 515, 20).fill('#ecf0f1');
             
             const baslangic = tarihFormatla(iz.baslangic_tarihi);
             const bitis = tarihFormatla(iz.bitis_tarihi);
 
+            doc.fillColor('#000'); // Her satır siyah
             doc.text(String(iz.izin_turu || '-'), 50, tableY + 6);
             doc.text(baslangic, 200, tableY + 6);
             doc.text(bitis, 300, tableY + 6);
-            doc.text(String(iz.kac_gun || 0) + ' Gün', 400, tableY + 6);
-            doc.text('ONAYLI', 480, tableY + 6);
+            doc.text(String(iz.kac_gun || 0), 400, tableY + 6);
+            
+            if(iz.durum === 'IK_ONAYLADI' || iz.durum === 'TAMAMLANDI') {
+                doc.fillColor('#27ae60').text('ONAYLI', 480, tableY + 6);
+            } else {
+                doc.fillColor('#000').text(String(iz.durum), 480, tableY + 6);
+            }
+            
             tableY += 20;
         });
 
