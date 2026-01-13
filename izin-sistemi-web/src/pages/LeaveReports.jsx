@@ -25,6 +25,8 @@ export default function LeaveReports() {
 
     const verileriGetir = () => {
         const token = localStorage.getItem('token');
+        if(!token) { window.location.href = '/login'; return; }
+
         Promise.all([
             axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } }),
             axios.get(`${API_URL}/api/ayar/hakedis-listele`, { headers: { Authorization: `Bearer ${token}` } })
@@ -38,25 +40,17 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 📸 FOTOĞRAF URL DÜZELTİCİ (YENİLENDİ) ---
+    // --- 📸 FOTOĞRAF URL DÜZELTİCİ (DÜZELTİLDİ) ---
     const getPhotoUrl = (path) => {
         if (!path) return DEFAULT_PHOTO;
-        
-        // 1. Zaten tam bir internet adresi mi?
+        // 1. Zaten internet adresi mi?
         if (path.startsWith('http')) return path;
-        
-        // 2. Windows ters slash (\) karakterlerini düz slash (/) yap
+        // 2. Windows ters slash (\) karakterlerini düzelt
         let cleanPath = path.replace(/\\/g, '/');
-        
-        // 3. Eğer yolun içinde 'uploads/' geçiyorsa, öncesini at
-        // Örnek: "C:/Users/Admin/Desktop/uploads/personel/resim.jpg" -> "uploads/personel/resim.jpg"
-        if (cleanPath.includes('uploads/')) {
-            cleanPath = cleanPath.split('uploads/')[1]; // 'uploads/' sonrası kısmı al
-            return `${API_URL}/uploads/${cleanPath}`;
-        }
-        
-        // 4. Standart format (uploads/...)
-        return `${API_URL}/${cleanPath}`;
+        // 3. Dosya ismini al
+        const fileName = cleanPath.split('/').pop();
+        // 4. Backend URL ile birleştir
+        return `${API_URL}/uploads/${fileName}`;
     };
 
     // --- 🧮 HESAPLAMA MOTORLARI ---
@@ -107,7 +101,7 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (Veri Odaklı) ---
+    // --- 📄 EXCEL ÇIKTILARI ---
     const generateDetailExcel = () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -157,7 +151,6 @@ export default function LeaveReports() {
     };
 
     // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN) ---
-    // 1. KİŞİSEL DETAYLI PDF
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -182,7 +175,6 @@ export default function LeaveReports() {
         }
     };
 
-    // 2. TOPLU PDF
     const downloadBulkPDF = async () => {
         if(!confirm("Toplu PDF raporu oluşturulsun mu?")) return; 
         setYukleniyor(true);
@@ -273,7 +265,7 @@ export default function LeaveReports() {
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered">
                         <div className="modal-content shadow-lg border-0 rounded-4">
-                            {/* --- YENİ MODAL BAŞLIĞI (FOTOĞRAFLI - DÜZELTİLDİ) --- */}
+                            {/* --- MODAL BAŞLIĞI (FOTOĞRAFLI - DÜZELTİLDİ) --- */}
                             <div className="modal-header bg-primary text-white p-4 align-items-center">
                                 <div className="d-flex align-items-center gap-3">
                                     <img 

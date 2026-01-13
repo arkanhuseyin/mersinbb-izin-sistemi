@@ -11,12 +11,11 @@ const path = require('path');
 
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
-    if (tarihStr.includes('-')) return tarihStr;
-    if (tarihStr.includes('.')) {
-        const [gun, ay, yil] = tarihStr.split('.');
-        return `${yil}-${ay}-${gun}`;
-    }
-    return tarihStr;
+    try {
+        const d = new Date(tarihStr);
+        if(isNaN(d.getTime())) return '-';
+        return d.toLocaleDateString('tr-TR');
+    } catch { return '-'; }
 };
 
 const hesaplaBakiye = async (personel_id) => {
@@ -116,9 +115,12 @@ exports.talepOlustur = async (req, res) => {
             }
         }
 
-        baslangic_tarihi = tarihFormatla(baslangic_tarihi);
-        bitis_tarihi = tarihFormatla(bitis_tarihi);
-        ise_baslama = tarihFormatla(ise_baslama);
+        // Tarih formatlama (Veritabanı formatına uygun hale getir)
+        const formatDBDate = (str) => {
+            if(!str) return null;
+            if(str.includes('T')) return str.split('T')[0];
+            return str;
+        }
 
         let baslangicDurumu = 'ONAY_BEKLIYOR'; 
         if (userRole === 'amir') baslangicDurumu = 'AMIR_ONAYLADI';
@@ -131,7 +133,7 @@ exports.talepOlustur = async (req, res) => {
 
         const yeniTalep = await pool.query(
             `INSERT INTO izin_talepleri (personel_id, baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, haftalik_izin_gunu, ise_baslama_tarihi, izin_adresi, personel_imza, durum, belge_yolu) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-            [personel_id, baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, haftalik_izin, ise_baslama, izin_adresi, personel_imza, baslangicDurumu, belge_yolu]
+            [personel_id, formatDBDate(baslangic_tarihi), formatDBDate(bitis_tarihi), kac_gun, izin_turu, aciklama, haftalik_izin, formatDBDate(ise_baslama), izin_adresi, personel_imza, baslangicDurumu, belge_yolu]
         );
         
         await hareketKaydet(yeniTalep.rows[0].talep_id, personel_id, 'BAŞVURU', 'İzin talebi oluşturuldu.');
@@ -175,7 +177,7 @@ exports.talepOnayla = async (req, res) => {
         const talepBilgi = await client.query("SELECT p.personel_id, p.ad, p.soyad, i.baslangic_tarihi FROM izin_talepleri i JOIN personeller p ON i.personel_id = p.personel_id WHERE i.talep_id = $1", [talep_id]);
         if (talepBilgi.rows.length > 0) {
             const p = talepBilgi.rows[0];
-            const baslangicTarihi = new Date(p.baslangic_tarihi).toLocaleDateString('tr-TR');
+            const baslangicTarihi = tarihFormatla(p.baslangic_tarihi);
             if (yeni_durum === 'IK_ONAYLADI') {
                 const mesaj = `Sayın ${p.ad} ${p.soyad}, ${baslangicTarihi} tarihli izniniz onaylanmıştır. İzninizden 1 gün önce İK'ya gelip ıslak imza atınız.`;
                 await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '✅ Onaylandı (Islak İmza Gerekli)', mesaj]);
@@ -318,7 +320,7 @@ exports.topluPdfRaporu = async (req, res) => {
             
             const kalan = toplamHavuz - kullanilan;
             const giris = new Date(p.ise_giris_tarihi);
-            const kidem = Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
+            const kidem = isNaN(giris.getTime()) ? 0 : Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
 
             let durumMetni = "NORMAL";
             let durumRenk = "#2ecc71"; 
@@ -330,7 +332,19 @@ exports.topluPdfRaporu = async (req, res) => {
             
             doc.fillColor('#333').fontSize(8);
             let rowX = startX;
-            const rowData = [(i + 1).toString(), p.tc_no, `${p.ad} ${p.soyad}`, p.birim_adi || '-', giris.toLocaleDateString('tr-TR'), `${kidem} Yıl`, devreden.toString(), buYilHak.toString(), toplamHavuz.toString(), kalan.toString(), durumMetni];
+            const rowData = [
+                (i + 1).toString(), 
+                String(p.tc_no || '-'), 
+                `${p.ad} ${p.soyad}`, 
+                String(p.birim_adi || '-'), 
+                tarihFormatla(p.ise_giris_tarihi), 
+                `${kidem} Yıl`, 
+                devreden.toString(), 
+                buYilHak.toString(), 
+                toplamHavuz.toString(), 
+                kalan.toString(), 
+                durumMetni
+            ];
 
             rowData.forEach((data, index) => {
                 if (index === 10) doc.fillColor(durumRenk).font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold');
@@ -345,7 +359,7 @@ exports.topluPdfRaporu = async (req, res) => {
 };
 
 // ============================================================
-// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Null Check)
+// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Güvenli)
 // ============================================================
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
@@ -373,14 +387,14 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.rect(40, doc.y, 515, 80).fill('#f8f9fa').stroke('#ddd');
         doc.fillColor('#000').fontSize(10);
         let y = doc.y + 15;
-        // ⚠️ DÜZELTME BURADA: String() kontrolü eklendi
+        
+        // ⚠️ GÜVENLİ YAZDIRMA (String Çevirme ve Null Kontrolü)
         doc.text(`Adı Soyadı: ${p.ad} ${p.soyad}`, 50, y); 
         doc.text(`TC Kimlik No: ${String(p.tc_no || '-')}`, 300, y); y+=20;
         doc.text(`Sicil No: ${String(p.sicil_no || '-')}`, 50, y); 
         doc.text(`Birim: ${String(p.birim_adi || '-')}`, 300, y); y+=20;
         doc.text(`Kadro: ${String(p.kadro_tipi || '-')}`, 50, y); 
-        const girisTarihi = p.ise_giris_tarihi ? new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR') : '-';
-        doc.text(`İşe Giriş: ${girisTarihi}`, 300, y);
+        doc.text(`İşe Giriş: ${tarihFormatla(p.ise_giris_tarihi)}`, 300, y);
         doc.moveDown(4);
 
         let devreden = 0; 
@@ -415,10 +429,9 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
             if (tableY > 750) { doc.addPage(); tableY = 40; }
             if (i % 2 === 0) doc.rect(40, tableY, 515, 20).fill('#eee');
             
-            const baslangic = iz.baslangic_tarihi ? new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR') : '-';
-            const bitis = iz.bitis_tarihi ? new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR') : '-';
+            const baslangic = tarihFormatla(iz.baslangic_tarihi);
+            const bitis = tarihFormatla(iz.bitis_tarihi);
 
-            // ⚠️ DÜZELTME BURADA: Null/Undefined kontrolü
             doc.text(String(iz.izin_turu || '-'), 50, tableY + 6);
             doc.text(baslangic, 200, tableY + 6);
             doc.text(bitis, 300, tableY + 6);
@@ -429,5 +442,5 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
 
         doc.end();
 
-    } catch (err) { console.error("PDF Hatası Detaylı:", err); res.status(500).send("PDF Hatası"); }
+    } catch (err) { console.error("PDF Hatası:", err); res.status(500).send("PDF Hatası"); }
 };
