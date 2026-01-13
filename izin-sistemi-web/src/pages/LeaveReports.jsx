@@ -1,11 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
-import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet } from 'lucide-react'; // FileTypePdf yerine FileText kullanıldı
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import { Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import * as XLSX from 'xlsx'; 
 
-// Varsayılan Profil Resmi (Eğer veritabanında yoksa bu çıkar)
+// Varsayılan Profil Resmi
 const DEFAULT_PHOTO = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
 
 export default function LeaveReports() {
@@ -40,7 +38,7 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 🧮 HESAPLAMA MOTORLARI ---
+    // --- 🧮 HESAPLAMA MOTORLARI (Sadece Görüntüleme İçin) ---
     const getSingleYearRights = (girisYili, hesaplanacakYil, kidemYili) => {
         const uygunKural = hakedisKurallari.find(k => hesaplanacakYil >= k.baslangic_yili && hesaplanacakYil <= k.bitis_yili && kidemYili >= k.kidem_alt && kidemYili <= k.kidem_ust);
         if (uygunKural) return uygunKural.gun_sayisi;
@@ -88,14 +86,14 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (Veri Odaklı) ---
+    // --- 📄 EXCEL ÇIKTILARI (Veri Odaklı - Frontend) ---
     const generateDetailExcel = () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
         const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         
         const wsData = [
-            ["Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU"], [" "],
+            ["TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ - PERSONEL İZİN DETAY RAPORU"], [" "],
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
             ["Kümülatif Hak", hesaplaKumulatifHakedis(p.ise_giris_tarihi)],
@@ -116,7 +114,7 @@ export default function LeaveReports() {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, { headers: { Authorization: `Bearer ${token}` } });
             const { personeller, gecmisBakiyeler, izinler } = res.data;
-            const excelRows = [["Toplu Taşıma Şube Müdürlüğü"], ["GENEL İZİN RAPORU"], [" "],
+            const excelRows = [["TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ"], ["GENEL İZİN RAPORU"], [" "],
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]];
             personeller.forEach((p) => {
                 const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
@@ -137,118 +135,59 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata"); } finally { setYukleniyor(false); }
     };
 
-    // --- 🎨 PDF ÇIKTILARI (Renkli ve Resmi) ---
-    // 1. KİŞİSEL DETAYLI PDF
-    const generateDetailPDF = () => {
+    // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN) ---
+    
+    // 1. KİŞİSEL DETAYLI PDF (Backend API Çağrısı)
+    const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
-        const doc = new jsPDF();
+        const token = localStorage.getItem('token');
 
-        // Başlık
-        doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.text("ULAŞIM DAİRESİ BAŞKANLIĞI", 105, 20, null, null, "center");
-        doc.setFontSize(12); doc.setTextColor(100); doc.text("Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU", 105, 28, null, null, "center");
-        doc.line(14, 32, 196, 32); // Çizgi
+        try {
+            // Backend'deki yeni rotaya istek atıyoruz
+            const response = await axios.get(`${API_URL}/api/izin/rapor/pdf-detay/${p.personel_id}`, { 
+                headers: { Authorization: `Bearer ${token}` }, 
+                responseType: 'blob' 
+            });
 
-        // Personel Bilgileri Tablosu
-        doc.autoTable({
-            startY: 40,
-            head: [['Personel Bilgileri', '']],
-            body: [
-                ['Adı Soyadı', `${p.ad} ${p.soyad}`], ['TC Kimlik No', p.tc_no],
-                ['Sicil No', p.sicil_no || '-'], ['Birim', p.birim_adi],
-                ['Kadro', p.kadro_tipi], ['İşe Giriş Tarihi', new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')]
-            ],
-            theme: 'plain', styles: { fontSize: 10, cellPadding: 1.5 }, columnStyles: { 0: { fontStyle: 'bold', width: 50 } }
-        });
-
-        // Bakiye Özeti Tablosu (Renkli)
-        const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
-        const toplamHavuz = (p.devreden_izin || 0) + (buYilHak || 0);
-        doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 10,
-            head: [['Bakiye Özeti', 'Gün Sayısı']],
-            body: [
-                ['Ömür Boyu Toplam Hakediş', hesaplaKumulatifHakedis(p.ise_giris_tarihi)],
-                ['Geçmişten Devreden (+)', p.devreden_izin],
-                ['Bu Yıl Hakediş (+)', buYilHak],
-                ['Kullanılabilir Toplam Havuz (=)', toplamHavuz],
-                ['Toplam Kullanılan İzin (-)', personelDetay.personel.kullanilan],
-                ['GÜNCEL KALAN BAKİYE', personelDetay.personel.kalan]
-            ],
-            theme: 'grid', headStyles: { fillColor: [41, 128, 185] },
-            columnStyles: { 0: { width: 100 }, 1: { fontStyle: 'bold', halign: 'center' } },
-            didParseCell: function (data) {
-                if (data.row.index === 5 && data.column.index === 1) {
-                    data.cell.styles.textColor = p.kalan < 0 ? [231, 76, 60] : [39, 174, 96];
-                    data.cell.styles.fontStyle = 'bold';
-                }
-            }
-        });
-
-        // İzin Hareketleri Tablosu (Şeritli)
-        const tableBody = personelDetay.izinler.map(iz => [
-            iz.izin_turu, new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR'), new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR'), iz.kac_gun, "ONAYLI"
-        ]);
-        doc.autoTable({
-            startY: doc.lastAutoTable.finalY + 15,
-            head: [['İzin Türü', 'Başlangıç', 'Bitiş', 'Gün', 'Durum']],
-            body: tableBody,
-            theme: 'striped', headStyles: { fillColor: [52, 73, 94] },
-            styles: { halign: 'center' }, columnStyles: { 0: { halign: 'left' } }
-        });
-
-        // Alt Bilgi
-        const today = new Date().toLocaleDateString('tr-TR');
-        doc.setFontSize(8); doc.setTextColor(150);
-        doc.text(`Bu rapor ${today} tarihinde sistemden otomatik oluşturulmuştur.`, 14, doc.internal.pageSize.height - 10);
-
-        doc.save(`${p.ad}_${p.soyad}_Detayli_Rapor.pdf`);
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${p.ad}_${p.soyad}_Izin_Raporu.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (e) {
+            console.error("PDF indirme hatası:", e);
+            alert("PDF oluşturulurken bir hata oluştu. Lütfen sistem yöneticisi ile görüşün.");
+        }
     };
 
-    // 2. TOPLU PDF (Yatay ve Renkli)
+    // 2. TOPLU PDF (Backend API Çağrısı)
     const downloadBulkPDF = async () => {
-        if(!confirm("Toplu PDF raporu oluşturulsun mu?")) return; setYukleniyor(true);
+        if(!confirm("Toplu PDF raporu oluşturulsun mu?")) return; 
+        setYukleniyor(true);
+        const token = localStorage.getItem('token');
+
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, { headers: { Authorization: `Bearer ${token}` } });
-            const { personeller, gecmisBakiyeler, izinler } = res.data;
-            
-            const doc = new jsPDF('l', 'mm', 'a4'); // Yatay (Landscape)
-
-            doc.setFontSize(18); doc.setTextColor(41, 128, 185); doc.text("Toplu Taşıma Şube Müdürlüğü", 148.5, 20, null, null, "center");
-            doc.setFontSize(12); doc.setTextColor(100); doc.text("GENEL İZİN DURUM RAPORU", 148.5, 28, null, null, "center");
-
-            const tableBody = personeller.map((p, index) => {
-                const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
-                const pIzinler = izinler.filter(iz => iz.personel_id === p.personel_id);
-                let devreden = 0; pGecmis.forEach(g => devreden += g.gun_sayisi);
-                const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
-                const toplamHavuz = devreden + buYilHak;
-                let kullanilan = 0; pIzinler.forEach(iz => kullanilan += iz.kac_gun);
-                const kalan = toplamHavuz - kullanilan;
-                let durum = "NORMAL"; if(kalan < 0) durum = "LİMİT AŞIMI"; else if (kalan < 5) durum = "AZALDI";
-
-                return [index + 1, p.tc_no, `${p.ad} ${p.soyad}`, p.birim_adi, new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), 
-                        hesaplaKumulatifHakedis(p.ise_giris_tarihi), devreden, buYilHak, toplamHavuz, kullanilan, kalan, durum];
+            const response = await axios.get(`${API_URL}/api/izin/rapor/pdf-toplu`, { 
+                headers: { Authorization: `Bearer ${token}` }, 
+                responseType: 'blob' 
             });
 
-            doc.autoTable({
-                startY: 35,
-                head: [['Sıra', 'TC', 'Ad Soyad', 'Birim', 'Giriş', 'Ömür Boyu', 'Devr.', 'Bu Yıl', 'Havuz', 'Kull.', 'Kalan', 'Durum']],
-                body: tableBody,
-                theme: 'grid', headStyles: { fillColor: [41, 128, 185], fontSize: 9 },
-                styles: { fontSize: 8, halign: 'center', cellPadding: 1 },
-                columnStyles: { 2: { halign: 'left' }, 3: { halign: 'left' }, 11: { fontStyle: 'bold' } },
-                didParseCell: function(data) {
-                    if (data.column.index === 11) {
-                        if (data.cell.raw === "LİMİT AŞIMI") data.cell.styles.textColor = [231, 76, 60];
-                        else if (data.cell.raw === "AZALDI") data.cell.styles.textColor = [243, 156, 18];
-                        else data.cell.styles.textColor = [39, 174, 96];
-                    }
-                }
-            });
-            doc.save(`Genel_Rapor_${new Date().toISOString().slice(0,10)}.pdf`);
-        } catch (e) { alert("Hata"); } finally { setYukleniyor(false); }
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Genel_Izin_Raporu_${new Date().toISOString().slice(0,10)}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (e) {
+            console.error("Toplu PDF hatası:", e);
+            alert("Rapor oluşturulamadı."); 
+        } finally {
+            setYukleniyor(false);
+        }
     };
 
 
@@ -259,7 +198,6 @@ export default function LeaveReports() {
             <div className="d-flex justify-content-between align-items-center mb-4">
                 <h2 className="fw-bold text-dark m-0"><FileBarChart size={28} className="me-2 text-primary"/> İzin Takip Raporu</h2>
                 <div className="d-flex gap-2">
-                    {/* --- YENİ ŞIK BUTONLAR (TOPLU) --- */}
                     <button className="btn btn-success shadow-sm d-flex align-items-center gap-2" onClick={downloadBulkExcel} disabled={yukleniyor}>
                         <FileSpreadsheet size={20}/> <span className="d-none d-md-inline">Tüm Liste (Excel)</span>
                     </button>
@@ -316,7 +254,7 @@ export default function LeaveReports() {
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered">
                         <div className="modal-content shadow-lg border-0 rounded-4">
-                            {/* --- YENİ MODAL BAŞLIĞI (FOTOĞRAFLI) --- */}
+                            {/* --- MODAL BAŞLIĞI (FOTOĞRAFLI) --- */}
                             <div className="modal-header bg-primary text-white p-4 align-items-center">
                                 <div className="d-flex align-items-center gap-3">
                                     <img 
@@ -324,7 +262,7 @@ export default function LeaveReports() {
                                         alt={secilenPersonel.ad}
                                         className="rounded-circle border border-3 border-white shadow-sm"
                                         style={{width: '64px', height: '64px', objectFit: 'cover'}}
-                                        onError={(e) => {e.target.src = DEFAULT_PHOTO}} // Resim yüklenemezse varsayılanı göster
+                                        onError={(e) => {e.target.src = DEFAULT_PHOTO}} 
                                     />
                                     <div>
                                         <h5 className="modal-title fw-bold mb-1">{secilenPersonel.ad} {secilenPersonel.soyad}</h5>
@@ -364,12 +302,12 @@ export default function LeaveReports() {
                                                 <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                                                     <h6 className="m-0 fw-bold text-primary d-flex align-items-center gap-2"><History size={18}/> İzin Geçmişi</h6>
                                                     
-                                                    {/* --- YENİ ŞIK BUTONLAR (TEKİL) --- */}
+                                                    {/* --- PDF BUTONLARI (BACKEND ÜZERİNDEN) --- */}
                                                     <div className="d-flex gap-2">
                                                         <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1 fw-bold" onClick={generateDetailExcel}>
                                                             <FileSpreadsheet size={16}/> Excel
                                                         </button>
-                                                        <button className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 fw-bold" onClick={generateDetailPDF}>
+                                                        <button className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 fw-bold" onClick={downloadDetailPDF}>
                                                             <FileText size={16}/> PDF Rapor
                                                         </button>
                                                     </div>
