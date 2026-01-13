@@ -25,7 +25,12 @@ export default function LeaveReports() {
 
     const verileriGetir = () => {
         const token = localStorage.getItem('token');
-        if(!token) { window.location.href = '/login'; return; }
+        
+        // Token kontrolü: Yoksa giriş sayfasına at
+        if(!token) {
+            window.location.href = '/login';
+            return;
+        }
 
         Promise.all([
             axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } }),
@@ -35,25 +40,34 @@ export default function LeaveReports() {
             setHakedisKurallari(kuralRes.data);
             setYukleniyor(false);
         }).catch(err => {
-            console.error(err);
+            console.error("Veri çekme hatası:", err);
             setYukleniyor(false);
         });
     };
 
-    // --- 📸 FOTOĞRAF URL DÜZELTİCİ (DÜZELTİLDİ) ---
+    // --- 📸 FOTOĞRAF URL DÜZELTİCİ (AKILLI VERSİYON) ---
     const getPhotoUrl = (path) => {
         if (!path) return DEFAULT_PHOTO;
-        // 1. Zaten internet adresi mi?
+        
+        // 1. Zaten internet adresi ise (http/https) direkt döndür
         if (path.startsWith('http')) return path;
-        // 2. Windows ters slash (\) karakterlerini düzelt
+        
+        // 2. Windows ters slash (\) karakterlerini düz slash (/) yap
         let cleanPath = path.replace(/\\/g, '/');
-        // 3. Dosya ismini al
+        
+        // 3. Yolun içinde 'uploads/' geçiyor mu?
+        if (cleanPath.includes('uploads/')) {
+            // 'uploads/' ve sonrasını al (Örn: "C:/Users/.../uploads/personel/resim.jpg" -> "uploads/personel/resim.jpg")
+            const relativePath = cleanPath.substring(cleanPath.indexOf('uploads/'));
+            return `${API_URL}/${relativePath}`;
+        }
+        
+        // 4. Eğer 'uploads/' yoksa ama dosya ismi varsa, varsayılan uploads klasöründe ara
         const fileName = cleanPath.split('/').pop();
-        // 4. Backend URL ile birleştir
         return `${API_URL}/uploads/${fileName}`;
     };
 
-    // --- 🧮 HESAPLAMA MOTORLARI ---
+    // --- 🧮 HESAPLAMA MOTORLARI (Sadece Arayüzde Gösterim İçin) ---
     const getSingleYearRights = (girisYili, hesaplanacakYil, kidemYili) => {
         const uygunKural = hakedisKurallari.find(k => hesaplanacakYil >= k.baslangic_yili && hesaplanacakYil <= k.bitis_yili && kidemYili >= k.kidem_alt && kidemYili <= k.kidem_ust);
         if (uygunKural) return uygunKural.gun_sayisi;
@@ -101,7 +115,7 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI ---
+    // --- 📄 EXCEL ÇIKTILARI (Tarayıcı Tarafında Oluşturulur) ---
     const generateDetailExcel = () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -151,6 +165,7 @@ export default function LeaveReports() {
     };
 
     // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN) ---
+    // 1. KİŞİSEL DETAYLI PDF
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -171,10 +186,11 @@ export default function LeaveReports() {
             link.remove();
         } catch (e) {
             console.error("PDF indirme hatası:", e);
-            alert("PDF indirilemedi. Backend tarafında veri eksikliği olabilir.");
+            alert("PDF indirilemedi. Lütfen sistem yöneticisine başvurun.");
         }
     };
 
+    // 2. TOPLU PDF
     const downloadBulkPDF = async () => {
         if(!confirm("Toplu PDF raporu oluşturulsun mu?")) return; 
         setYukleniyor(true);

@@ -9,6 +9,7 @@ const path = require('path');
 // 🛠️ YARDIMCI FONKSİYONLAR
 // ============================================================
 
+// Tarih Formatlayıcı (Hata önleyici)
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     try {
@@ -16,6 +17,18 @@ const tarihFormatla = (tarihStr) => {
         if(isNaN(d.getTime())) return '-';
         return d.toLocaleDateString('tr-TR');
     } catch { return '-'; }
+};
+
+// Dosya isminde Türkçe karakterleri temizler (HTTP Header Hatasını Önler)
+const turkceKarakterTemizle = (str) => {
+    if(!str) return "rapor";
+    return str.replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+              .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+              .replace(/ş/g, 's').replace(/Ş/g, 'S')
+              .replace(/ı/g, 'i').replace(/İ/g, 'I')
+              .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+              .replace(/ç/g, 'c').replace(/Ç/g, 'C')
+              .replace(/[^a-zA-Z0-9]/g, '_'); // Diğer özel karakterleri alt çizgi yap
 };
 
 const hesaplaBakiye = async (personel_id) => {
@@ -115,10 +128,10 @@ exports.talepOlustur = async (req, res) => {
             }
         }
 
-        // Tarih formatlama (Veritabanı formatına uygun hale getir)
+        // Veritabanı için tarih formatı düzeltme
         const formatDBDate = (str) => {
             if(!str) return null;
-            if(str.includes('T')) return str.split('T')[0];
+            if(str.includes('T')) return str.split('T')[0]; // ISO formatından temizle
             return str;
         }
 
@@ -359,7 +372,7 @@ exports.topluPdfRaporu = async (req, res) => {
 };
 
 // ============================================================
-// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Güvenli)
+// 📄 2. KİŞİYE ÖZEL DETAYLI PDF RAPORU (DÜZELTİLDİ: Türkçe Karakter ve Null Check)
 // ============================================================
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
@@ -376,8 +389,11 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         if (fs.existsSync(fontPath)) doc.registerFont('TrFont', fontPath);
         doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
 
+        // GÜVENLİ DOSYA İSMİ (Türkçe karakter temizlendi)
+        const safeFilename = turkceKarakterTemizle(p.ad + '_' + p.soyad) + '_Detayli_Rapor.pdf';
+
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename=${p.ad.replace(/ /g, '_')}_Detayli_Rapor.pdf`);
+        res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
         doc.pipe(res);
 
         doc.fontSize(16).fillColor('#1a3c6e').text('MERSİN BÜYÜKŞEHİR BELEDİYESİ', { align: 'center' });
@@ -388,7 +404,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.fillColor('#000').fontSize(10);
         let y = doc.y + 15;
         
-        // ⚠️ GÜVENLİ YAZDIRMA (String Çevirme ve Null Kontrolü)
+        // Verileri String() ile korumaya aldık
         doc.text(`Adı Soyadı: ${p.ad} ${p.soyad}`, 50, y); 
         doc.text(`TC Kimlik No: ${String(p.tc_no || '-')}`, 300, y); y+=20;
         doc.text(`Sicil No: ${String(p.sicil_no || '-')}`, 50, y); 
