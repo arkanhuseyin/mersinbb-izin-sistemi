@@ -144,7 +144,7 @@ export default function LeaveReports() {
         const p = personelDetay.personel;
         const doc = new jsPDF();
 
-        // Başlık
+        // Başlığım
         doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.text("ULAŞIM DAİRESİ BAŞKANLIĞI", 105, 20, null, null, "center");
         doc.setFontSize(12); doc.setTextColor(100); doc.text("Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU", 105, 28, null, null, "center");
         doc.line(14, 32, 196, 32); // Çizgi
