@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
-import { Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet, FileTypePdf } from 'lucide-react';
+import { Download, AlertTriangle, Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
@@ -40,7 +40,7 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 🧮 HESAPLAMA MOTORLARI (Aynı kalıyor) ---
+    // --- 🧮 HESAPLAMA MOTORLARI ---
     const getSingleYearRights = (girisYili, hesaplanacakYil, kidemYili) => {
         const uygunKural = hakedisKurallari.find(k => hesaplanacakYil >= k.baslangic_yili && hesaplanacakYil <= k.bitis_yili && kidemYili >= k.kidem_alt && kidemYili <= k.kidem_ust);
         if (uygunKural) return uygunKural.gun_sayisi;
@@ -95,7 +95,7 @@ export default function LeaveReports() {
         const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         
         const wsData = [
-            ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - PERSONEL İZİN DETAY RAPORU"], [" "],
+            ["Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU"], [" "],
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
             ["Kümülatif Hak", hesaplaKumulatifHakedis(p.ise_giris_tarihi)],
@@ -116,7 +116,7 @@ export default function LeaveReports() {
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, { headers: { Authorization: `Bearer ${token}` } });
             const { personeller, gecmisBakiyeler, izinler } = res.data;
-            const excelRows = [["MERSİN BÜYÜKŞEHİR BELEDİYESİ"], ["GENEL İZİN RAPORU"], [" "],
+            const excelRows = [["Toplu Taşıma Şube Müdürlüğü"], ["GENEL İZİN RAPORU"], [" "],
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]];
             personeller.forEach((p) => {
                 const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
@@ -144,7 +144,7 @@ export default function LeaveReports() {
         const p = personelDetay.personel;
         const doc = new jsPDF();
 
-        // Başlığım
+        // Başlık
         doc.setFontSize(16); doc.setTextColor(41, 128, 185); doc.text("ULAŞIM DAİRESİ BAŞKANLIĞI", 105, 20, null, null, "center");
         doc.setFontSize(12); doc.setTextColor(100); doc.text("Toplu Taşıma Şube Müdürlüğü - PERSONEL İZİN DETAY RAPORU", 105, 28, null, null, "center");
         doc.line(14, 32, 196, 32); // Çizgi
@@ -215,7 +215,7 @@ export default function LeaveReports() {
             
             const doc = new jsPDF('l', 'mm', 'a4'); // Yatay (Landscape)
 
-            doc.setFontSize(18); doc.setTextColor(41, 128, 185); doc.text("TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ", 148.5, 20, null, null, "center");
+            doc.setFontSize(18); doc.setTextColor(41, 128, 185); doc.text("Toplu Taşıma Şube Müdürlüğü", 148.5, 20, null, null, "center");
             doc.setFontSize(12); doc.setTextColor(100); doc.text("GENEL İZİN DURUM RAPORU", 148.5, 28, null, null, "center");
 
             const tableBody = personeller.map((p, index) => {
@@ -264,7 +264,7 @@ export default function LeaveReports() {
                         <FileSpreadsheet size={20}/> <span className="d-none d-md-inline">Tüm Liste (Excel)</span>
                     </button>
                     <button className="btn btn-danger shadow-sm d-flex align-items-center gap-2" onClick={downloadBulkPDF} disabled={yukleniyor}>
-                        <FileTypePdf size={20}/> <span className="d-none d-md-inline">Tüm Liste (PDF)</span>
+                        <FileText size={20}/> <span className="d-none d-md-inline">Tüm Liste (PDF)</span>
                     </button>
                 </div>
             </div>
@@ -370,7 +370,7 @@ export default function LeaveReports() {
                                                             <FileSpreadsheet size={16}/> Excel
                                                         </button>
                                                         <button className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 fw-bold" onClick={generateDetailPDF}>
-                                                            <FileTypePdf size={16}/> PDF Rapor
+                                                            <FileText size={16}/> PDF Rapor
                                                         </button>
                                                     </div>
                                                 </div>
