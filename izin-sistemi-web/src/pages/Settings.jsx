@@ -1,20 +1,49 @@
-import { useState, useEffect, useCallback } from 'react';
+import HakedisAyarlari from '../components/HakedisAyarlari';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History, Shirt, ToggleLeft, ToggleRight, Briefcase
+    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History, Shirt, ToggleLeft, ToggleRight
 } from 'lucide-react';
-
-// Hakediş Ayarları Komponenti
-import HakedisAyarlari from '../components/HakedisAyarlari';
 
 // API URL
 const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
+
+// ============================================================
+// 📋 HAKEDİŞ MATRİSİ (FRONTEND TARAFI İÇİN)
+// ============================================================
+// A. HAKEDİŞ MATRİSİ (Tablo Verileri - RESİMLERE GÖRE DÜZELTİLDİ)
+const HAKEDIS_MATRISI = {
+    // --- GRUP 1: ESKİ GİRİŞLİLER (2007 - 2015) - BU KISIM DOĞRUYDU ---
+    "2007": { 2020: 25, 2021: 25, 2022: 30, 2023: 30, 2024: 32, 2025: 32 },
+    "2008": { 2020: 25, 2021: 25, 2022: 25, 2023: 30, 2024: 32, 2025: 32 },
+    "2009": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 32, 2025: 32 },
+    "2010": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 32 },
+    "2011": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2012": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2013": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2014": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+    "2015": { 2020: 25, 2021: 25, 2022: 25, 2023: 25, 2024: 27, 2025: 27 },
+
+    // --- GRUP 2: YENİ GİRİŞLİLER (2016 - 2025) - HATALI KISIMLAR DÜZELTİLDİ ---
+    "2016": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2017": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2018": { 2020: 16, 2021: 16, 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2019": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    "2020": { 2020: 18, 2021: 18, 2022: 18, 2023: 18, 2024: 20, 2025: 20 },
+    
+    // ⚠️ DÜZELTME: Resimlerde bu yıllar 16-18-20 gün görünüyor, 25-27 değil.
+    "2021": { 2021: 16, 2022: 16, 2023: 16, 2024: 20, 2025: 20 },
+    "2022": { 2022: 16, 2023: 16, 2024: 18, 2025: 18 },
+    "2023": { 2023: 16, 2024: 18, 2025: 18 },
+    "2024": { 2024: 18, 2025: 18 },
+    "2025": { 2025: 18 }
+};
 
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('profile');
     const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } });
     
-    const token = localStorage.getItem('token'); 
+    const token = localStorage.getItem('token'); // Token'ı buraya aldık
 
     const [usersList, setUsersList] = useState([]);
     const [birimler, setBirimler] = useState([]);
@@ -22,9 +51,6 @@ export default function Settings() {
     const [filterStatus, setFilterStatus] = useState('all');
     const [yukleniyor, setYukleniyor] = useState(false);
     
-    // --- DİNAMİK HAKEDİŞ STATE'İ ---
-    const [hakedisKurallari, setHakedisKurallari] = useState([]);
-
     const [showModal, setShowModal] = useState(false);
     const [modalMode, setModalMode] = useState('add'); 
     const [modalTab, setModalTab] = useState(1); 
@@ -34,16 +60,16 @@ export default function Settings() {
     const [fotograf, setFotograf] = useState(null);
 
     const [izinGecmisi, setIzinGecmisi] = useState([]);
-    const [izinHakki, setIzinHakki] = useState(0); // Bu yılki hak
+    const [izinHakki, setIzinHakki] = useState(0);
     const [kullanilanIzin, setKullanilanIzin] = useState(0);
     const [kidemYili, setKidemYili] = useState(0);
 
-    // Geçmiş Bakiye Yönetimi
+    // YENİ: Geçmiş Bakiye Yönetimi State'leri (MEVCUT)
     const [gecmisBakiyeler, setGecmisBakiyeler] = useState([]);
     const [yeniGecmisYil, setYeniGecmisYil] = useState(new Date().getFullYear() - 1);
     const [yeniGecmisGun, setYeniGecmisGun] = useState(0);
 
-    // Kıyafet Yönetimi
+    // ✅ YENİ EKLENEN: KIYAFET YÖNETİMİ STATE
     const [kiyafetDonemiAktif, setKiyafetDonemiAktif] = useState(false);
     const [kiyafetLoading, setKiyafetLoading] = useState(false);
 
@@ -65,7 +91,7 @@ export default function Settings() {
             "Sürekli İşçi", "Kadrolu İşçi", "Memur", "Sözleşmeli Personel", "Şirket Personeli", "Geçici İşçi", "Düz İşçi (KHK)"
         ],
         roller: [
-            "personel", "amir", "yazici", "ik", "admin", "filo" 
+            "personel", "amir", "yazici", "ik", "admin", "filo" // Filo eklendi
         ]
     };
 
@@ -83,73 +109,33 @@ export default function Settings() {
     };
     const [formData, setFormData] = useState(initialFormState);
 
-    // --- YETKİ KONTROLÜ ---
-    const checkPermission = (modulKey) => {
-        if (user?.rol === 'admin') return true; 
-        const userPermissions = user?.yetkiler || [];
-        const permission = userPermissions.find(p => p.modul_adi === modulKey);
-        if (permission) return permission.goruntule === true; 
-        if (modulKey === 'ayar_profil') return true;
-        return false; 
-    };
+    const isYetkili = user && ['admin', 'ik', 'filo'].includes(user.rol);
 
-    // --- VERİ YÜKLEME ---
     useEffect(() => {
-        // Hakediş Kurallarını Her Zaman Çek (Hesaplama için gerekli)
-        fetchHakedisKurallari();
-
-        if (activeTab === 'users' && checkPermission('ayar_personel')) { fetchUsers(); fetchBirimler(); }
-        if (activeTab === 'kiyafet' && checkPermission('ayar_kiyafet')) { checkKiyafetDurumu(); }
+        if (activeTab === 'users' && isYetkili) { fetchUsers(); fetchBirimler(); }
+        // ✅ Yeni: Kıyafet sekmesi kontrolü
+        if (activeTab === 'kiyafet' && isYetkili) { checkKiyafetDurumu(); }
     }, [activeTab]);
 
-    const fetchHakedisKurallari = async () => {
-        try {
-            const res = await axios.get(`${API_URL}/api/ayar/hakedis-listele`, { headers: { Authorization: `Bearer ${token}` } });
-            setHakedisKurallari(res.data);
-        } catch (error) { console.error("Kurallar çekilemedi:", error); }
-    };
-
+    // --- OTOMATİK ROL ÖNERİSİ ---
     const handleGorevChange = (e) => {
         const secilenGorev = e.target.value;
         let onerilenRol = 'personel'; 
-        if (['Baş Şoför', 'Günlük Görevlendirmeci', 'Puantör'].includes(secilenGorev)) onerilenRol = 'amir';
-        else if (['Yazıcı'].includes(secilenGorev)) onerilenRol = 'yazici';
-        else if (['Personel İşleri'].includes(secilenGorev)) onerilenRol = 'ik'; 
+
+        if (['Baş Şoför', 'Günlük Görevlendirmeci', 'Puantör'].includes(secilenGorev)) {
+            onerilenRol = 'amir';
+        } 
+        else if (['Yazıcı'].includes(secilenGorev)) {
+            onerilenRol = 'yazici';
+        } 
+        else if (['Personel İşleri'].includes(secilenGorev)) {
+            onerilenRol = 'ik'; 
+        }
+
         setFormData({ ...formData, gorev: secilenGorev, rol: onerilenRol });
     };
 
-    // --- 🔥 DİNAMİK HAKEDİŞ HESAPLAMA FONKSİYONU ---
-    // Bu fonksiyon veritabanındaki kurallara göre kişiye özel izin gününü hesaplar
-    const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
-        if (!iseGirisTarihi) return 0;
-        
-        const giris = new Date(iseGirisTarihi);
-        const bugun = new Date();
-        const farkMs = bugun - giris;
-        const kidemYili = Math.floor(farkMs / (1000 * 60 * 60 * 24 * 365.25));
-        const girisYili = giris.getFullYear();
-
-        // 1. Veritabanındaki kuralları kontrol et
-        // Kural: Giriş yılı tutacak VE kıdem yılı aralıkta olacak
-        const uygunKural = hakedisKurallari.find(k => 
-            k.baslangic_yili === girisYili && 
-            kidemYili >= k.kidem_alt && 
-            kidemYili <= k.kidem_ust
-        );
-
-        if (uygunKural) {
-            return uygunKural.gun_sayisi;
-        }
-
-        // 2. Kural yoksa Standart İş Kanunu (Yedek)
-        if (kidemYili < 1) return 0;
-        if (kidemYili <= 5) return 14;
-        if (kidemYili < 15) return 20;
-        return 26;
-
-    }, [hakedisKurallari]);
-
-    // --- FORM VERİSİ DEĞİŞİNCE HESAPLAMA YAP ---
+    // --- 🟢 GÜNCELLENEN HESAPLAMA MANTIĞI ---
     useEffect(() => {
         if (formData.ise_giris_tarihi) {
             const giris = new Date(formData.ise_giris_tarihi);
@@ -158,8 +144,25 @@ export default function Settings() {
             const yil = Math.floor(fark / (1000 * 60 * 60 * 24 * 365.25));
             setKidemYili(yil < 0 ? 0 : yil);
 
-            // Dinamik hesaplama çağrısı
-            const toplamHak = hesaplaDinamikHakedis(formData.ise_giris_tarihi);
+            // --- YENİ MATRİS SİSTEMİ İLE HAKEDİŞ ---
+            const girisYili = giris.getFullYear();
+            const buYil = bugun.getFullYear();
+            let arananGirisYili = girisYili;
+            if (girisYili < 2007) arananGirisYili = 2007;
+
+            let toplamHak = 0;
+
+            // 1. Tabloda var mı kontrol et
+            if (HAKEDIS_MATRISI[arananGirisYili] && HAKEDIS_MATRISI[arananGirisYili][buYil]) {
+                toplamHak = HAKEDIS_MATRISI[arananGirisYili][buYil];
+            } else {
+                // 2. Yoksa Eski Sistem (Yedek)
+                if (yil >= 1) {
+                    if (yil <= 5) toplamHak = 14;
+                    else if (yil < 15) toplamHak = 20;
+                    else toplamHak = 26;
+                }
+            }
             setIzinHakki(toplamHak);
 
             if (izinGecmisi.length > 0) {
@@ -171,7 +174,7 @@ export default function Settings() {
                 setKullanilanIzin(0);
             }
         }
-    }, [formData.ise_giris_tarihi, izinGecmisi, hakedisKurallari, hesaplaDinamikHakedis]);
+    }, [formData.ise_giris_tarihi, izinGecmisi]);
 
     useEffect(() => {
         if (showModal && modalMode === 'edit' && modalTab === 2 && formData.personel_id) {
@@ -189,6 +192,7 @@ export default function Settings() {
         } catch (error) { console.error('İzin geçmişi hatası', error); }
     };
 
+    // YENİ: Geçmiş Bakiyeleri Çek
     const fetchGecmisBakiyeler = async (id) => {
         try {
             const res = await axios.get(`${API_URL}/api/izin/gecmis-bakiyeler/${id}`, {
@@ -198,6 +202,7 @@ export default function Settings() {
         } catch (error) { console.error('Geçmiş bakiye hatası', error); }
     };
 
+    // YENİ: Geçmiş Bakiye Ekle
     const addGecmisBakiye = async () => {
         if (!yeniGecmisGun || yeniGecmisGun <= 0) return alert("Lütfen geçerli bir gün sayısı giriniz.");
         try {
@@ -210,6 +215,7 @@ export default function Settings() {
         } catch (e) { alert("Hata oluştu."); }
     };
 
+    // YENİ: Geçmiş Bakiye Sil
     const deleteGecmisBakiye = async (id) => {
         if(!window.confirm("Silmek istediğinize emin misiniz?")) return;
         try {
@@ -220,6 +226,7 @@ export default function Settings() {
         } catch (e) { alert("Hata oluştu."); }
     };
 
+    // ✅ YENİ: KIYAFET FONKSİYONLARI
     const checkKiyafetDurumu = async () => {
         setKiyafetLoading(true);
         try {
@@ -285,17 +292,21 @@ export default function Settings() {
         e.preventDefault();
         try {
             const data = new FormData();
+            
             Object.keys(formData).forEach(key => { 
                 data.append(key, formData[key] === null || formData[key] === undefined ? '' : formData[key]); 
             });
+            
             if (fotograf) data.append('fotograf', fotograf);
 
             const url = modalMode === 'add' 
                 ? `${API_URL}/api/personel/ekle` 
                 : `${API_URL}/api/personel/guncelle/${formData.personel_id}`;
+            
             const method = modalMode === 'add' ? 'post' : 'put';
 
             await axios[method](url, data, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } });
+            
             alert(`Personel başarıyla ${modalMode === 'add' ? 'eklendi' : 'güncellendi'}!`);
             setShowModal(false);
             fetchUsers();
@@ -316,12 +327,14 @@ export default function Settings() {
                 await axios.delete(`${API_URL}/api/personel/sil/${id}`, { headers: { Authorization: `Bearer ${token}` } });
             }
             alert('İşlem başarılı.');
+            
             setUsersList(prev => prev.map(u => {
                 if (u.personel_id !== id) return u;
                 if (type === 'aktif') return { ...u, aktif: true, calisma_durumu: 'Çalışıyor' };
                 if (type === 'dondur') return { ...u, aktif: false, calisma_durumu: reason };
                 return u;
             }).filter(u => type !== 'sil' || u.personel_id !== id));
+
         } catch (e) { alert('Hata oluştu.'); }
     };
 
@@ -365,40 +378,18 @@ export default function Settings() {
                 <User size={28}/> Yönetim Paneli
             </h2>
 
-            {/* SEKME BAŞLIKLARI (YETKİYE GÖRE) */}
             <ul className="nav nav-tabs mb-4 border-bottom-0">
-                {checkPermission('ayar_profil') && (
-                    <li className="nav-item">
-                        <button className={`nav-link px-4 fw-bold ${activeTab === 'profile' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
-                            onClick={() => setActiveTab('profile')}>Profilim</button>
-                    </li>
-                )}
-                {checkPermission('ayar_personel') && (
-                    <li className="nav-item">
-                        <button className={`nav-link px-4 fw-bold ${activeTab === 'users' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
-                            onClick={() => setActiveTab('users')}>Personel Listesi</button>
-                    </li>
-                )}
-                {checkPermission('ayar_kiyafet') && (
-                    <li className="nav-item">
-                        <button className={`nav-link px-4 fw-bold ${activeTab === 'kiyafet' ? 'active shadow-sm border-0 bg-dark text-white' : 'text-muted border-0 bg-transparent'}`} 
-                            onClick={() => setActiveTab('kiyafet')}>👕 Kıyafet Yönetimi</button>
-                    </li>
-                )}
-                {/* ✅ YENİ: HAKEDİŞ AYARLARI BURADA */}
-                {checkPermission('ayar_hakedis') && (
-                    <li className="nav-item">
-                        <button className={`nav-link px-4 fw-bold ${activeTab === 'hakedis' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
-                            onClick={() => setActiveTab('hakedis')}>📅 İzin Hakediş Ayarları</button>
-                    </li>
-                )}
+                <li className="nav-item"><button className={`nav-link px-4 fw-bold ${activeTab === 'profile' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} onClick={() => setActiveTab('profile')}>Profilim</button></li>
+                {isYetkili && <li className="nav-item"><button className={`nav-link px-4 fw-bold ${activeTab === 'users' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} onClick={() => setActiveTab('users')}>Personel Listesi</button></li>}
+                {/* ✅ YENİ SEKME */}
+                {isYetkili && <li className="nav-item"><button className={`nav-link px-4 fw-bold ${activeTab === 'kiyafet' ? 'active shadow-sm border-0 bg-dark text-white' : 'text-muted border-0 bg-transparent'}`} onClick={() => setActiveTab('kiyafet')}>👕 Kıyafet Yönetimi</button></li>}
             </ul>
 
             <div className="card shadow-sm border-0 rounded-4" style={{minHeight: '600px'}}>
                 <div className="card-body p-4">
                     
                     {/* TAB: PROFİLİM */}
-                    {activeTab === 'profile' && checkPermission('ayar_profil') && (
+                    {activeTab === 'profile' && (
                         <div className="row justify-content-center">
                             <div className="col-md-6 text-center">
                                 <div className="bg-light d-inline-block p-4 rounded-circle mb-3"><User size={64} className="text-primary"/></div>
@@ -423,8 +414,8 @@ export default function Settings() {
                         </div>
                     )}
 
-                    {/* TAB: KIYAFET YÖNETİMİ */}
-                    {activeTab === 'kiyafet' && checkPermission('ayar_kiyafet') && (
+                    {/* ✅ TAB: KIYAFET YÖNETİMİ (YENİ) */}
+                    {activeTab === 'kiyafet' && isYetkili && (
                         <div className="row justify-content-center pt-5">
                             <div className="col-md-6 text-center">
                                 <div className={`card border-0 shadow-lg ${kiyafetDonemiAktif ? 'bg-success-subtle' : 'bg-danger-subtle'}`}>
@@ -449,16 +440,25 @@ export default function Settings() {
                             </div>
                         </div>
                     )}
-
-                    {/* ✅ TAB: HAKEDİŞ AYARLARI (YENİ) */}
-                    {activeTab === 'hakedis' && checkPermission('ayar_hakedis') && (
-                        <div className="pt-4">
-                            <HakedisAyarlari />
-                        </div>
-                    )}
+					{/* ✅ TAB: HAKEDİŞ AYARLARI */}
+{activeTab === 'hakedis' && isYetkili && (
+    <div className="pt-4">
+        <HakedisAyarlari />
+    </div>
+)}
+						{isYetkili && (
+								<li className="nav-item">
+								<button 
+							className={`nav-link px-4 fw-bold ${activeTab === 'hakedis' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
+							onClick={() => setActiveTab('hakedis')}
+																			>
+											📅 İzin Hakediş Ayarları
+													</button>
+												</li>
+															)}
 
                     {/* TAB: PERSONEL LİSTESİ */}
-                    {activeTab === 'users' && checkPermission('ayar_personel') && (
+                    {activeTab === 'users' && isYetkili && (
                         <>
                             <div className="d-flex justify-content-between align-items-end mb-4">
                                 <div className="w-50">
@@ -482,18 +482,10 @@ export default function Settings() {
                             <div className="table-responsive">
                                 <table className="table table-hover align-middle">
                                     <thead className="bg-light text-muted small text-uppercase">
-                                        <tr>
-                                            <th>TC / Ad Soyad</th>
-                                            <th>Birim / Görev</th>
-                                            <th>Rol</th>
-                                            <th>Giriş Tarihi</th>
-                                            <th className="text-center text-primary">Hakediş (Yıllık)</th> {/* ✅ YENİ SÜTUN */}
-                                            <th className="text-center">Durum</th>
-                                            <th className="text-end">İşlemler</th>
-                                        </tr>
+                                        <tr><th>TC / Ad Soyad</th><th>Birim / Görev</th><th>Rol</th><th>Giriş Tarihi</th><th className="text-center">Durum</th><th className="text-end">İşlemler</th></tr>
                                     </thead>
                                     <tbody>
-                                        {yukleniyor ? <tr><td colSpan="7" className="text-center py-4">Yükleniyor...</td></tr> : 
+                                        {yukleniyor ? <tr><td colSpan="6" className="text-center py-4">Yükleniyor...</td></tr> : 
                                          filteredUsers.map(u => {
                                             const isActive = u.aktif === true || u.aktif === 'true' || u.aktif === 1;
                                             return (
@@ -505,12 +497,6 @@ export default function Settings() {
                                                     </td>
                                                     <td><span className="badge bg-primary bg-opacity-10 text-primary border fw-normal">{u.rol_adi?.toUpperCase()}</span></td>
                                                     <td className="small">{new Date(u.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
-                                                    
-                                                    {/* ✅ HESAPLANMIŞ HAKEDİŞ DEĞERİ (DİNAMİK) */}
-                                                    <td className="text-center fw-bold text-primary">
-                                                        {hesaplaDinamikHakedis(u.ise_giris_tarihi)} Gün
-                                                    </td>
-
                                                     <td className="text-center">{!isActive ? <span className="badge bg-secondary">Pasif ({u.calisma_durumu})</span> : <span className="badge bg-success">Aktif</span>}</td>
                                                     <td className="text-end">
                                                         <button className="btn btn-sm btn-light text-danger me-1" title="PDF" onClick={() => downloadPdf(u.personel_id, u.ad)}><FileDown size={18}/></button>
@@ -558,11 +544,9 @@ export default function Settings() {
                                 </ul>
 
                                 <div className="p-4">
+                                    {/* TAB 1: BİLGİLER FORM */}
                                     {modalTab === 1 && (
                                         <form onSubmit={handleSubmit}>
-                                            {/* (BURASI AYNI KALDI, KOD TEKRARI OLMASIN DİYE KISALTIM) */}
-                                            {/* Önceki kodunuzdaki Personel Bilgileri formu buraya gelecek */}
-                                            {/* ... */}
                                             <div className="row g-3">
                                                 <div className="col-md-3 text-center border-end">
                                                     <div className="mb-3">
@@ -573,33 +557,72 @@ export default function Settings() {
                                                             }
                                                         </div>
                                                         <input type="file" className="form-control form-control-sm mt-2" onChange={e=>setFotograf(e.target.files[0])} />
+                                                        <div className="form-text small">Değiştirmek için dosya seçin.</div>
                                                     </div>
-                                                    <textarea className="form-control form-control-sm" rows="5" placeholder="Adres" value={formData.adres} onChange={e=>setFormData({...formData, adres:e.target.value})}></textarea>
+                                                    <div className="text-start">
+                                                        <label className="small fw-bold text-muted">Adres</label>
+                                                        <textarea className="form-control form-control-sm" rows="5" value={formData.adres} onChange={e=>setFormData({...formData, adres:e.target.value})}></textarea>
+                                                    </div>
                                                 </div>
 
                                                 <div className="col-md-9">
                                                     <div className="row g-2">
-                                                        {/* KİMLİK & İLETİŞİM */}
                                                         <div className="col-12"><h6 className="text-primary small fw-bold border-bottom pb-1">Kimlik & İletişim</h6></div>
                                                         <div className="col-md-4"><label className="small fw-bold">TC Kimlik No *</label><input className="form-control form-control-sm" required value={formData.tc_no} onChange={e=>setFormData({...formData, tc_no:e.target.value})} /></div>
                                                         <div className="col-md-4"><label className="small fw-bold">Ad *</label><input className="form-control form-control-sm" required value={formData.ad} onChange={e=>setFormData({...formData, ad:e.target.value})} /></div>
                                                         <div className="col-md-4"><label className="small fw-bold">Soyad *</label><input className="form-control form-control-sm" required value={formData.soyad} onChange={e=>setFormData({...formData, soyad:e.target.value})} /></div>
+                                                        
                                                         <div className="col-md-4"><label className="small fw-bold">Telefon 1</label><input className="form-control form-control-sm" value={formData.telefon} onChange={e=>setFormData({...formData, telefon:e.target.value})} /></div>
                                                         <div className="col-md-4"><label className="small fw-bold">Telefon 2</label><input className="form-control form-control-sm" value={formData.telefon2} onChange={e=>setFormData({...formData, telefon2:e.target.value})} /></div>
                                                         <div className="col-md-4"><label className="small fw-bold">Doğum Tarihi</label><input type="date" className="form-control form-control-sm" value={formData.dogum_tarihi} onChange={e=>setFormData({...formData, dogum_tarihi:e.target.value})} /></div>
                                                         
-                                                        {/* KURUMSAL */}
+                                                        <div className="col-md-3"><label className="small fw-bold">Cinsiyet</label><select className="form-select form-select-sm" value={formData.cinsiyet} onChange={e=>setFormData({...formData, cinsiyet:e.target.value})}><option>Erkek</option><option>Kadın</option></select></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Medeni Hal</label><select className="form-select form-select-sm" value={formData.medeni_hal} onChange={e=>setFormData({...formData, medeni_hal:e.target.value})}><option>Bekar</option><option>Evli</option></select></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Kan Grubu</label><select className="form-select form-select-sm" value={formData.kan_grubu} onChange={e=>setFormData({...formData, kan_grubu:e.target.value})}><option value="">Seç</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Tahsil</label><select className="form-select form-select-sm" value={formData.egitim_durumu} onChange={e=>setFormData({...formData, egitim_durumu:e.target.value})}><option>İlkokul</option><option>Ortaokul</option><option>Lise</option><option>Önlisans</option><option>Lisans</option><option>Yüksek Lisans</option></select></div>
+
                                                         <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Kurumsal Bilgiler</h6></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Sicil No</label><input className="form-control form-control-sm" value={formData.sicil_no} onChange={e=>setFormData({...formData, sicil_no:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Asis Kart No</label><input className="form-control form-control-sm" value={formData.asis_kart_no} onChange={e=>setFormData({...formData, asis_kart_no:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Hareket Merkezi</label><input className="form-control form-control-sm" value={formData.hareket_merkezi} onChange={e=>setFormData({...formData, hareket_merkezi:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Çalışma Durumu</label><select className="form-select form-select-sm" value={formData.calisma_durumu} onChange={e=>setFormData({...formData, calisma_durumu:e.target.value})}><option>Çalışıyor</option><option>Emekli</option><option>İş Akdi Fesih</option></select></div>
+
                                                         <div className="col-md-4"><label className="small fw-bold">Birim</label><select className="form-select form-select-sm" value={formData.birim_id} onChange={e=>setFormData({...formData, birim_id:e.target.value})}>{birimler.map(b=><option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>)}</select></div>
-                                                        <div className="col-md-4"><label className="small fw-bold text-primary">Görevi</label><select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange}><option value="">Seçiniz...</option>{sabitListeler.gorevler.sort().map(g => <option key={g} value={g}>{g}</option>)}</select></div>
-                                                        <div className="col-md-4"><label className="small fw-bold text-danger">Rol (Yetki)</label><select className="form-select form-select-sm border-danger" value={formData.rol} onChange={e=>setFormData({...formData, rol: e.target.value})}>{sabitListeler.roller.map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}</select></div>
                                                         
-                                                        <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Şifre</h6></div>
-                                                        <div className="col-md-4"><input className="form-control form-control-sm" placeholder="Giriş Şifresi" value={formData.sifre} onChange={e=>setFormData({...formData, sifre:e.target.value})} /></div>
+                                                        <div className="col-md-4">
+                                                            <label className="small fw-bold text-primary">Görevi (Rol Önerisi)</label>
+                                                            <select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange}>
+                                                                <option value="">Seçiniz...</option>
+                                                                {sabitListeler.gorevler.sort().map(g => <option key={g} value={g}>{g}</option>)}
+                                                            </select>
+                                                        </div>
+
+                                                        <div className="col-md-4">
+                                                            <label className="small fw-bold text-danger d-flex align-items-center gap-1"><Shield size={14}/> Sistem Rolü (Yetki)</label>
+                                                            <select className="form-select form-select-sm border-danger" value={formData.rol} onChange={e=>setFormData({...formData, rol: e.target.value})}>
+                                                                {sabitListeler.roller.map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        
+                                                        <div className="col-md-4"><label className="small fw-bold">Kadro Tipi</label><select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})}>
+                                                            <option value="">Seçiniz...</option>{sabitListeler.kadroTipleri.map(k => <option key={k} value={k}>{k}</option>)}</select>
+                                                        </div>
+
+                                                        <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Lojistik ve Beden</h6></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet No</label><input className="form-control form-control-sm" value={formData.ehliyet_no} onChange={e=>setFormData({...formData, ehliyet_no:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet Sınıfı</label><input className="form-control form-control-sm" value={formData.ehliyet_sinifi} onChange={e=>setFormData({...formData, ehliyet_sinifi:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet Bitiş</label><input type="date" className="form-control form-control-sm" value={formData.ehliyet_tarih} onChange={e=>setFormData({...formData, ehliyet_tarih:e.target.value})} /></div>
+                                                        <div className="col-md-3"><label className="small fw-bold">SRC Belge No</label><input className="form-control form-control-sm" value={formData.src_belge_no} onChange={e=>setFormData({...formData, src_belge_no:e.target.value})} /></div>
+                                                        
+                                                        <div className="col-md-2"><label className="small">Ayakkabı</label><input className="form-control form-control-sm" value={formData.ayakkabi_no} onChange={e=>setFormData({...formData, ayakkabi_no:e.target.value})} /></div>
+                                                        <div className="col-md-2"><label className="small">Tişört</label><input className="form-control form-control-sm" value={formData.tisort_beden} onChange={e=>setFormData({...formData, tisort_beden:e.target.value})} /></div>
+                                                        <div className="col-md-2"><label className="small">Gömlek</label><input className="form-control form-control-sm" value={formData.gomlek_beden} onChange={e=>setFormData({...formData, gomlek_beden:e.target.value})} /></div>
+                                                        <div className="col-md-2"><label className="small">Mont</label><input className="form-control form-control-sm" value={formData.mont_beden} onChange={e=>setFormData({...formData, mont_beden:e.target.value})} /></div>
+                                                        <div className="col-md-2"><label className="small">Süveter</label><input className="form-control form-control-sm" value={formData.suveter_beden} onChange={e=>setFormData({...formData, suveter_beden:e.target.value})} /></div>
+                                                        <div className="col-md-2"><label className="small text-danger fw-bold">Şifre (Login)</label><input className="form-control form-control-sm" value={formData.sifre} onChange={e=>setFormData({...formData, sifre:e.target.value})} /></div>
                                                     </div>
                                                 </div>
                                             </div>
-
                                             <div className="mt-4 text-end border-top pt-3">
                                                 <button type="button" className="btn btn-secondary me-2 px-4" onClick={()=>setShowModal(false)}>Kapat</button>
                                                 <button type="submit" className="btn btn-success px-5 fw-bold shadow-sm"><Save size={18} className="me-2"/> Kaydet & Güncelle</button>
@@ -607,20 +630,14 @@ export default function Settings() {
                                         </form>
                                     )}
 
+                                    {/* TAB 2: İZİN YÖNETİMİ & GEÇMİŞ */}
                                     {modalTab === 2 && (
                                         <div className="p-3">
-                                            {/* --- TARİH GÜNCELLEME --- */}
                                             <form onSubmit={handleSubmit}>
                                                 <div className="row mb-4 bg-light p-3 rounded border">
                                                     <div className="col-md-6 border-end">
                                                         <label className="form-label fw-bold text-dark d-flex align-items-center gap-2"><Calendar size={18}/> İşe Giriş Tarihi</label>
                                                         <input type="date" className="form-control" value={formData.ise_giris_tarihi} onChange={e=>setFormData({...formData, ise_giris_tarihi:e.target.value})} />
-                                                        
-                                                        {/* HAKEDİŞ BİLGİSİ (DİNAMİK) */}
-                                                        <div className="mt-2 text-success small fw-bold d-flex align-items-center gap-2">
-                                                            <Briefcase size={16}/> 
-                                                            Kıdem: {kidemYili} Yıl | Hakediş: <span className="badge bg-success fs-6">{izinHakki} Gün</span>
-                                                        </div>
                                                     </div>
                                                     <div className="col-md-6">
                                                         <label className="form-label fw-bold text-danger d-flex align-items-center gap-2"><AlertCircle size={18}/> İşten Ayrılış Tarihi</label>
@@ -632,12 +649,11 @@ export default function Settings() {
 
                                             <hr/>
 
-                                            {/* --- GEÇMİŞ BAKİYE EKLEME --- */}
                                             <div className="bg-warning-subtle p-3 rounded mb-4 border border-warning">
-                                                <h6 className="fw-bold d-flex align-items-center gap-2 text-dark"><History size={18}/> Geçmiş Dönem İzin Girişi</h6>
+                                                <h6 className="fw-bold d-flex align-items-center gap-2 text-dark"><History size={18}/> Geçmiş Dönem İzin Girişi (Excel'den Aktarım)</h6>
                                                 <div className="d-flex gap-2 align-items-end mt-2">
                                                     <div><label className="small fw-bold">Hangi Yıl?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisYil} onChange={e=>setYeniGecmisYil(e.target.value)} style={{width:'80px'}}/></div>
-                                                    <div><label className="small fw-bold">Kaç Gün?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisGun} onChange={e=>setYeniGecmisGun(e.target.value)} style={{width:'100px'}}/></div>
+                                                    <div><label className="small fw-bold">Kaç Gün Kaldı?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisGun} onChange={e=>setYeniGecmisGun(e.target.value)} style={{width:'100px'}}/></div>
                                                     <button className="btn btn-sm btn-success fw-bold" onClick={addGecmisBakiye}><Plus size={14}/> Ekle</button>
                                                 </div>
                                                 
@@ -649,9 +665,9 @@ export default function Settings() {
                                                         </span>
                                                     )) : <span className="text-muted small fst-italic">Henüz geçmiş kayıt eklenmemiş.</span>}
                                                 </div>
+                                                <div className="mt-2 small text-muted">* Buraya girilen günler, personelin toplam izin havuzuna eklenir.</div>
                                             </div>
 
-                                            {/* --- GEÇMİŞ İZİN HAREKETLERİ --- */}
                                             <h6 className="border-bottom pb-2 fw-bold text-dark d-flex align-items-center"><FileDown size={18} className="me-2"/> Geçmiş İzin Hareketleri (Sistem)</h6>
                                             <div className="table-responsive bg-white border rounded" style={{maxHeight:'350px'}}>
                                                 <table className="table table-sm table-striped table-hover text-center mb-0">
