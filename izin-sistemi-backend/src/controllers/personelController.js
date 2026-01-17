@@ -5,8 +5,8 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-// ✅ YENİ: Dinamik Hakediş Hesaplama Modülü
-const dinamikHakedisHesapla = require('../utils/hakedisHesapla');
+// ✅ YENİ: Merkezi Hakediş Hesaplama Modülünden Fonksiyonları Çekiyoruz
+const { hesaplaKumulatif, hesaplaBuYil } = require('../utils/hakedisHesapla');
 
 const formatNull = (val) => (val === '' || val === undefined || val === 'null' ? null : val);
 
@@ -21,22 +21,24 @@ const tarihFormatla = (tarihStr) => {
     return tarihStr;
 };
 
-// ❌ ESKİ MATRİS VE HESAPLAMA FONKSİYONLARI SİLİNDİ
-
 // ============================================================
-// 🛠️ YARDIMCI: Net Bakiye Hesaplama
+// 🛠️ YARDIMCI: Net Bakiye Hesaplama (GÜNCELLENDİ)
 // ============================================================
 const hesaplaBakiye = async (personel_id) => {
-    // 1. Personel var mı?
-    const pRes = await pool.query("SELECT 1 FROM personeller WHERE personel_id = $1", [personel_id]);
+    // 1. Personelin Kritik Tarihlerini ve Durumunu Çek (DÜZELTİLDİ)
+    // 50 yaş kuralı için doğum tarihi, hakediş durdurmak için ayrılma tarihi şart.
+    const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi, ayrilma_tarihi, aktif FROM personeller WHERE personel_id = $1", [personel_id]);
+    
     if (pRes.rows.length === 0) return 0;
+    const p = pRes.rows[0];
 
-    // 2. Geçmiş Yılların Toplamı (izin_gecmis_bakiyeler tablosundan)
+    // 2. Geçmiş Yılların Toplamı (Manuel Eklenenler / Devredenler)
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const devreden = parseInt(gecmisRes.rows[0].toplam) || 0;
 
-    // 3. Bu Yıl Hakediş (✅ DİNAMİK SİSTEM)
-    const buYilHak = await dinamikHakedisHesapla(personel_id);
+    // 3. Ömür Boyu Hakediş (✅ DİNAMİK MERKEZİ SİSTEM)
+    // 2007 girişli personel için 376/408 gün hesabını burası yapar.
+    const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
 
     // 4. Kullanılanlar
     const izinRes = await pool.query(`
@@ -48,7 +50,8 @@ const hesaplaBakiye = async (personel_id) => {
     `, [personel_id]);
     const kullanilan = parseInt(izinRes.rows[0].toplam) || 0;
 
-    return (devreden + buYilHak) - kullanilan;
+    // Formül: (Ömür Boyu Hak + Manuel Eklenenler) - Kullanılan
+    return (kumulatifHak + devreden) - kullanilan;
 };
 
 // ============================================================
@@ -552,16 +555,23 @@ exports.getPersonelBakiye = async (req, res) => {
     try {
         const client = await pool.connect();
         
-        // 1. Personel Giriş Tarihini Çek
-        const pRes = await client.query('SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1', [pid]);
+        // 1. Personel Giriş Tarihini Çek (DÜZELTİLDİ: Eksik alanlar eklendi)
+        // 50 yaş kuralı ve aktiflik kontrolü için doğum tarihi, ayrılma tarihi ve aktiflik durumu şart.
+        const pRes = await client.query('SELECT ise_giris_tarihi, dogum_tarihi, ayrilma_tarihi, aktif FROM personeller WHERE personel_id = $1', [pid]);
+        
         if (pRes.rows.length === 0) { client.release(); return res.status(404).json({ mesaj: 'Personel yok' }); }
+        const p = pRes.rows[0];
         
         // 2. GEÇMİŞ YILLARIN TOPLAMINI DETAYLI TABLODAN ÇEK
         const gecmisRes = await client.query('SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1', [pid]);
         const devreden = parseInt(gecmisRes.rows[0].toplam) || 0;
 
-        // 3. Bu yılki hakedişi hesapla (✅ ARTIK DİNAMİK)
-        const buYilHak = await dinamikHakedisHesapla(pid);
+        // 3. Ömür Boyu Hakediş (✅ DİNAMİK MERKEZİ SİSTEM)
+        // 408 gün hesabını yapan yer burası.
+        const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
+        
+        // Ayrıca bu yılki spesifik hakkı da gösterim için alabiliriz (opsiyonel)
+        const buYilHak = await hesaplaBuYil(pid);
 
         // 4. Kullanılan YILLIK İzinleri Topla
         const izinRes = await client.query(`
@@ -575,7 +585,7 @@ exports.getPersonelBakiye = async (req, res) => {
         const kullanilan = parseInt(izinRes.rows[0].toplam) || 0;
         
         // 5. NET HESAPLAMA
-        const toplamHak = devreden + buYilHak;
+        const toplamHak = devreden + kumulatifHak; // Önceki "buYilHak" yerine "kumulatifHak" kullanıyoruz.
         const kalan = toplamHak - kullanilan;
 
         client.release();
@@ -584,7 +594,8 @@ exports.getPersonelBakiye = async (req, res) => {
             kalan_izin: kalan,
             detay: {
                 devreden: devreden,
-                bu_yil_hak: buYilHak,
+                bu_yil_hak: buYilHak, // Bilgi amaçlı gösterim
+                kumulatif_hak: kumulatifHak, // Esas hesaplanan değer
                 kullanilan: kullanilan
             }
         });
@@ -599,7 +610,6 @@ exports.getPersonelBakiye = async (req, res) => {
 // 11. ŞİFRE SIFIRLAMA TALEBİ (Giriş Yapmadan - LOGLU VERSİYON)
 // ============================================================
 exports.sifreSifirlamaTalep = async (req, res) => {
-    // ... (Mevcut kod aynen korunabilir)
     const { tc_no, yeni_sifre } = req.body;
     const kimlik_foto = req.file ? req.file.path : null;
 
