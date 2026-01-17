@@ -170,7 +170,6 @@ exports.pdfOlustur = async (req, res) => {
         const managerName = query.managerName || 'Bayram DEMİR';
         const headName = query.headName || 'Ersan TOPÇUOĞLU';
 
-        // --- TEK SAYFAYA SIĞDIRMA İÇİN SIKIŞTIRILMIŞ CSS ---
         const commonCSS = `
             body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1; }
             .no-border td { border: none; }
@@ -259,29 +258,31 @@ exports.pdfOlustur = async (req, res) => {
 
         } else {
             // ============================================================
-            // FORM 2: TEK SAYFAYA SIĞDIRILMIŞ VERSİYON
+            // FORM 2: TEK SAYFAYA SIĞAN KÜLTÜR A.Ş. FORMATI (GÜNCELLENDİ)
             // ============================================================
             htmlContent = `
             <html>
             <head>
                 <style>
                     ${commonCSS}
-                    .page-container { padding: 15px 30px; height: 98vh; box-sizing: border-box; }
+                    .page-container { padding: 10px 25px; height: 98vh; box-sizing: border-box; }
                     .header-tbl td { text-align: center; vertical-align: middle; padding: 2px; }
                     
-                    /* Form Tablosu - Sıkıştırılmış */
-                    .form-tbl { width: 100%; margin-top: 10px; font-size: 10px; }
-                    .form-tbl td { padding: 3px 0; vertical-align: top; }
+                    /* Form Tablosu */
+                    .form-tbl { width: 100%; margin-top: 5px; font-size: 10px; }
+                    .form-tbl td { padding: 2px 0; vertical-align: top; }
                     .lbl { font-weight: bold; width: 32%; }
                     .sep { width: 2%; text-align: center; }
                     .val { width: 66%; border-bottom: 1px dotted #999; } 
 
-                    .imza-row { display: flex; justify-content: space-between; margin-top: 50px; width: 100%; }
-                    .imza-box { text-align: center; width: 30%; font-size: 11px; }
+                    /* İmzalar */
+                    .imza-row { margin-top: 20px; width: 100%; font-size:10px; }
+                    .imza-row td { vertical-align: top; text-align:center; }
                     
-                    .kvkk-area { margin-top: 15px; font-size: 7px; text-align: justify; border-top: 1px solid #000; padding-top: 5px; line-height: 1.2; }
-                    .kvkk-check { margin-top: 5px; display: flex; justify-content: space-between; width: 60%; }
-                    .sahibi-box { float: right; width: 35%; margin-top: -15px; font-size: 8px; }
+                    /* KVKK */
+                    .kvkk-area { margin-top: 10px; font-size: 8px; text-align: justify; border-top: 1px solid #000; padding-top: 5px; line-height: 1.2; }
+                    .kvkk-table { width:100%; margin-top:5px; font-size:9px; }
+                    .kvkk-table td { vertical-align: top; }
                 </style>
             </head>
             <body>
@@ -323,26 +324,26 @@ exports.pdfOlustur = async (req, res) => {
                         <tr><td class="lbl">İŞÇİNİN İMZASI</td><td class="sep">:</td><td class="val" style="height:25px; padding-top:10px;">............................................. (İmza)</td></tr>
                     </table>
 
-                    <div style="font-size:10px; margin-top:15px; line-height: 1.4; text-align: justify;">
+                    <div style="font-size:10px; margin-top:10px; line-height: 1.4; text-align: justify;">
                         Belediyemiz personeli <strong>${veri.ad} ${veri.soyad}</strong>'ın izine ayrılmasında sakınca bulunmamaktadır.
                         Adı geçen personel <strong>(${veri.kac_gun})</strong> iş günü ücretli ${veri.izin_turu.toLowerCase()} kullanacaktır.
                         ${veri.izin_turu === 'YILLIK İZİN' ? `İzin kullanım sonrası <strong>(${kalanIzinMetni})</strong> gün izni kalacaktır.` : ''}
                         <br>Gereğini arz ederim.
                     </div>
 
-                    <table class="no-border" style="width:100%; margin-top:30px;">
+                    <table class="no-border imza-row">
                         <tr>
-                            <td width="33%" class="center" style="font-size:10px;">
+                            <td width="33%">
                                 <div class="bold">Daire Başkanı</div>
                                 <div style="margin-top:2px;">${headName}</div>
                                 <div style="margin-top:20px;">.........................</div>
                             </td>
-                            <td width="33%" class="center" style="font-size:10px;">
+                            <td width="33%">
                                 <div class="bold">Şube Müdürü</div>
                                 <div style="margin-top:2px;">${managerName}</div>
                                 <div style="margin-top:20px;">.........................</div>
                             </td>
-                            <td width="33%" class="center" style="font-size:10px;">
+                            <td width="33%">
                                 <div class="bold">Hazırlayan</div>
                                 <div style="margin-top:2px;">${hrName}</div>
                                 <div style="margin-top:20px;">.........................</div>
@@ -354,18 +355,19 @@ exports.pdfOlustur = async (req, res) => {
                         <strong>6698 Sayılı Kişisel Verilerin Korunması Kanunu</strong> hakkındaki bilgilendirme www.mersin.bel.tr adresinde KVK Kapsamında Aydınlatma Beyanı ile gerçekleştirilmiştir.<br>
                         İşbu Formda Mersin Büyükşehir Belediyesi ile paylaştığım kişisel ve özel nitelikli kişisel verilerimin sadece bu işlem ile sınırlı olmak üzere Mersin Büyükşehir Belediyesi ve İştirakleri tarafından işlenmesine, kanunen gerekli görülen yerlere aktarılmasına, kişisel verileri saklama ve imha politikasına uygun olarak saklanmasına açık rıza gösterdiğimi ve bu hususta tarafıma gerekli aydınlatmanın yapıldığını, işbu metni okuduğumu ve anladığımı beyan ediyorum.
                         
-                        <div style="margin-top:10px; overflow: hidden;">
-                            <div style="float:left; width:60%;">
-                                <span style="margin-right:15px;">[  ] Onay Veriyorum</span>
-                                <span>[  ] Onay Vermiyorum</span>
-                            </div>
-                            <div class="sahibi-box">
-                                <strong>Kişisel Veri Sahibi'nin:</strong><br>
-                                Adı Soyadı: ${veri.ad} ${veri.soyad}<br>
-                                Tarih: ${fmt(new Date())}<br>
-                                İmza: .......................
-                            </div>
-                        </div>
+                        <table class="no-border kvkk-table">
+                            <tr>
+                                <td width="55%" style="padding-top:10px;">
+                                    [  ] Onay Veriyorum &nbsp;&nbsp;&nbsp;&nbsp; [  ] Onay Vermiyorum
+                                </td>
+                                <td width="45%" style="padding-left:10px;">
+                                    <strong>Kişisel Veri Sahibi'nin:</strong><br>
+                                    Adı Soyadı: ${veri.ad} ${veri.soyad}<br>
+                                    Tarih: ${fmt(new Date())}<br>
+                                    İmza: .......................................
+                                </td>
+                            </tr>
+                        </table>
                     </div>
 
                 </div>
