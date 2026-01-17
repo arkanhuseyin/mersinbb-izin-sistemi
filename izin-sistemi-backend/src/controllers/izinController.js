@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
-// 🧠 MERKEZİ HESAPLAMA MOTORU BURADA
+// 🧠 MERKEZİ HESAPLAMA MOTORU
 const { hesaplaBuYil, hesaplaKumulatif } = require('../utils/hakedisHesapla'); 
 const PDFDocument = require('pdfkit'); 
 const fs = require('fs'); 
@@ -42,15 +42,15 @@ const turkceKarakterTemizle = (str) => {
 };
 
 // ============================================================
-// 🧠 ANA BAKİYE HESAPLAMA (MERKEZİ SİSTEM KULLANIR)
+// 🧠 ANA BAKİYE HESAPLAMA (GÜNCELLENDİ: DOĞUM TARİHİ EKLENDİ)
 // ============================================================
 const hesaplaBakiye = async (personel_id) => {
-    // 1. Personel Giriş Tarihini Al
-    const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
+    // 1. Personel Giriş ve Doğum Tarihini Al (YAŞ KURALI İÇİN ÖNEMLİ)
+    const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
-    // 2. ÖMÜR BOYU HAKKI MERKEZDEN ÇEK (hakedisHesapla.js)
-    const toplamHakedis = await hesaplaKumulatif(pRes.rows[0].ise_giris_tarihi);
+    // 2. ÖMÜR BOYU HAKKI MERKEZDEN ÇEK (Doğum tarihi ile beraber)
+    const toplamHakedis = await hesaplaKumulatif(pRes.rows[0].ise_giris_tarihi, pRes.rows[0].dogum_tarihi);
 
     // 3. Manuel Eklenenleri Al
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
@@ -112,8 +112,7 @@ exports.talepOlustur = async (req, res) => {
 
         if (izin_turu === 'YILLIK İZİN') {
             const kalanHak = await hesaplaBakiye(personel_id);
-            const istenen = parseInt(kac_gun);
-            if (istenen > kalanHak) {
+            if (parseInt(kac_gun) > kalanHak) {
                 return res.status(400).json({ mesaj: `Sayın ${ad} ${soyad}, Kullanmak istediğiniz izin (${istenen} Gün), Mevcut hakkınızdan (${kalanHak} Gün) fazladır.` });
             }
         }
@@ -191,16 +190,18 @@ exports.talepOnayla = async (req, res) => {
     } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ mesaj: 'Hata oluştu.' }); } finally { client.release(); }
 };
 
-// RAPORLAR VE DETAYLAR (GÜNCELLENDİ: HESAPLAMAYI MERKEZDEN ALIR)
+// 1. RAPOR İÇİN VERİ (GÜNCELLENDİ)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     try {
-        const query = `SELECT p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.devreden_izin, b.birim_adi, COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id LEFT JOIN izin_talepleri it ON p.personel_id = it.personel_id AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') AND it.izin_turu = 'YILLIK İZİN' AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE) WHERE p.aktif = TRUE GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.devreden_izin ORDER BY p.ad ASC`;
+        // GÜNCELLEME: dogum_tarihi EKLENDİ
+        const query = `SELECT p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.devreden_izin, b.birim_adi, COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id LEFT JOIN izin_talepleri it ON p.personel_id = it.personel_id AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') AND it.izin_turu = 'YILLIK İZİN' AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE) WHERE p.aktif = TRUE GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.devreden_izin ORDER BY p.ad ASC`;
         const result = await pool.query(query);
         const rapor = await Promise.all(result.rows.map(async (p) => {
             const netKalan = await hesaplaBakiye(p.personel_id);
-            const buYilHak = await hesaplaBuYil(p.personel_id); // MERKEZDEN
-            const kumulatif = await hesaplaKumulatif(p.ise_giris_tarihi); // MERKEZDEN
+            const buYilHak = await hesaplaBuYil(p.personel_id);
+            // GÜNCELLEME: dogum_tarihi paslandı
+            const kumulatif = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi);
             return { ...p, bu_yil_hakedis: buYilHak, kalan: netKalan, kumulatif_hak: kumulatif };
         }));
         res.json(rapor);
@@ -219,7 +220,7 @@ exports.getPersonelIzinDetay = async (req, res) => {
         izinRes.rows.forEach(izin => { if (izin.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(izin.kac_gun); });
         
         const netKalan = await hesaplaBakiye(id);
-        const buYilHak = await hesaplaBuYil(id); // MERKEZDEN
+        const buYilHak = await hesaplaBuYil(id);
         
         const personelVerisi = { ...pRes.rows[0], kullanilan: toplamKullanilan, kalan: netKalan, bu_yil_hak: buYilHak };
         res.json({ personel: personelVerisi, gecmisBakiyeler: gecmisRes.rows, izinler: izinRes.rows });
@@ -270,10 +271,10 @@ exports.personelListesi = async (req, res) => {
 };
 
 // ============================================================
-// 📄 PDF ÇIKTILARI (MERKEZİ SİSTEME BAĞLANDI)
+// 📄 PDF ÇIKTILARI
 // ============================================================
 
-// 1. TOPLU PDF
+// 1. TOPLU PDF (GÜNCELLENDİ)
 exports.topluPdfRaporu = async (req, res) => {
     if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).send('Yetkisiz işlem');
 
@@ -308,8 +309,9 @@ exports.topluPdfRaporu = async (req, res) => {
         for (let i = 0; i < personeller.length; i++) {
             const p = personeller[i];
             const kalan = await hesaplaBakiye(p.personel_id);
-            const buYilHak = await hesaplaBuYil(p.personel_id); // MERKEZDEN
-            const omurBoyu = await hesaplaKumulatif(p.ise_giris_tarihi); // MERKEZDEN
+            const buYilHak = await hesaplaBuYil(p.personel_id);
+            // GÜNCELLEME: dogum_tarihi paslandı
+            const omurBoyu = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi);
 
             const giris = new Date(p.ise_giris_tarihi);
             const kidem = isNaN(giris.getTime()) ? 0 : Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
@@ -350,7 +352,7 @@ exports.topluPdfRaporu = async (req, res) => {
     } catch (err) { console.error(err); res.status(500).send("PDF Hatası"); }
 };
 
-// 2. KİŞİYE ÖZEL DETAYLI PDF
+// 2. KİŞİYE ÖZEL DETAYLI PDF (GÜNCELLENDİ)
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
     try {
@@ -371,6 +373,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
         doc.pipe(res);
 
+        // --- 1. ÜST BİLGİ ---
         const photoX = 40; const photoY = 40; const photoW = 80; const photoH = 100;
         let photoFound = false;
         if (p.fotograf_yolu) {
@@ -394,6 +397,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.fontSize(12).fillColor('#555').text('TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ - PERSONEL İZİN DETAYI', textStartX, 70);
         doc.moveDown(4);
 
+        // --- 2. PERSONEL BİLGİLERİ ---
         let y = doc.y + 20;
         doc.rect(40, y - 10, 515, 65).fill('#f8f9fa').stroke('#ddd');
         doc.fillColor('#000').fontSize(10);
@@ -406,8 +410,9 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.text(`İşe Giriş: ${tarihGoster(p.ise_giris_tarihi)}`, 300, y);
         doc.y = y + 40;
 
-        // --- 3. BAKİYE ÖZETİ (MERKEZİ HESAP) ---
-        const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi); // MERKEZDEN
+        // --- 3. BAKİYE ÖZETİ ---
+        // GÜNCELLEME: dogum_tarihi paslandı
+        const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi);
         
         let manuelGecmis = 0;
         gRes.rows.forEach(g => manuelGecmis += parseInt(g.gun_sayisi) || 0);
@@ -443,15 +448,21 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
 
         doc.moveDown(5);
 
+        // --- 4. İZİN HAREKETLERİ LİSTESİ ---
         doc.fontSize(12).fillColor('#000').text('GEÇMİŞ İZİN HAREKETLERİ', 40, doc.y);
         doc.moveDown(0.5);
 
         let tableY = doc.y;
         doc.rect(40, tableY, 515, 20).fill('#2c3e50');
         doc.fillColor('#fff').fontSize(9);
-        doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
-        doc.text("Gün", 400, tableY + 6); doc.text("Durum", 480, tableY + 6);
-        tableY += 20; doc.fillColor('#000');
+        doc.text("İzin Türü", 50, tableY + 6); 
+        doc.text("Başlangıç", 200, tableY + 6); 
+        doc.text("Bitiş", 300, tableY + 6);
+        doc.text("Gün", 400, tableY + 6); 
+        doc.text("Durum", 480, tableY + 6);
+        
+        tableY += 20;
+        doc.fillColor('#000');
 
         iRes.rows.forEach((iz, i) => {
             if (tableY > 750) { 
@@ -459,9 +470,13 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
                 tableY = 40; 
                 doc.rect(40, tableY, 515, 20).fill('#2c3e50');
                 doc.fillColor('#fff');
-                doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
-                doc.text("Gün", 400, tableY + 6); doc.text("Durum", 480, tableY + 6);
-                tableY += 20; doc.fillColor('#000');
+                doc.text("İzin Türü", 50, tableY + 6); 
+                doc.text("Başlangıç", 200, tableY + 6); 
+                doc.text("Bitiş", 300, tableY + 6);
+                doc.text("Gün", 400, tableY + 6); 
+                doc.text("Durum", 480, tableY + 6);
+                tableY += 20;
+                doc.fillColor('#000');
             }
 
             if (i % 2 === 0) doc.rect(40, tableY, 515, 20).fill('#ecf0f1');
