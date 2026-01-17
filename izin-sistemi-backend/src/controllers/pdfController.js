@@ -2,7 +2,7 @@ const pool = require('../config/db');
 const pdf = require('html-pdf-node');
 const fs = require('fs');
 const path = require('path');
-// ✅ MERKEZİ HESAPLAMA MOTORU (Bakiye hesabı için gerekli)
+// ✅ MERKEZİ HESAPLAMA MOTORU (Bakiye hesabı için)
 const { hesaplaKumulatif } = require('../utils/hakedisHesapla');
 
 // --- YARDIMCI: Resmi Base64'e Çevir ---
@@ -25,22 +25,109 @@ const fmt = (t) => {
     } catch { return '-'; }
 };
 
+// ============================================================
+// 🧠 FIFO MANTIĞI İLE İZNİN AİT OLDUĞU YILI BULMA
+// ============================================================
+const getIzninAitOlduguYilFIFO = async (personel_id, current_talep_id) => {
+    try {
+        // 1. Personel Bilgilerini Çek
+        const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi, ayrilma_tarihi, aktif FROM personeller WHERE personel_id = $1", [personel_id]);
+        if (pRes.rows.length === 0) return new Date().getFullYear();
+        const p = pRes.rows[0];
+        const giris = new Date(p.ise_giris_tarihi);
+        const dogum = p.dogum_tarihi ? new Date(p.dogum_tarihi) : null;
+
+        // 2. Geçmişte Kullanılan Toplam İzni Bul (Bu talep HARİÇ)
+        // Not: Sadece ONAYLI izinler düşülür.
+        const uRes = await pool.query(`
+            SELECT COALESCE(SUM(kac_gun), 0) as used 
+            FROM izin_talepleri 
+            WHERE personel_id = $1 
+            AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
+            AND izin_turu = 'YILLIK İZİN'
+            AND talep_id != $2 
+        `, [personel_id, current_talep_id]);
+        
+        let toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
+
+        // 3. Geçmiş Yılların Haklarını Tek Tek Hesapla (Liste Oluştur)
+        // (Burada hakedisHesapla.js mantığını simüle edip yıl yıl döküm alıyoruz)
+        const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
+        const kurallar = kuralRes.rows;
+        
+        let hakedisListesi = [];
+        let bitisTarihi = new Date(); // Bugün
+        if (!p.aktif && p.ayrilma_tarihi) bitisTarihi = new Date(p.ayrilma_tarihi);
+
+        let iterasyonTarihi = new Date(giris);
+        
+        // Döngü (2007, 2008, 2009... diye gider)
+        while (iterasyonTarihi <= bitisTarihi) {
+            const hesapYili = iterasyonTarihi.getFullYear();
+            const oAnkiKidem = Math.floor((iterasyonTarihi - giris) / (1000 * 60 * 60 * 24 * 365.25));
+            let oAnkiYas = 0;
+            if(dogum) oAnkiYas = hesapYili - dogum.getFullYear();
+
+            // Hak Hesaplama Kuralı (Aynı mantık)
+            let hak = 0;
+            const uygunKural = kurallar.find(k => hesapYili >= parseInt(k.baslangic_yili) && hesapYili <= parseInt(k.bitis_yili) && oAnkiKidem >= parseInt(k.kidem_alt) && oAnkiKidem <= parseInt(k.kidem_ust));
+            
+            if (uygunKural) hak = parseInt(uygunKural.gun_sayisi);
+            else {
+                if (hesapYili <= 2017) { if (oAnkiKidem < 5) hak = 14; else if (oAnkiKidem < 15) hak = 20; else hak = 26; } 
+                else if (hesapYili <= 2019) { if (oAnkiKidem < 5) hak = 16; else if (oAnkiKidem < 15) hak = 22; else hak = 26; } 
+                else if (hesapYili <= 2021) { if (oAnkiKidem < 5) hak = 18; else if (oAnkiKidem < 15) hak = 25; else hak = 30; }
+                else if (hesapYili <= 2023) { if (oAnkiKidem < 5) hak = 18; else if (oAnkiKidem < 15) hak = 25; else hak = 30; }
+                else { if (oAnkiKidem <= 3) hak = 18; else if (oAnkiKidem < 15) hak = 27; else hak = 32; }
+            }
+            if (oAnkiYas >= 50 && hak < 20) hak = 20;
+
+            if (oAnkiKidem >= 0) {
+                hakedisListesi.push({ yil: hesapYili, hak: hak });
+            }
+            iterasyonTarihi.setFullYear(iterasyonTarihi.getFullYear() + 1);
+        }
+
+        // 4. FIFO Mantığı: Kullanılanları Eskiden Düş
+        // Örn: Toplam Kullanılan 30 gün.
+        // 2007 (14) -> Düşüldü, Kalan Kullanılan 16.
+        // 2008 (14) -> Düşüldü, Kalan Kullanılan 2.
+        // 2009 (14) -> 2 düştü, bu yılın bakiyesi var. SONUÇ: 2009.
+        
+        let sonucYili = new Date().getFullYear();
+
+        for (let i = 0; i < hakedisListesi.length; i++) {
+            const hakedis = hakedisListesi[i];
+            
+            if (toplamKullanilan >= hakedis.hak) {
+                // Bu yılın hakkı tamamen kullanılmış, sonrakine geç
+                toplamKullanilan -= hakedis.hak;
+            } else {
+                // Bu yılın hakkından hala bakiye var! Demek ki şu anki izin bu yıla ait.
+                sonucYili = hakedis.yil;
+                break;
+            }
+        }
+
+        return sonucYili;
+
+    } catch (e) {
+        console.error("Yıl Bulma Hatası:", e);
+        return new Date().getFullYear();
+    }
+};
+
 // --- YARDIMCI: İzin Sonrası Kalan Bakiye Hesapla ---
 const hesaplaKalanBakiye = async (personel_id, talep_id, talep_gun_sayisi, talep_durumu) => {
     try {
-        // 1. Personel Bilgileri
         const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi, ayrilma_tarihi, aktif FROM personeller WHERE personel_id = $1", [personel_id]);
         if (pRes.rows.length === 0) return 0;
         const p = pRes.rows[0];
 
-        // 2. Kümülatif Hak (Merkezi Sistem)
         const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
-
-        // 3. Manuel Devreden
         const gRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
         const devreden = parseInt(gRes.rows[0].toplam) || 0;
 
-        // 4. Onaylanmış İzinler
         const uRes = await pool.query(`
             SELECT COALESCE(SUM(kac_gun), 0) as used 
             FROM izin_talepleri 
@@ -48,8 +135,6 @@ const hesaplaKalanBakiye = async (personel_id, talep_id, talep_gun_sayisi, talep
         `, [personel_id]);
         let toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
 
-        // 5. Mantık: Eğer bu talep henüz onaylanmadıysa, "kullanılacak" gibi düşünüp düşüyoruz.
-        // Eğer zaten onaylıysa, yukarıdaki sorguda zaten sayılmıştır, tekrar düşmeye gerek yok.
         let buTalepDahilKullanilan = toplamKullanilan;
         if (talep_durumu !== 'IK_ONAYLADI' && talep_durumu !== 'TAMAMLANDI') {
             buTalepDahilKullanilan += parseInt(talep_gun_sayisi);
@@ -64,7 +149,6 @@ exports.pdfOlustur = async (req, res) => {
     const query = req.query || {};
 
     try {
-        // 1. Verileri Çek
         const result = await pool.query(`
             SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.adres, p.telefon, p.ise_giris_tarihi, 
             p.sicil_no, p.gorev, p.kadro_tipi, b.birim_adi
@@ -77,7 +161,7 @@ exports.pdfOlustur = async (req, res) => {
         if (result.rows.length === 0) return res.status(404).send('Talep bulunamadı');
         const veri = result.rows[0];
 
-        // 2. İmzaları Hazırla (Sadece Form 1 için gerekli)
+        // İmzalar (Sadece Form 1)
         let amirImza = '', yaziciImza = '', personelImza = '';
         if (veri.personel_imza) personelImza = veri.personel_imza;
 
@@ -93,32 +177,34 @@ exports.pdfOlustur = async (req, res) => {
             });
         }
 
-        // 3. Kalan İzin Hesabı (Sadece Form 2'de gösterilecek)
+        // --- HESAPLAMALAR ---
         let kalanIzinMetni = "...";
+        let aitOlduguYil = new Date().getFullYear();
+
         if (veri.izin_turu === 'YILLIK İZİN') {
             const kalan = await hesaplaKalanBakiye(veri.personel_id, veri.talep_id, veri.kac_gun, veri.durum);
             kalanIzinMetni = kalan.toString();
+            
+            // ✅ YENİ FIFO MANTIĞI
+            aitOlduguYil = await getIzninAitOlduguYilFIFO(veri.personel_id, veri.talep_id);
         }
 
-        // 4. Logolar
         const logoMBB = resimOku('logo1.png'); 
         const logoTSE = resimOku('logo2.png'); 
         const logo100 = resimOku('logo3.png');
 
-        // Dinamik İsimler (Form 2 İçin)
-        const hrName = query.hrName || '................................';
+        const hrName = query.hrName || '................................'; 
         const managerName = query.managerName || 'Bayram DEMİR';
         const managerTitle = query.managerTitle || 'Toplu Taşıma Şube Müdürü';
         const headName = query.headName || 'Ersan TOPÇUOĞLU';
         const headTitle = query.headTitle || 'Ulaşım Dairesi Başkanı';
 
-        // --- ORTAK CSS ---
         const commonCSS = `
-            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; }
+            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.1; }
             .no-border td { border: none; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .imza-img { height: 40px; max-width: 120px; display: block; margin: 0 auto; }
+            .imza-img { height: 40px; max-width: 100px; display: block; margin: 0 auto; }
             .logo-img { height: 60px; width: auto; }
             table { width: 100%; border-collapse: collapse; }
         `;
@@ -126,9 +212,7 @@ exports.pdfOlustur = async (req, res) => {
         let htmlContent = '';
 
         if (form_tipi === 'form1') {
-            // ============================================================
-            // FORM 1: AMİR/YAZICI ONAY FORMU (DİJİTAL İMZALI)
-            // ============================================================
+            // ================= FORM 1 (DİJİTAL SÜREÇ) =================
             const isType = (tur) => veri.izin_turu === tur ? 'X' : ' ';
             let formBasligi = "İZİN TALEP FORMU";
             if (veri.izin_turu) formBasligi = `${veri.izin_turu} TALEP FORMU`.toUpperCase();
@@ -147,7 +231,7 @@ exports.pdfOlustur = async (req, res) => {
             </head>
             <body>
                 <div class="cerceve">
-                    <table class="no-border" style="margin-bottom:10px;">
+                    <table class="no-border">
                         <tr>
                             <td width="20%" class="center"><img src="${logoMBB}" class="logo-img"></td>
                             <td width="60%" class="center">
@@ -158,18 +242,16 @@ exports.pdfOlustur = async (req, res) => {
                             <td width="20%" class="center"><img src="${logoTSE}" class="logo-img"></td>
                         </tr>
                     </table>
-
                     <div class="section-title">I. İZİN TALEBİNDE BULUNANIN</div>
                     <table>
                         <tr><td colspan="2" class="center bold">(1) KİMLİK BİLGİLERİ</td><td colspan="2" class="center bold">(2) ADRES BİLGİLERİ</td></tr>
-                        <tr><td class="label">Adı Soyadı</td><td class="val">${veri.ad} ${veri.soyad}</td><td class="label">Ev Adresi</td><td rowspan="3" class="adres-kutu">${veri.adres || '-'}</td></tr>
+                        <tr><td class="label">Adı Soyadı</td><td class="val">${veri.ad} ${veri.soyad}</td><td class="label">Ev Adresi</td><td rowspan="3" class="adres-kutu">${veri.adres}</td></tr>
                         <tr><td class="label">TC Kimlik No</td><td>${veri.tc_no}</td><td class="label">İzin Adresi</td></tr>
-                        <tr><td class="label">Kadrosu</td><td>${veri.kadro_tipi || 'İŞÇİ'}</td><td rowspan="3" class="adres-kutu">${veri.izin_adresi || veri.adres || '-'}</td></tr>
+                        <tr><td class="label">Kadrosu</td><td>${veri.kadro_tipi || 'İŞÇİ'}</td><td rowspan="3" class="adres-kutu">${veri.izin_adresi || veri.adres}</td></tr>
                         <tr><td class="label">Sicil No</td><td>${veri.sicil_no || '-'}</td><td class="label">Cep Tel</td></tr>
-                        <tr><td class="label">Görevi</td><td>${veri.gorev || 'ŞOFÖR'}</td><td>${veri.telefon || '-'}</td></tr>
-                        <tr><td class="label">Amirlik</td><td>${veri.birim_adi || '-'}</td><td class="label">Hafta Tatili</td><td>${veri.haftalik_izin_gunu || '-'}</td></tr>
+                        <tr><td class="label">Görevi</td><td>${veri.gorev}</td><td>${veri.telefon}</td></tr>
+                        <tr><td class="label">Amirlik</td><td>${veri.birim_adi}</td><td class="label">Hafta Tatili</td><td>${veri.haftalik_izin_gunu}</td></tr>
                     </table>
-
                     <div class="section-title">II. İZİN TALEP BEYANI</div>
                     <table>
                         <tr>
@@ -180,151 +262,140 @@ exports.pdfOlustur = async (req, res) => {
                         </tr>
                         <tr><td class="label">Başlama</td><td>${fmt(veri.baslangic_tarihi)}</td><td class="label">Bitiş</td><td>${fmt(veri.bitis_tarihi)}</td></tr>
                         <tr><td class="label">İşe Başlama</td><td>${fmt(veri.ise_baslama_tarihi)}</td><td class="label">Gün Sayısı</td><td>${veri.kac_gun}</td></tr>
-                        <tr>
-                            <td class="label">İzin Türü</td>
-                            <td colspan="3">
-                                [${isType('YILLIK İZİN')}] Yıllık &nbsp; [${isType('MAZERET İZNİ')}] Mazeret &nbsp; [${isType('ÜCRETSİZ İZİN')}] Ücretsiz &nbsp; 
-                                [${isType('RAPOR')}] Rapor &nbsp; [${isType('EVLİLİK İZNİ')}] Evlilik &nbsp; [${isType('ÖLÜM İZNİ')}] Ölüm
-                            </td>
-                        </tr>
-                        <tr><td class="label">Açıklama</td> <td colspan="3">${veri.aciklama || '-'}</td></tr>
+                        <tr><td class="label">İzin Türü</td><td colspan="3">${veri.izin_turu}</td></tr>
+                        <tr><td class="label">Açıklama</td> <td colspan="3">${veri.aciklama}</td></tr>
                     </table>
-
                     <div class="section-title">III. İZİN ONAY KISMI</div>
                     <table>
-                        <tr>
-                            <td width="50%" class="center bold" style="background-color:#f0f0f0;">AMİR GÖRÜŞÜ (OLUMLU)</td>
-                            <td width="50%" class="center bold" style="background-color:#f0f0f0;">YAZICI KONTROLÜ</td>
-                        </tr>
+                        <tr><td width="50%" class="center bold">AMİR GÖRÜŞÜ</td><td width="50%" class="center bold">YAZICI KONTROLÜ</td></tr>
                         <tr>
                             <td height="80" class="center" style="vertical-align:top;">
                                 <div style="margin-bottom:5px;">Uygun Görüşle Arz Ederim</div>
                                 ${amirImza ? `<img src="${amirImza}" class="imza-img">` : ''}
-                                <div style="margin-top:5px;"><strong>${fmt(new Date())}</strong></div>
                                 <div>Birim Amiri</div>
                             </td>
                             <td height="80" class="center" style="vertical-align:top;">
                                 <div style="margin-bottom:5px;">Kontrol Edilmiştir</div>
                                 ${yaziciImza ? `<img src="${yaziciImza}" class="imza-img">` : ''}
-                                <div style="margin-top:5px;"><strong>${fmt(new Date())}</strong></div>
                                 <div>Amirlik Yazıcısı</div>
                             </td>
                         </tr>
                     </table>
-                    <div style="position:absolute; bottom:10px; left:30px; font-size:8px;">Doküman No: 23.ULS.02</div>
                 </div>
             </body>
             </html>`;
 
         } else {
             // ============================================================
-            // FORM 2: İK İÇİN ISLAK İMZA FORMU (YENİ TASARIM)
+            // FORM 2: KÜLTÜR A.Ş. İZİN BELGESİ (YENİLENMİŞ TASARIM)
             // ============================================================
             htmlContent = `
             <html>
             <head>
                 <style>
                     ${commonCSS}
-                    .cerceve { border: 2px solid black; padding: 20px 40px; height: 98vh; box-sizing: border-box; position: relative; }
-                    .header-tbl td { vertical-align: middle; border: 1px solid #000; padding: 5px; }
-                    .f2-table { margin-top: 20px; width: 100%; border: 1px solid #000; }
-                    .f2-table td { padding: 6px; font-size: 11px; border: 1px solid #000; vertical-align: middle; }
-                    .f2-label { font-weight: bold; width: 35%; background-color: #f0f0f0; }
-                    .f2-val { width: 65%; }
+                    .page-container { padding: 30px 40px; }
+                    .header-tbl td { text-align: center; vertical-align: middle; }
                     
-                    .footer-container { margin-top: 40px; width: 100%; } 
-                    .imza-blok { text-align: center; font-size: 11px; vertical-align: top; }
-                    .unvan { font-size: 10px; margin-top: 2px; font-weight:bold; }
-                    .isim { font-weight: bold; font-size: 11px; margin-top: 40px; }
+                    /* Form Tablosu */
+                    .form-tbl { width: 100%; margin-top: 20px; font-size: 11px; }
+                    .form-tbl td { padding: 4px 0; vertical-align: top; }
+                    .lbl { font-weight: bold; width: 30%; }
+                    .sep { width: 2%; text-align: center; }
+                    .val { width: 68%; border-bottom: 1px dotted #ccc; } 
+
+                    .imza-row { display: flex; justify-content: space-between; margin-top: 50px; width: 100%; }
+                    .imza-box { text-align: center; width: 30%; font-size: 11px; }
                     
-                    .kvkk-box { margin-top: 30px; border: 1px solid #000; padding: 5px; font-size: 8px; text-align: justify; }
-                    .kvkk-row { display: flex; justify-content: space-between; margin-top: 5px; }
+                    .kvkk-area { margin-top: 40px; font-size: 8px; text-align: justify; border-top: 1px solid #000; padding-top: 10px; }
+                    .kvkk-check { margin-top: 10px; display: flex; justify-content: space-between; width: 60%; }
+                    .sahibi-box { float: right; width: 35%; margin-top: -20px; font-size: 9px; }
                 </style>
             </head>
             <body>
-                <div class="cerceve">
+                <div class="page-container">
                     
-                    <table class="header-tbl">
+                    <table class="header-tbl no-border">
                         <tr>
-                            <td width="20%" class="center" rowspan="3"><img src="${logoMBB}" class="logo-img"></td>
-                            <td width="60%" class="center bold" style="font-size:14px;">
-                                T.C.<br>MERSİN BÜYÜKŞEHİR BELEDİYESİ<br>ULAŞIM DAİRESİ BAŞKANLIĞI
+                            <td width="20%"><img src="${logoMBB}" class="logo-img"></td>
+                            <td width="60%">
+                                <div class="bold" style="font-size:14px;">T.C.<br>MERSİN BÜYÜKŞEHİR BELEDİYESİ<br>ULAŞIM DAİRESİ BAŞKANLIĞI</div>
                             </td>
-                            <td width="20%" class="center" rowspan="3"><img src="${logo100}" class="logo-img"></td>
+                            <td width="20%"><img src="${logo100}" class="logo-img"></td>
                         </tr>
                         <tr>
-                            <td class="center bold" style="font-size:12px;">
+                            <td colspan="3" class="bold" style="font-size:12px; padding-top:10px;">
                                 MERSİN BÜYÜKŞEHİR KÜLTÜR SANAT BİLİM ULŞ.TİC. ve SAN. A.Ş.
                             </td>
                         </tr>
                         <tr>
-                            <td class="center bold" style="font-size:16px;">İŞÇİ İZİN FORMU</td>
+                            <td colspan="3" class="bold" style="font-size:16px; text-decoration: underline; padding-top:10px;">
+                                İŞÇİ İZİN FORMU
+                            </td>
                         </tr>
                     </table>
 
-                    <table class="f2-table">
-                        <tr><td class="f2-label">ADI SOYADI ve T.C.NO</td><td class="f2-val">${veri.ad} ${veri.soyad} / ${veri.tc_no}</td></tr>
-                        <tr><td class="f2-label">İŞE GİRİŞ TARİHİ</td><td class="f2-val">${fmt(veri.ise_giris_tarihi)}</td></tr>
-                        <tr><td class="f2-label">POZİSYONU</td><td class="f2-val">${veri.kadro_tipi || 'Sürekli İşçi'}</td></tr>
-                        <tr><td class="f2-label">BAĞLI OLDUĞU BİRİM</td><td class="f2-val">${veri.birim_adi}</td></tr>
-                        <tr><td class="f2-label">İZİN TÜRÜ</td><td class="f2-val">${veri.izin_turu}</td></tr>
-                        <tr><td class="f2-label">İZNİN AİT OLDUĞU YIL</td><td class="f2-val">${new Date().getFullYear()}</td></tr>
-                        <tr><td class="f2-label">DİLEKÇE TARİHİ</td><td class="f2-val">${fmt(veri.olusturma_tarihi)}</td></tr>
-                        <tr><td class="f2-label">İZİNİ KULLANACAĞI TARİH</td><td class="f2-val">${fmt(veri.baslangic_tarihi)}</td></tr>
-                        <tr><td class="f2-label">İZİN BİTİŞ TARİHİ</td><td class="f2-val">${fmt(veri.bitis_tarihi)}</td></tr>
-                        <tr><td class="f2-label">İŞ BAŞI TARİHİ</td><td class="f2-val">${fmt(veri.ise_baslama_tarihi)}</td></tr>
-                        <tr><td class="f2-label">İKAMETGAH ADRESİ VE TELEFON</td><td class="f2-val">${veri.adres} / ${veri.telefon}</td></tr>
-                        <tr><td class="f2-label">İZNİNİ GEÇİRECEĞİ ADRES</td><td class="f2-val">${veri.izin_adresi || veri.adres}</td></tr>
+                    <table class="form-tbl">
+                        <tr><td class="lbl">ADI SOYADI ve T.C.NO</td><td class="sep">:</td><td class="val">${veri.ad} ${veri.soyad} / ${veri.tc_no}</td></tr>
+                        <tr><td class="lbl">İŞE GİRİŞ TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_giris_tarihi)}</td></tr>
+                        <tr><td class="lbl">POZİSYONU</td><td class="sep">:</td><td class="val">${veri.kadro_tipi || 'Sürekli İşçi'}</td></tr>
+                        <tr><td class="lbl">BAĞLI OLDUĞU BİRİM</td><td class="sep">:</td><td class="val">${veri.birim_adi}</td></tr>
+                        <tr><td class="lbl">İZİN TÜRÜ</td><td class="sep">:</td><td class="val">${veri.izin_turu}</td></tr>
+                        <tr><td class="lbl">İZNİN AİT OLDUĞU YIL</td><td class="sep">:</td><td class="val">${aitOlduguYil}</td></tr>
+                        <tr><td class="lbl">DİLEKÇE TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.olusturma_tarihi)}</td></tr>
+                        <tr><td class="lbl">İZİNİ KULLANACAĞI TARİH</td><td class="sep">:</td><td class="val">${fmt(veri.baslangic_tarihi)}</td></tr>
+                        <tr><td class="lbl">İZİN BİTİŞ TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.bitis_tarihi)}</td></tr>
+                        <tr><td class="lbl">İŞ BAŞI TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_baslama_tarihi)}</td></tr>
+                        <tr><td class="lbl">İKAMETGAH ADRESİ VE TELEFON</td><td class="sep">:</td><td class="val">${veri.adres} / ${veri.telefon}</td></tr>
+                        <tr><td class="lbl">İZNİNİ GEÇİRECEĞİ ADRES</td><td class="sep">:</td><td class="val">${veri.izin_adresi || veri.adres}</td></tr>
+                        <tr><td class="lbl">İŞÇİNİN İMZASI</td><td class="sep">:</td><td class="val" style="height:30px;">............................................. (İmza)</td></tr>
+                    </table>
+
+                    <div style="font-size:11px; margin-top:20px; line-height: 1.5; text-align: justify;">
+                        Belediyemiz personeli <strong>${veri.ad} ${veri.soyad}</strong>'ın izine ayrılmasında sakınca bulunmamaktadır.
+                        Adı geçen personel <strong>(${veri.kac_gun})</strong> iş günü ücretli ${veri.izin_turu.toLowerCase()} kullanacaktır.
+                        ${veri.izin_turu === 'YILLIK İZİN' ? `İzin kullanım sonrası <strong>(${kalanIzinMetni})</strong> gün izni kalacaktır.` : ''}
+                        <br>Gereğini arz ederim.
+                    </div>
+
+                    <table class="no-border" style="width:100%; margin-top:50px;">
                         <tr>
-                            <td class="f2-label" style="height:40px; vertical-align:middle;">İŞÇİNİN İMZASI</td>
-                            <td class="f2-val" style="vertical-align:bottom;">...................................................... (İmza)</td>
+                            <td width="33%" class="center" style="font-size:11px;">
+                                <div class="bold">Daire Başkanı</div>
+                                <div style="margin-top:5px;">${headName}</div>
+                                <div style="margin-top:25px;">.........................</div>
+                            </td>
+                            <td width="33%" class="center" style="font-size:11px;">
+                                <div class="bold">Şube Müdürü</div>
+                                <div style="margin-top:5px;">${managerName}</div>
+                                <div style="margin-top:25px;">.........................</div>
+                            </td>
+                            <td width="33%" class="center" style="font-size:11px;">
+                                <div class="bold">Hazırlayan</div>
+                                <div style="margin-top:5px;">${hrName}</div>
+                                <div style="margin-top:25px;">.........................</div>
+                            </td>
                         </tr>
                     </table>
 
-                    <div style="font-size:11px; margin-top:15px; line-height: 1.6;">
-                        Belediyemiz personeli <strong>${veri.ad} ${veri.soyad}</strong>'ın izine ayrılmasında sakınca bulunmamaktadır.<br>
-                        Adı geçen personel <strong>(${veri.kac_gun})</strong> iş günü ${veri.izin_turu.toLowerCase()} kullanacaktır.<br>
-                        ${veri.izin_turu === 'YILLIK İZİN' ? `İzin kullanım sonrası <strong>(${kalanIzinMetni})</strong> gün izni kalacaktır.<br>` : ''}
-                        Gereğini arz ederim.
-                    </div>
-
-                    <div class="footer-container">
-                        <table class="no-border" style="width:100%;">
-                            <tr>
-                                <td class="imza-blok">
-                                    <div class="unvan">Hazırlayan</div>
-                                    <div class="isim">${hrName}</div>
-                                </td>
-                                <td class="imza-blok">
-                                    <div class="unvan">Şube Müdürü</div>
-                                    <div class="isim">${managerName}</div>
-                                </td>
-                                <td class="imza-blok">
-                                    <div class="unvan">Daire Başkanı</div>
-                                    <div class="isim">${headName}</div>
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    <div class="kvkk-box">
+                    <div class="kvkk-area">
                         <strong>6698 Sayılı Kişisel Verilerin Korunması Kanunu</strong> hakkındaki bilgilendirme www.mersin.bel.tr adresinde KVK Kapsamında Aydınlatma Beyanı ile gerçekleştirilmiştir.<br>
-                        İşbu Formda Mersin Büyükşehir Belediyesi ile paylaştığım kişisel ve özel nitelikli kişisel verilerimin sadece bu işlem ile sınırlı olmak üzere Mersin Büyükşehir Belediyesi ve İştirakleri tarafından işlenmesine, kanunen gerekli görülen yerlere aktarılmasına, kişisel verileri saklama ve imha politikasına uygun olarak saklanmasına açık rıza gösterdiğimi ve bu hususta tarafıma gerekli aydınlatmanın yapıldığını, işbu metni okuduğumu ve anladığımı beyan ediyorum.<br><br>
+                        İşbu Formda Mersin Büyükşehir Belediyesi ile paylaştığım kişisel ve özel nitelikli kişisel verilerimin sadece bu işlem ile sınırlı olmak üzere Mersin Büyükşehir Belediyesi ve İştirakleri tarafından işlenmesine, kanunen gerekli görülen yerlere aktarılmasına, kişisel verileri saklama ve imha politikasına uygun olarak saklanmasına açık rıza gösterdiğimi ve bu hususta tarafıma gerekli aydınlatmanın yapıldığını, işbu metni okuduğumu ve anladığımı beyan ediyorum.
                         
-                        <table class="no-border" style="width:100%">
-                            <tr>
-                                <td width="30%">[  ] Onay Veriyorum</td>
-                                <td width="30%">[  ] Onay Vermiyorum</td>
-                                <td width="40%" style="text-align:right;">
-                                    Kişisel Veri Sahibi'nin:<br>
-                                    Adı Soyadı: ${veri.ad} ${veri.soyad}<br>
-                                    Tarih: ${fmt(new Date())}<br>
-                                    İmza: ........................
-                                </td>
-                            </tr>
-                        </table>
+                        <div style="margin-top:15px; overflow: hidden;">
+                            <div style="float:left; width:60%;">
+                                <span style="margin-right:20px;">[  ] Onay Veriyorum</span>
+                                <span>[  ] Onay Vermiyorum</span>
+                            </div>
+                            <div class="sahibi-box">
+                                <strong>Kişisel Veri Sahibi'nin:</strong><br>
+                                Adı Soyadı: ${veri.ad} ${veri.soyad}<br>
+                                Tarih: ${fmt(new Date())}<br>
+                                İmza: .......................
+                            </div>
+                        </div>
                     </div>
-                
+
                 </div>
             </body>
             </html>
