@@ -1,54 +1,76 @@
-// src/routes/yetkiRoutes.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../config/db');
-const auth = require('../middleware/auth');
+const pool = require('../config/db'); // Veritabanı bağlantısı
+const auth = require('../middleware/auth'); // Token doğrulama middleware
 
-// 1. Bir personelin yetkilerini getir
+// ============================================================
+// 1. PERSONELİN YETKİLERİNİ GETİR
+// ============================================================
 router.get('/:personel_id', auth, async (req, res) => {
     try {
         const { personel_id } = req.params;
-        const result = await pool.query('SELECT * FROM yetkiler WHERE personel_id = $1', [personel_id]);
+
+        // Yetkiler tablosundan o kişiye ait tüm satırları çek
+        const result = await pool.query(
+            'SELECT * FROM yetkiler WHERE personel_id = $1', 
+            [personel_id]
+        );
+
         res.json(result.rows);
     } catch (error) {
-        console.error(error);
+        console.error('Yetki Getirme Hatası:', error);
         res.status(500).json({ error: 'Yetkiler alınamadı' });
     }
 });
 
-// 2. Yetkileri Kaydet (SİL VE YENİDEN YAZ MANTIĞI)
+// ============================================================
+// 2. YETKİLERİ KAYDET / GÜNCELLE (TRANSACTION YAPISI)
+// ============================================================
 router.post('/kaydet', auth, async (req, res) => {
+    // Güvenlik Kontrolü: Sadece Admin veya İK yetki verebilir
+    if (!['admin', 'ik'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Bu işlemi yapmaya yetkiniz yok.' });
+    }
+
     const { personel_id, yetkiler } = req.body; 
     
+    // Transaction başlatmak için client alıyoruz
     const client = await pool.connect();
     
     try {
-        await client.query('BEGIN'); // İşlemi başlat
+        await client.query('BEGIN'); // 🚩 İşlemi başlat
 
-        // 1. ADIM: Bu personelin TÜM yetki kayıtlarını sil (Temiz sayfa)
-        // Böylece tikini kaldırdıklarınız veritabanından tamamen uçar.
+        // ADIM 1: Önce bu personelin eski yetkilerinin tamamını temizle (Sıfırla)
         await client.query('DELETE FROM yetkiler WHERE personel_id = $1', [personel_id]);
 
-        // 2. ADIM: Sadece "açık" olan veya "içi dolu" olan yetkileri ekle
+        // ADIM 2: Gelen listedeki yeni yetkileri tek tek ekle
         for (const yetki of yetkiler) {
-            // Eğer herhangi bir yetki (Görüntüle, Ekle/İndir, Sil) true ise kaydet
-            if (yetki.goruntule === true || yetki.ekle_duzenle === true || yetki.sil === true) {
+            // Sadece en az bir yetkisi (Görüntüle/Düzenle/Sil) açık olanları kaydet
+            // (Veritabanını gereksiz şişirmemek için hepsi false ise kaydetmeye gerek yok)
+            if (yetki.goruntule || yetki.ekle_duzenle || yetki.sil) {
                 await client.query(
-                    'INSERT INTO yetkiler (personel_id, modul_adi, goruntule, ekle_duzenle, sil) VALUES ($1, $2, $3, $4, $5)',
-                    [personel_id, yetki.modul_adi, yetki.goruntule, yetki.ekle_duzenle, yetki.sil]
+                    `INSERT INTO yetkiler (personel_id, modul_adi, goruntule, ekle_duzenle, sil) 
+                     VALUES ($1, $2, $3, $4, $5)`,
+                    [
+                        personel_id, 
+                        yetki.modul_adi, 
+                        yetki.goruntule || false, 
+                        yetki.ekle_duzenle || false, 
+                        yetki.sil || false
+                    ]
                 );
             }
         }
 
-        await client.query('COMMIT'); // İşlemi onayla
+        await client.query('COMMIT'); // ✅ İşlemi onayla ve kaydet
         res.json({ mesaj: 'Yetkiler başarıyla güncellendi!' });
 
     } catch (error) {
-        await client.query('ROLLBACK'); // Hata varsa geri al
+        await client.query('ROLLBACK'); // ❌ Hata olursa her şeyi geri al
         console.error("Yetki Kayıt Hatası:", error);
-        res.status(500).json({ error: 'Kaydedilemedi' });
+        res.status(500).json({ error: 'Yetkiler kaydedilemedi.' });
     } finally {
-        client.release();
+        client.release(); // Bağlantıyı havuza geri bırak
     }
 });
 

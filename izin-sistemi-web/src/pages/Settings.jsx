@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { 
-    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History, Shirt, ToggleLeft, ToggleRight, Briefcase, MapPin, CreditCard, Truck
+    User, Search, Plus, Save, Ban, Edit, FileDown, Lock, KeyRound, Filter, Trash2, CheckCircle, Calendar, AlertCircle, Shield, History, Shirt, ToggleLeft, ToggleRight, Briefcase, MapPin, CreditCard, Truck, Eye
 } from 'lucide-react';
 
 // Hakediş Ayarları Komponenti
@@ -15,29 +15,33 @@ export default function Settings() {
     const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } });
     const token = localStorage.getItem('token'); 
 
+    // --- STATE TANIMLARI ---
     const [usersList, setUsersList] = useState([]);
     const [birimler, setBirimler] = useState([]);
     const [arama, setArama] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     const [yukleniyor, setYukleniyor] = useState(false);
     
-    // 🔥 DİNAMİK HAKEDİŞ KURALLARI
+    // Hakediş Kuralları
     const [hakedisKurallari, setHakedisKurallari] = useState([]);
 
+    // Modal Yönetimi
     const [showModal, setShowModal] = useState(false);
-    const [modalMode, setModalMode] = useState('add'); 
+    const [modalMode, setModalMode] = useState('add'); // 'add', 'edit', 'view'
     const [modalTab, setModalTab] = useState(1); 
     const [dondurmaModal, setDondurmaModal] = useState(null);
 
+    // Form Dataları
     const [yeniSifre, setYeniSifre] = useState('');
     const [fotograf, setFotograf] = useState(null);
 
+    // İzin Verileri
     const [izinGecmisi, setIzinGecmisi] = useState([]);
     const [izinHakki, setIzinHakki] = useState(0); 
     const [kullanilanIzin, setKullanilanIzin] = useState(0);
     const [kidemYili, setKidemYili] = useState(0);
 
-    // Geçmiş Bakiye Yönetimi
+    // Manuel Geçmiş Bakiye Yönetimi
     const [gecmisBakiyeler, setGecmisBakiyeler] = useState([]);
     const [yeniGecmisYil, setYeniGecmisYil] = useState(new Date().getFullYear() - 1);
     const [yeniGecmisGun, setYeniGecmisGun] = useState(0);
@@ -82,21 +86,40 @@ export default function Settings() {
     };
     const [formData, setFormData] = useState(initialFormState);
 
-    // --- YETKİ KONTROLÜ ---
-    const checkPermission = (modulKey) => {
+    // --- 🔥 GELİŞMİŞ YETKİ KONTROLÜ 🔥 ---
+    const checkPermission = (modulKey, action) => {
+        // 1. Admin her şeyi yapar
         if (user?.rol === 'admin') return true; 
+
+        // 2. Profilim sekmesi herkese açıktır
+        if (modulKey === 'ayar_profil') return true;
+
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
-        if (permission) return permission.goruntule === true; 
-        if (modulKey === 'ayar_profil') return true;
-        return false; 
+
+        if (!permission) return false; // Yetki kaydı yoksa kapalıdır
+
+        // 3. İstenen aksiyona göre kontrol et
+        if (action === 'goruntule') return permission.goruntule === true;
+        if (action === 'ekle_duzenle') return permission.ekle_duzenle === true;
+        if (action === 'sil') return permission.sil === true;
+
+        return false;
     };
 
     // --- VERİ YÜKLEME ---
     useEffect(() => {
+        // Hakediş kuralları her zaman lazım olabilir
         fetchHakedisKurallari();
-        if (activeTab === 'users' && checkPermission('ayar_personel')) { fetchUsers(); fetchBirimler(); }
-        if (activeTab === 'kiyafet' && checkPermission('ayar_kiyafet')) { checkKiyafetDurumu(); }
+
+        // Sekmelere göre veri çekme (Yetki varsa)
+        if (activeTab === 'users' && checkPermission('ayar_personel', 'goruntule')) { 
+            fetchUsers(); 
+            fetchBirimler(); 
+        }
+        if (activeTab === 'kiyafet' && checkPermission('ayar_kiyafet', 'goruntule')) { 
+            checkKiyafetDurumu(); 
+        }
     }, [activeTab]);
 
     const fetchHakedisKurallari = async () => {
@@ -115,7 +138,7 @@ export default function Settings() {
         setFormData({ ...formData, gorev: secilenGorev, rol: onerilenRol });
     };
 
-    // --- 🔥 DİNAMİK HAKEDİŞ HESAPLAMA MOTORU 🔥 ---
+    // --- DİNAMİK HAKEDİŞ HESAPLAMA ---
     const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
         if (!iseGirisTarihi) return 0;
         
@@ -133,14 +156,11 @@ export default function Settings() {
             kidemYili <= k.kidem_ust
         );
 
-        if (uygunKural) {
-            return uygunKural.gun_sayisi;
-        }
+        if (uygunKural) return uygunKural.gun_sayisi;
 
-        // Yedek Mantık (Eski Sistem)
+        // Yedek Mantık
         let hak = 0;
         if (kidemYili < 1) return 0;
-
         if (girisYili < 2018) {
             if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25;
         } else if (girisYili < 2024) {
@@ -151,10 +171,9 @@ export default function Settings() {
             else { if (kidemYili <= 3) hak = 18; else if (kidemYili <= 5) hak = 20; else if (kidemYili <= 15) hak = 27; else hak = 32; }
         }
         return hak;
-
     }, [hakedisKurallari]);
 
-    // --- FORM VERİSİ DEĞİŞİNCE HESAPLAMA YAP ---
+    // --- FORM DEĞİŞİKLİK TAKİBİ ---
     useEffect(() => {
         if (formData.ise_giris_tarihi) {
             const giris = new Date(formData.ise_giris_tarihi);
@@ -178,7 +197,7 @@ export default function Settings() {
     }, [formData.ise_giris_tarihi, izinGecmisi, hakedisKurallari, hesaplaDinamikHakedis]);
 
     useEffect(() => {
-        if (showModal && modalMode === 'edit' && modalTab === 2 && formData.personel_id) {
+        if (showModal && modalMode !== 'add' && modalTab === 2 && formData.personel_id) {
             fetchIzinGecmisi(formData.personel_id);
             fetchGecmisBakiyeler(formData.personel_id);
         }
@@ -198,6 +217,7 @@ export default function Settings() {
         } catch (error) { console.error('Geçmiş bakiye hatası', error); }
     };
 
+    // --- EKLEME / SİLME İŞLEMLERİ ---
     const addGecmisBakiye = async () => {
         if (!yeniGecmisGun || yeniGecmisGun <= 0) return alert("Lütfen geçerli bir gün sayısı giriniz.");
         try {
@@ -211,13 +231,29 @@ export default function Settings() {
     };
 
     const deleteGecmisBakiye = async (id) => {
-        if(!window.confirm("Silmek istediğinize emin misiniz?")) return;
+        if(!window.confirm("Bu manuel eklenen izni silmek istediğinize emin misiniz?")) return;
         try {
             await axios.delete(`${API_URL}/api/izin/gecmis-bakiye-sil/${id}`, { headers: { Authorization: `Bearer ${token}` } });
             fetchGecmisBakiyeler(formData.personel_id);
         } catch (e) { alert("Hata oluştu."); }
     };
 
+    const izinSil = async (talep_id) => {
+        if(!window.confirm("Bu izin hareketini kalıcı olarak silmek istediğinize emin misiniz?")) return;
+        try {
+            await axios.delete(`${API_URL}/api/izin/talep-sil/${talep_id}`, { 
+                headers: { Authorization: `Bearer ${token}` } 
+            });
+            alert("Kayıt başarıyla silindi.");
+            fetchIzinGecmisi(formData.personel_id);
+            fetchUsers();
+        } catch (error) {
+            console.error(error);
+            alert("Silme işlemi sırasında hata oluştu. Yetkinizi kontrol edin.");
+        }
+    };
+
+    // --- KIYAFET YÖNETİMİ ---
     const checkKiyafetDurumu = async () => {
         setKiyafetLoading(true);
         try {
@@ -237,6 +273,7 @@ export default function Settings() {
         } catch (e) { alert('Hata: Yetkiniz yok veya sunucu hatası.'); } finally { setKiyafetLoading(false); }
     };
 
+    // --- PERSONEL LİSTELEME ---
     const fetchUsers = async () => {
         setYukleniyor(true);
         try {
@@ -255,14 +292,21 @@ export default function Settings() {
         } catch (error) { console.error(error); }
     };
 
+    // --- MODAL AÇMA (YETKİ KONTROLLÜ) ---
     const openModal = (mode, data = null) => {
+        // Eğer 'edit' modunda açılmak isteniyorsa ama kullanıcının 'ekle_duzenle' yetkisi yoksa,
+        // otomatik olarak 'view' moduna düşür.
+        if (mode === 'edit' && !checkPermission('ayar_personel', 'ekle_duzenle')) {
+            mode = 'view';
+        }
+
         setModalMode(mode);
         setModalTab(1); 
         setIzinGecmisi([]); 
         setGecmisBakiyeler([]);
         setFotograf(null);
 
-        if (mode === 'edit' && data) {
+        if ((mode === 'edit' || mode === 'view') && data) {
             const fixDate = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
             setFormData({
                 ...data,
@@ -281,6 +325,9 @@ export default function Settings() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        // Görüntüleme modunda kayıt yapılamaz
+        if (modalMode === 'view') return;
+
         try {
             const data = new FormData();
             Object.keys(formData).forEach(key => { 
@@ -351,34 +398,38 @@ export default function Settings() {
         return matchesSearch;
     });
 
+    // Form Elemanlarının Kilit Durumu
+    const isReadOnly = modalMode === 'view';
+
     return (
         <div className="container-fluid p-4">
             <h2 className="fw-bold mb-4 text-dark flex items-center gap-2">
                 <User size={28}/> Yönetim Paneli
             </h2>
 
-            {/* SEKME BAŞLIKLARI */}
+            {/* SEKME BAŞLIKLARI (YETKİYE GÖRE GİZLENİR) */}
             <ul className="nav nav-tabs mb-4 border-bottom-0">
-                {checkPermission('ayar_profil') && (
-                    <li className="nav-item">
-                        <button className={`nav-link px-4 fw-bold ${activeTab === 'profile' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
-                            onClick={() => setActiveTab('profile')}>Profilim</button>
-                    </li>
-                )}
-                {checkPermission('ayar_personel') && (
+                {/* Profilim sekmesi yetkiye bakmaz */}
+                <li className="nav-item">
+                    <button className={`nav-link px-4 fw-bold ${activeTab === 'profile' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
+                        onClick={() => setActiveTab('profile')}>Profilim</button>
+                </li>
+                
+                {checkPermission('ayar_personel', 'goruntule') && (
                     <li className="nav-item">
                         <button className={`nav-link px-4 fw-bold ${activeTab === 'users' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
                             onClick={() => setActiveTab('users')}>Personel Listesi</button>
                     </li>
                 )}
-                {checkPermission('ayar_kiyafet') && (
+                
+                {checkPermission('ayar_kiyafet', 'goruntule') && (
                     <li className="nav-item">
                         <button className={`nav-link px-4 fw-bold ${activeTab === 'kiyafet' ? 'active shadow-sm border-0 bg-dark text-white' : 'text-muted border-0 bg-transparent'}`} 
                             onClick={() => setActiveTab('kiyafet')}>👕 Kıyafet Yönetimi</button>
                     </li>
                 )}
-                {/* ✅ TAB: HAKEDİŞ AYARLARI */}
-                {checkPermission('ayar_hakedis') && (
+                
+                {checkPermission('ayar_hakedis', 'goruntule') && (
                     <li className="nav-item">
                         <button className={`nav-link px-4 fw-bold ${activeTab === 'hakedis' ? 'active shadow-sm border-0' : 'text-muted border-0 bg-transparent'}`} 
                             onClick={() => setActiveTab('hakedis')}>📅 İzin Hakediş Ayarları</button>
@@ -390,7 +441,7 @@ export default function Settings() {
                 <div className="card-body p-4">
                     
                     {/* TAB: PROFİLİM */}
-                    {activeTab === 'profile' && checkPermission('ayar_profil') && (
+                    {activeTab === 'profile' && (
                         <div className="row justify-content-center">
                             <div className="col-md-6 text-center">
                                 <div className="bg-light d-inline-block p-4 rounded-circle mb-3"><User size={64} className="text-primary"/></div>
@@ -416,7 +467,7 @@ export default function Settings() {
                     )}
 
                     {/* TAB: KIYAFET YÖNETİMİ */}
-                    {activeTab === 'kiyafet' && checkPermission('ayar_kiyafet') && (
+                    {activeTab === 'kiyafet' && checkPermission('ayar_kiyafet', 'goruntule') && (
                         <div className="row justify-content-center pt-5">
                             <div className="col-md-6 text-center">
                                 <div className={`card border-0 shadow-lg ${kiyafetDonemiAktif ? 'bg-success-subtle' : 'bg-danger-subtle'}`}>
@@ -430,9 +481,17 @@ export default function Settings() {
                                         <p className="text-muted mb-4 fs-5">
                                             {kiyafetDonemiAktif ? "Mobil uygulamadan veri girişi AÇIK." : "Mobil uygulamadan veri girişi KAPALI."}
                                         </p>
-                                        <button onClick={toggleDonem} disabled={kiyafetLoading} className={`btn btn-lg px-5 py-3 fw-bold shadow ${kiyafetDonemiAktif ? 'btn-danger' : 'btn-success'}`}>
-                                            {kiyafetLoading ? 'İşleniyor...' : (kiyafetDonemiAktif ? <><ToggleRight className="me-2"/> DÖNEMİ KAPAT</> : <><ToggleLeft className="me-2"/> DÖNEMİ BAŞLAT</>)}
-                                        </button>
+                                        
+                                        {/* Sadece Düzenleme Yetkisi Olan Butonu Görebilir */}
+                                        {checkPermission('ayar_kiyafet', 'ekle_duzenle') ? (
+                                            <button onClick={toggleDonem} disabled={kiyafetLoading} className={`btn btn-lg px-5 py-3 fw-bold shadow ${kiyafetDonemiAktif ? 'btn-danger' : 'btn-success'}`}>
+                                                {kiyafetLoading ? 'İşleniyor...' : (kiyafetDonemiAktif ? <><ToggleRight className="me-2"/> DÖNEMİ KAPAT</> : <><ToggleLeft className="me-2"/> DÖNEMİ BAŞLAT</>)}
+                                            </button>
+                                        ) : (
+                                            <div className="alert alert-warning mt-3 small">
+                                                Yetkiniz sadece görüntüleme ile sınırlıdır. Değişiklik yapamazsınız.
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="alert alert-info mt-4">
@@ -442,15 +501,16 @@ export default function Settings() {
                         </div>
                     )}
 
-                    {/* ✅ TAB: HAKEDİŞ AYARLARI */}
-                    {activeTab === 'hakedis' && checkPermission('ayar_hakedis') && (
+                    {/* TAB: HAKEDİŞ AYARLARI */}
+                    {activeTab === 'hakedis' && checkPermission('ayar_hakedis', 'goruntule') && (
                         <div className="pt-4">
-                            <HakedisAyarlari />
+                            {/* ReadOnly prop'u göndererek alt componenti kilitliyoruz */}
+                            <HakedisAyarlari readOnly={!checkPermission('ayar_hakedis', 'ekle_duzenle')} />
                         </div>
                     )}
 
                     {/* TAB: PERSONEL LİSTESİ */}
-                    {activeTab === 'users' && checkPermission('ayar_personel') && (
+                    {activeTab === 'users' && checkPermission('ayar_personel', 'goruntule') && (
                         <>
                             <div className="d-flex justify-content-between align-items-end mb-4">
                                 <div className="w-50">
@@ -468,7 +528,11 @@ export default function Settings() {
                                         </select>
                                     </div>
                                 </div>
-                                <button className="btn btn-primary fw-bold shadow-sm px-4 py-2" onClick={() => openModal('add')}><Plus size={18} className="me-2"/> Yeni Personel</button>
+                                
+                                {/* Ekleme Yetkisi Varsa Göster */}
+                                {checkPermission('ayar_personel', 'ekle_duzenle') && (
+                                    <button className="btn btn-primary fw-bold shadow-sm px-4 py-2" onClick={() => openModal('add')}><Plus size={18} className="me-2"/> Yeni Personel</button>
+                                )}
                             </div>
 
                             <div className="table-responsive">
@@ -479,7 +543,6 @@ export default function Settings() {
                                             <th>Birim / Görev</th>
                                             <th>Rol</th>
                                             <th>Giriş Tarihi</th>
-                                            {/* ✅ SADECE HAKEDİŞ VAR - DEVREDEN KALDIRILDI */}
                                             <th className="text-center text-primary">Hakediş (Yıllık)</th>
                                             <th className="text-center">Durum</th>
                                             <th className="text-end">İşlemler</th>
@@ -498,24 +561,30 @@ export default function Settings() {
                                                     </td>
                                                     <td><span className="badge bg-primary bg-opacity-10 text-primary border fw-normal">{u.rol_adi?.toUpperCase()}</span></td>
                                                     <td className="small">{new Date(u.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
-                                                    
-                                                    {/* ✅ DİNAMİK HESAPLANAN HAKEDİŞ DEĞERİ */}
                                                     <td className="text-center fw-bold text-primary">
                                                         {hesaplaDinamikHakedis(u.ise_giris_tarihi)} Gün
                                                     </td>
-
                                                     <td className="text-center">{!isActive ? <span className="badge bg-secondary">Pasif ({u.calisma_durumu})</span> : <span className="badge bg-success">Aktif</span>}</td>
                                                     <td className="text-end">
                                                         <button className="btn btn-sm btn-light text-danger me-1" title="PDF" onClick={() => downloadPdf(u.personel_id, u.ad)}><FileDown size={18}/></button>
-                                                        <button className="btn btn-sm btn-light text-primary me-1" title="Düzenle" onClick={() => openModal('edit', u)}><Edit size={18}/></button>
                                                         
-                                                        {isActive ? (
-                                                            <button className="btn btn-sm btn-light text-warning" title="Pasife Al" onClick={() => setDondurmaModal(u)}><Ban size={18}/></button>
+                                                        {/* Yetkiye Göre Buton Değişimi: Edit vs View */}
+                                                        {checkPermission('ayar_personel', 'ekle_duzenle') ? (
+                                                            <button className="btn btn-sm btn-light text-primary me-1" title="Düzenle" onClick={() => openModal('edit', u)}><Edit size={18}/></button>
                                                         ) : (
-                                                            <>
-                                                                <button className="btn btn-sm btn-light text-success me-1" title="Aktif Et" onClick={() => changeStatus(u.personel_id, 'aktif')}><CheckCircle size={18}/></button>
-                                                                <button className="btn btn-sm btn-light text-danger" title="Tamamen Sil" onClick={() => changeStatus(u.personel_id, 'sil')}><Trash2 size={18}/></button>
-                                                            </>
+                                                            <button className="btn btn-sm btn-light text-secondary me-1" title="Görüntüle" onClick={() => openModal('view', u)}><Eye size={18}/></button>
+                                                        )}
+                                                        
+                                                        {/* Silme Yetkisi Varsa Göster */}
+                                                        {checkPermission('ayar_personel', 'sil') && (
+                                                            isActive ? (
+                                                                <button className="btn btn-sm btn-light text-warning" title="Pasife Al" onClick={() => setDondurmaModal(u)}><Ban size={18}/></button>
+                                                            ) : (
+                                                                <>
+                                                                    <button className="btn btn-sm btn-light text-success me-1" title="Aktif Et" onClick={() => changeStatus(u.personel_id, 'aktif')}><CheckCircle size={18}/></button>
+                                                                    <button className="btn btn-sm btn-light text-danger" title="Tamamen Sil" onClick={() => changeStatus(u.personel_id, 'sil')}><Trash2 size={18}/></button>
+                                                                </>
+                                                            )
                                                         )}
                                                     </td>
                                                 </tr>
@@ -529,15 +598,15 @@ export default function Settings() {
                 </div>
             </div>
 
-            {/* ... MODAL KISIMLARI AYNI KALIYOR ... */}
-            {/* Modal kodları zaten doğru olduğu için tekrar buraya kopyalamıyorum, yukarıdaki tam kodda mevcuttur. */}
-            
+            {/* --- DETAYLI PERSONEL MODALI --- */}
             {showModal && (
                 <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto' }}>
                     <div className="modal-dialog modal-xl modal-dialog-centered my-4">
                         <div className="modal-content shadow-lg rounded-4 border-0">
-                            <div className="modal-header bg-primary text-white">
-                                <h5 className="modal-title fw-bold">{modalMode === 'add' ? 'Yeni Personel Ekle' : 'Personel Düzenle'}</h5>
+                            <div className={`modal-header ${isReadOnly ? 'bg-secondary' : 'bg-primary'} text-white`}>
+                                <h5 className="modal-title fw-bold">
+                                    {modalMode === 'add' ? 'Yeni Personel Ekle' : modalMode === 'edit' ? 'Personel Düzenle' : 'Personel Detayı (Salt Okunur)'}
+                                </h5>
                                 <button className="btn-close btn-close-white" onClick={() => setShowModal(false)}></button>
                             </div>
                             <div className="modal-body p-0">
@@ -555,82 +624,81 @@ export default function Settings() {
                                 <div className="p-4">
                                     {modalTab === 1 && (
                                         <form onSubmit={handleSubmit}>
-                                            <div className="row g-3">
-                                                <div className="col-md-3 text-center border-end">
-                                                    <div className="mb-3">
-                                                        <div className="bg-light border rounded d-flex align-items-center justify-content-center mx-auto shadow-sm" style={{width:'150px', height:'180px', overflow:'hidden'}}>
-                                                            {fotograf ? 
-                                                                <img src={URL.createObjectURL(fotograf)} alt="Preview" style={{width:'100%', height:'100%', objectFit:'cover'}}/> : 
-                                                                (modalMode==='edit' && formData.fotograf_yolu ? <div className="text-success small fw-bold">Kayıtlı Foto Var</div> : <span className="text-muted small">FOTOĞRAF</span>)
-                                                            }
+                                            {/* Fieldset ile tüm formu tek seferde disable edebiliriz */}
+                                            <fieldset disabled={isReadOnly}>
+                                                <div className="row g-3">
+                                                    <div className="col-md-3 text-center border-end">
+                                                        <div className="mb-3">
+                                                            <div className="bg-light border rounded d-flex align-items-center justify-content-center mx-auto shadow-sm" style={{width:'150px', height:'180px', overflow:'hidden'}}>
+                                                                {fotograf ? 
+                                                                    <img src={URL.createObjectURL(fotograf)} alt="Preview" style={{width:'100%', height:'100%', objectFit:'cover'}}/> : 
+                                                                    (modalMode!=='add' && formData.fotograf_yolu ? <div className="text-success small fw-bold">Kayıtlı Foto Var</div> : <span className="text-muted small">FOTOĞRAF</span>)
+                                                                }
+                                                            </div>
+                                                            <input type="file" className="form-control form-control-sm mt-2" onChange={e=>setFotograf(e.target.files[0])} disabled={isReadOnly} />
+                                                            {!isReadOnly && <div className="form-text small">Değiştirmek için dosya seçin.</div>}
                                                         </div>
-                                                        <input type="file" className="form-control form-control-sm mt-2" onChange={e=>setFotograf(e.target.files[0])} />
-                                                        <div className="form-text small">Değiştirmek için dosya seçin.</div>
+                                                        <div className="text-start">
+                                                            <label className="small fw-bold text-muted">Adres</label>
+                                                            <textarea className="form-control form-control-sm" rows="5" placeholder="Adres" value={formData.adres} onChange={e=>setFormData({...formData, adres:e.target.value})} disabled={isReadOnly}></textarea>
+                                                        </div>
                                                     </div>
-                                                    <div className="text-start">
-                                                        <label className="small fw-bold text-muted">Adres</label>
-                                                        <textarea className="form-control form-control-sm" rows="5" placeholder="Adres" value={formData.adres} onChange={e=>setFormData({...formData, adres:e.target.value})}></textarea>
-                                                    </div>
-                                                </div>
 
-                                                <div className="col-md-9">
-                                                    <div className="row g-2">
-                                                        {/* KİMLİK & İLETİŞİM */}
-                                                        <div className="col-12"><h6 className="text-primary small fw-bold border-bottom pb-1">Kimlik & İletişim</h6></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">TC Kimlik No *</label><input className="form-control form-control-sm" required value={formData.tc_no} onChange={e=>setFormData({...formData, tc_no:e.target.value})} /></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Ad *</label><input className="form-control form-control-sm" required value={formData.ad} onChange={e=>setFormData({...formData, ad:e.target.value})} /></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Soyad *</label><input className="form-control form-control-sm" required value={formData.soyad} onChange={e=>setFormData({...formData, soyad:e.target.value})} /></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Telefon 1</label><input className="form-control form-control-sm" value={formData.telefon} onChange={e=>setFormData({...formData, telefon:e.target.value})} /></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Telefon 2</label><input className="form-control form-control-sm" value={formData.telefon2} onChange={e=>setFormData({...formData, telefon2:e.target.value})} /></div>
-                                                        <div className="col-md-4"><label className="small fw-bold">Doğum Tarihi</label><input type="date" className="form-control form-control-sm" value={formData.dogum_tarihi} onChange={e=>setFormData({...formData, dogum_tarihi:e.target.value})} /></div>
-                                                        
-                                                        {/* CİNSİYET, MEDENİ HAL, KAN GRUBU, TAHSİL */}
-                                                        <div className="col-md-3"><label className="small fw-bold">Cinsiyet</label><select className="form-select form-select-sm" value={formData.cinsiyet} onChange={e=>setFormData({...formData, cinsiyet:e.target.value})}><option>Erkek</option><option>Kadın</option></select></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Medeni Hal</label><select className="form-select form-select-sm" value={formData.medeni_hal} onChange={e=>setFormData({...formData, medeni_hal:e.target.value})}><option>Bekar</option><option>Evli</option></select></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Kan Grubu</label><select className="form-select form-select-sm" value={formData.kan_grubu} onChange={e=>setFormData({...formData, kan_grubu:e.target.value})}><option value="">Seç</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Tahsil</label><select className="form-select form-select-sm" value={formData.egitim_durumu} onChange={e=>setFormData({...formData, egitim_durumu:e.target.value})}><option>İlkokul</option><option>Ortaokul</option><option>Lise</option><option>Önlisans</option><option>Lisans</option><option>Yüksek Lisans</option></select></div>
+                                                    <div className="col-md-9">
+                                                        <div className="row g-2">
+                                                            {/* KİMLİK & İLETİŞİM */}
+                                                            <div className="col-12"><h6 className="text-primary small fw-bold border-bottom pb-1">Kimlik & İletişim</h6></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">TC Kimlik No *</label><input className="form-control form-control-sm" required value={formData.tc_no} onChange={e=>setFormData({...formData, tc_no:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">Ad *</label><input className="form-control form-control-sm" required value={formData.ad} onChange={e=>setFormData({...formData, ad:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">Soyad *</label><input className="form-control form-control-sm" required value={formData.soyad} onChange={e=>setFormData({...formData, soyad:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">Telefon 1</label><input className="form-control form-control-sm" value={formData.telefon} onChange={e=>setFormData({...formData, telefon:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">Telefon 2</label><input className="form-control form-control-sm" value={formData.telefon2} onChange={e=>setFormData({...formData, telefon2:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">Doğum Tarihi</label><input type="date" className="form-control form-control-sm" value={formData.dogum_tarihi} onChange={e=>setFormData({...formData, dogum_tarihi:e.target.value})} disabled={isReadOnly} /></div>
+                                                            
+                                                            {/* CİNSİYET, MEDENİ HAL, KAN GRUBU, TAHSİL */}
+                                                            <div className="col-md-3"><label className="small fw-bold">Cinsiyet</label><select className="form-select form-select-sm" value={formData.cinsiyet} onChange={e=>setFormData({...formData, cinsiyet:e.target.value})} disabled={isReadOnly}><option>Erkek</option><option>Kadın</option></select></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Medeni Hal</label><select className="form-select form-select-sm" value={formData.medeni_hal} onChange={e=>setFormData({...formData, medeni_hal:e.target.value})} disabled={isReadOnly}><option>Bekar</option><option>Evli</option></select></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Kan Grubu</label><select className="form-select form-select-sm" value={formData.kan_grubu} onChange={e=>setFormData({...formData, kan_grubu:e.target.value})} disabled={isReadOnly}><option value="">Seç</option><option>A Rh+</option><option>A Rh-</option><option>B Rh+</option><option>B Rh-</option><option>0 Rh+</option><option>0 Rh-</option><option>AB Rh+</option><option>AB Rh-</option></select></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Tahsil</label><select className="form-select form-select-sm" value={formData.egitim_durumu} onChange={e=>setFormData({...formData, egitim_durumu:e.target.value})} disabled={isReadOnly}><option>İlkokul</option><option>Ortaokul</option><option>Lise</option><option>Önlisans</option><option>Lisans</option><option>Yüksek Lisans</option></select></div>
 
-                                                        {/* KURUMSAL BİLGİLER */}
-                                                        <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Kurumsal Bilgiler</h6></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Sicil No</label><input className="form-control form-control-sm" value={formData.sicil_no} onChange={e=>setFormData({...formData, sicil_no:e.target.value})} /></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Asis Kart No</label><input className="form-control form-control-sm" value={formData.asis_kart_no} onChange={e=>setFormData({...formData, asis_kart_no:e.target.value})} /></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Hareket Merkezi</label><input className="form-control form-control-sm" value={formData.hareket_merkezi} onChange={e=>setFormData({...formData, hareket_merkezi:e.target.value})} /></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Çalışma Durumu</label><select className="form-select form-select-sm" value={formData.calisma_durumu} onChange={e=>setFormData({...formData, calisma_durumu:e.target.value})}><option>Çalışıyor</option><option>Emekli</option><option>İş Akdi Fesih</option></select></div>
-                                                        
-                                                        {/* ✅ YENİ: Görev Yeri */}
-                                                        <div className="col-md-4"><label className="small fw-bold d-flex align-items-center gap-1"><MapPin size={12}/> Görev Yeri</label><input className="form-control form-control-sm" placeholder="Örn: Garaj" value={formData.gorev_yeri} onChange={e=>setFormData({...formData, gorev_yeri:e.target.value})} /></div>
+                                                            {/* KURUMSAL BİLGİLER */}
+                                                            <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Kurumsal Bilgiler</h6></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Sicil No</label><input className="form-control form-control-sm" value={formData.sicil_no} onChange={e=>setFormData({...formData, sicil_no:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Asis Kart No</label><input className="form-control form-control-sm" value={formData.asis_kart_no} onChange={e=>setFormData({...formData, asis_kart_no:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Hareket Merkezi</label><input className="form-control form-control-sm" value={formData.hareket_merkezi} onChange={e=>setFormData({...formData, hareket_merkezi:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Çalışma Durumu</label><select className="form-select form-select-sm" value={formData.calisma_durumu} onChange={e=>setFormData({...formData, calisma_durumu:e.target.value})} disabled={isReadOnly}><option>Çalışıyor</option><option>Emekli</option><option>İş Akdi Fesih</option></select></div>
+                                                            
+                                                            <div className="col-md-4"><label className="small fw-bold d-flex align-items-center gap-1"><MapPin size={12}/> Görev Yeri</label><input className="form-control form-control-sm" placeholder="Örn: Garaj" value={formData.gorev_yeri} onChange={e=>setFormData({...formData, gorev_yeri:e.target.value})} disabled={isReadOnly} /></div>
 
-                                                        <div className="col-md-4"><label className="small fw-bold">Birim</label><select className="form-select form-select-sm" value={formData.birim_id} onChange={e=>setFormData({...formData, birim_id:e.target.value})}>{birimler.map(b=><option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>)}</select></div>
-                                                        <div className="col-md-4"><label className="small fw-bold text-primary">Görevi</label><select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange}><option value="">Seçiniz...</option>{sabitListeler.gorevler.sort().map(g => <option key={g} value={g}>{g}</option>)}</select></div>
-                                                        <div className="col-md-6"><label className="small fw-bold text-danger d-flex align-items-center gap-1"><Shield size={14}/> Rol (Yetki)</label><select className="form-select form-select-sm border-danger" value={formData.rol} onChange={e=>setFormData({...formData, rol: e.target.value})}>{sabitListeler.roller.map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}</select></div>
-                                                        <div className="col-md-6"><label className="small fw-bold">Kadro Tipi</label><select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})}><option value="">Seçiniz...</option>{sabitListeler.kadroTipleri.map(k => <option key={k} value={k}>{k}</option>)}</select></div>
+                                                            <div className="col-md-4"><label className="small fw-bold">Birim</label><select className="form-select form-select-sm" value={formData.birim_id} onChange={e=>setFormData({...formData, birim_id:e.target.value})} disabled={isReadOnly}>{birimler.map(b=><option key={b.birim_id} value={b.birim_id}>{b.birim_adi}</option>)}</select></div>
+                                                            <div className="col-md-4"><label className="small fw-bold text-primary">Görevi</label><select className="form-select form-select-sm" value={formData.gorev} onChange={handleGorevChange} disabled={isReadOnly}><option value="">Seçiniz...</option>{sabitListeler.gorevler.sort().map(g => <option key={g} value={g}>{g}</option>)}</select></div>
+                                                            <div className="col-md-6"><label className="small fw-bold text-danger d-flex align-items-center gap-1"><Shield size={14}/> Rol (Yetki)</label><select className="form-select form-select-sm border-danger" value={formData.rol} onChange={e=>setFormData({...formData, rol: e.target.value})} disabled={isReadOnly}>{sabitListeler.roller.map(r => <option key={r} value={r}>{r.toUpperCase()}</option>)}</select></div>
+                                                            <div className="col-md-6"><label className="small fw-bold">Kadro Tipi</label><select className="form-select form-select-sm" value={formData.kadro_tipi} onChange={e=>setFormData({...formData, kadro_tipi:e.target.value})} disabled={isReadOnly}><option value="">Seçiniz...</option>{sabitListeler.kadroTipleri.map(k => <option key={k} value={k}>{k}</option>)}</select></div>
 
-                                                        {/* LOJİSTİK VE BEDEN */}
-                                                        <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Lojistik ve Beden</h6></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet No</label><input className="form-control form-control-sm" value={formData.ehliyet_no} onChange={e=>setFormData({...formData, ehliyet_no:e.target.value})} /></div>
-                                                        <div className="col-md-2"><label className="small fw-bold">Sınıfı</label><input className="form-control form-control-sm" value={formData.ehliyet_sinifi} onChange={e=>setFormData({...formData, ehliyet_sinifi:e.target.value})} /></div>
-                                                        <div className="col-md-3"><label className="small fw-bold">Ehliyet Bitiş</label><input type="date" className="form-control form-control-sm" value={formData.ehliyet_tarih} onChange={e=>setFormData({...formData, ehliyet_tarih:e.target.value})} /></div>
-                                                        
-                                                        {/* ✅ YENİ: Sürücü Kart No */}
-                                                        <div className="col-md-4"><label className="small fw-bold d-flex align-items-center gap-1"><CreditCard size={12}/> Sürücü Kart No</label><input className="form-control form-control-sm" value={formData.surucu_no} onChange={e=>setFormData({...formData, surucu_no:e.target.value})} /></div>
+                                                            <div className="col-12 mt-2"><h6 className="text-primary small fw-bold border-bottom pb-1">Lojistik ve Beden</h6></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Ehliyet No</label><input className="form-control form-control-sm" value={formData.ehliyet_no} onChange={e=>setFormData({...formData, ehliyet_no:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small fw-bold">Sınıfı</label><input className="form-control form-control-sm" value={formData.ehliyet_sinifi} onChange={e=>setFormData({...formData, ehliyet_sinifi:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">Ehliyet Bitiş</label><input type="date" className="form-control form-control-sm" value={formData.ehliyet_tarih} onChange={e=>setFormData({...formData, ehliyet_tarih:e.target.value})} disabled={isReadOnly} /></div>
+                                                            
+                                                            <div className="col-md-4"><label className="small fw-bold d-flex align-items-center gap-1"><CreditCard size={12}/> Sürücü Kart No</label><input className="form-control form-control-sm" value={formData.surucu_no} onChange={e=>setFormData({...formData, surucu_no:e.target.value})} disabled={isReadOnly} /></div>
 
-                                                        <div className="col-md-3"><label className="small fw-bold">SRC Belge No</label><input className="form-control form-control-sm" value={formData.src_belge_no} onChange={e=>setFormData({...formData, src_belge_no:e.target.value})} /></div>
-                                                        
-                                                        {/* ✅ YENİ: Psikoteknik Tarih */}
-                                                        <div className="col-md-3"><label className="small fw-bold d-flex align-items-center gap-1"><Truck size={12}/> Psikoteknik</label><input type="date" className="form-control form-control-sm" value={formData.psiko_tarih} onChange={e=>setFormData({...formData, psiko_tarih:e.target.value})} /></div>
+                                                            <div className="col-md-3"><label className="small fw-bold">SRC Belge No</label><input className="form-control form-control-sm" value={formData.src_belge_no} onChange={e=>setFormData({...formData, src_belge_no:e.target.value})} disabled={isReadOnly} /></div>
+                                                            
+                                                            <div className="col-md-3"><label className="small fw-bold d-flex align-items-center gap-1"><Truck size={12}/> Psikoteknik</label><input type="date" className="form-control form-control-sm" value={formData.psiko_tarih} onChange={e=>setFormData({...formData, psiko_tarih:e.target.value})} disabled={isReadOnly} /></div>
 
-                                                        <div className="col-md-2"><label className="small">Ayakkabı</label><input className="form-control form-control-sm" value={formData.ayakkabi_no} onChange={e=>setFormData({...formData, ayakkabi_no:e.target.value})} /></div>
-                                                        <div className="col-md-2"><label className="small">Tişört</label><input className="form-control form-control-sm" value={formData.tisort_beden} onChange={e=>setFormData({...formData, tisort_beden:e.target.value})} /></div>
-                                                        <div className="col-md-2"><label className="small">Gömlek</label><input className="form-control form-control-sm" value={formData.gomlek_beden} onChange={e=>setFormData({...formData, gomlek_beden:e.target.value})} /></div>
-                                                        <div className="col-md-2"><label className="small">Mont</label><input className="form-control form-control-sm" value={formData.mont_beden} onChange={e=>setFormData({...formData, mont_beden:e.target.value})} /></div>
-                                                        <div className="col-md-2"><label className="small">Süveter</label><input className="form-control form-control-sm" value={formData.suveter_beden} onChange={e=>setFormData({...formData, suveter_beden:e.target.value})} /></div>
-                                                        <div className="col-md-2"><label className="small text-danger fw-bold">Şifre</label><input className="form-control form-control-sm" value={formData.sifre} onChange={e=>setFormData({...formData, sifre:e.target.value})} /></div>
+                                                            <div className="col-md-2"><label className="small">Ayakkabı</label><input className="form-control form-control-sm" value={formData.ayakkabi_no} onChange={e=>setFormData({...formData, ayakkabi_no:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small">Tişört</label><input className="form-control form-control-sm" value={formData.tisort_beden} onChange={e=>setFormData({...formData, tisort_beden:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small">Gömlek</label><input className="form-control form-control-sm" value={formData.gomlek_beden} onChange={e=>setFormData({...formData, gomlek_beden:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small">Mont</label><input className="form-control form-control-sm" value={formData.mont_beden} onChange={e=>setFormData({...formData, mont_beden:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small">Süveter</label><input className="form-control form-control-sm" value={formData.suveter_beden} onChange={e=>setFormData({...formData, suveter_beden:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small text-danger fw-bold">Şifre</label><input className="form-control form-control-sm" value={formData.sifre} onChange={e=>setFormData({...formData, sifre:e.target.value})} disabled={isReadOnly} /></div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
+                                            </fieldset>
                                             <div className="mt-4 text-end border-top pt-3">
                                                 <button type="button" className="btn btn-secondary me-2 px-4" onClick={()=>setShowModal(false)}>Kapat</button>
-                                                <button type="submit" className="btn btn-success px-5 fw-bold shadow-sm"><Save size={18} className="me-2"/> Kaydet & Güncelle</button>
+                                                {!isReadOnly && <button type="submit" className="btn btn-success px-5 fw-bold shadow-sm"><Save size={18} className="me-2"/> Kaydet & Güncelle</button>}
                                             </div>
                                         </form>
                                     )}
@@ -639,52 +707,61 @@ export default function Settings() {
                                         <div className="p-3">
                                             {/* --- TARİH GÜNCELLEME --- */}
                                             <form onSubmit={handleSubmit}>
-                                                <div className="row mb-4 bg-light p-3 rounded border">
-                                                    <div className="col-md-6 border-end">
-                                                        <label className="form-label fw-bold text-dark d-flex align-items-center gap-2"><Calendar size={18}/> İşe Giriş Tarihi</label>
-                                                        <input type="date" className="form-control" value={formData.ise_giris_tarihi} onChange={e=>setFormData({...formData, ise_giris_tarihi:e.target.value})} />
-                                                        
-                                                        {/* HAKEDİŞ BİLGİSİ (DİNAMİK) */}
-                                                        <div className="mt-2 text-success small fw-bold d-flex align-items-center gap-2">
-                                                            <Briefcase size={16}/> 
-                                                            Kıdem: {kidemYili} Yıl | Hakediş: <span className="badge bg-success fs-6">{izinHakki} Gün</span>
+                                                <fieldset disabled={isReadOnly}>
+                                                    <div className="row mb-4 bg-light p-3 rounded border">
+                                                        <div className="col-md-6 border-end">
+                                                            <label className="form-label fw-bold text-dark d-flex align-items-center gap-2"><Calendar size={18}/> İşe Giriş Tarihi</label>
+                                                            <input type="date" className="form-control" value={formData.ise_giris_tarihi} onChange={e=>setFormData({...formData, ise_giris_tarihi:e.target.value})} />
+                                                            
+                                                            {/* HAKEDİŞ BİLGİSİ (DİNAMİK) */}
+                                                            <div className="mt-2 text-success small fw-bold d-flex align-items-center gap-2">
+                                                                <Briefcase size={16}/> 
+                                                                Kıdem: {kidemYili} Yıl | Hakediş: <span className="badge bg-success fs-6">{izinHakki} Gün</span>
+                                                            </div>
                                                         </div>
+                                                        <div className="col-md-6">
+                                                            <label className="form-label fw-bold text-danger d-flex align-items-center gap-2"><AlertCircle size={18}/> İşten Ayrılış Tarihi</label>
+                                                            <input type="date" className="form-control border-danger bg-danger-subtle" value={formData.ayrilma_tarihi} onChange={e=>setFormData({...formData, ayrilma_tarihi:e.target.value})} />
+                                                        </div>
+                                                        {!isReadOnly && <div className="col-12 mt-2 text-end"><button className="btn btn-sm btn-primary">Tarihleri Güncelle</button></div>}
                                                     </div>
-                                                    <div className="col-md-6">
-                                                        <label className="form-label fw-bold text-danger d-flex align-items-center gap-2"><AlertCircle size={18}/> İşten Ayrılış Tarihi</label>
-                                                        <input type="date" className="form-control border-danger bg-danger-subtle" value={formData.ayrilma_tarihi} onChange={e=>setFormData({...formData, ayrilma_tarihi:e.target.value})} />
-                                                    </div>
-                                                    <div className="col-12 mt-2 text-end"><button className="btn btn-sm btn-primary">Tarihleri Güncelle</button></div>
-                                                </div>
+                                                </fieldset>
                                             </form>
 
                                             <hr/>
 
-                                            {/* --- GEÇMİŞ BAKİYE EKLEME --- */}
-                                            <div className="bg-warning-subtle p-3 rounded mb-4 border border-warning">
-                                                <h6 className="fw-bold d-flex align-items-center gap-2 text-dark"><History size={18}/> Geçmiş Dönem İzin Girişi</h6>
-                                                <div className="d-flex gap-2 align-items-end mt-2">
-                                                    <div><label className="small fw-bold">Hangi Yıl?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisYil} onChange={e=>setYeniGecmisYil(e.target.value)} style={{width:'80px'}}/></div>
-                                                    <div><label className="small fw-bold">Kaç Gün?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisGun} onChange={e=>setYeniGecmisGun(e.target.value)} style={{width:'100px'}}/></div>
-                                                    <button className="btn btn-sm btn-success fw-bold" onClick={addGecmisBakiye}><Plus size={14}/> Ekle</button>
+                                            {/* --- ✅ GERİ GELEN "GEÇMİŞ DÖNEM İZİN GİRİŞİ" (YETKİYE GÖRE GİZLE/GÖSTER) --- */}
+                                            {/* Sadece Düzenleme Yetkisi Olanlar Görebilir */}
+                                            {checkPermission('ayar_personel', 'ekle_duzenle') ? (
+                                                <div className="bg-warning-subtle p-3 rounded mb-4 border border-warning">
+                                                    <h6 className="fw-bold d-flex align-items-center gap-2 text-dark"><History size={18}/> Geçmiş Dönem İzin Girişi (Manuel)</h6>
+                                                    <div className="d-flex gap-2 align-items-end mt-2">
+                                                        <div><label className="small fw-bold">Hangi Yıl?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisYil} onChange={e=>setYeniGecmisYil(e.target.value)} style={{width:'80px'}}/></div>
+                                                        <div><label className="small fw-bold">Kaç Gün?</label><input type="number" className="form-control form-control-sm" value={yeniGecmisGun} onChange={e=>setYeniGecmisGun(e.target.value)} style={{width:'100px'}}/></div>
+                                                        <button className="btn btn-sm btn-success fw-bold" onClick={addGecmisBakiye}><Plus size={14}/> Ekle</button>
+                                                    </div>
+                                                    
+                                                    <div className="mt-3 d-flex flex-wrap gap-2">
+                                                        {gecmisBakiyeler.length > 0 ? gecmisBakiyeler.map(g => (
+                                                            <span key={g.id} className="badge bg-white text-dark border d-flex align-items-center gap-2 p-2 shadow-sm">
+                                                                {g.yil}: <strong className="text-success">+{g.gun_sayisi} Gün</strong>
+                                                                <button onClick={()=>deleteGecmisBakiye(g.id)} className="btn btn-link text-danger p-0 m-0" style={{lineHeight:0}}><Trash2 size={14}/></button>
+                                                            </span>
+                                                        )) : <span className="text-muted small fst-italic">Henüz geçmiş kayıt eklenmemiş.</span>}
+                                                    </div>
                                                 </div>
-                                                
-                                                <div className="mt-3 d-flex flex-wrap gap-2">
-                                                    {gecmisBakiyeler.length > 0 ? gecmisBakiyeler.map(g => (
-                                                        <span key={g.id} className="badge bg-white text-dark border d-flex align-items-center gap-2 p-2 shadow-sm">
-                                                            {g.yil}: <strong className="text-success">+{g.gun_sayisi} Gün</strong>
-                                                            <button onClick={()=>deleteGecmisBakiye(g.id)} className="btn btn-link text-danger p-0 m-0" style={{lineHeight:0}}><Trash2 size={14}/></button>
-                                                        </span>
-                                                    )) : <span className="text-muted small fst-italic">Henüz geçmiş kayıt eklenmemiş.</span>}
+                                            ) : (
+                                                <div className="alert alert-info small d-flex align-items-center gap-2">
+                                                    <Lock size={16}/> Manuel geçmiş ekleme yetkiniz bulunmamaktadır. Sadece mevcut veriler hesaplamaya dahil edilir.
                                                 </div>
-                                            </div>
+                                            )}
 
-                                            {/* --- GEÇMİŞ İZİN HAREKETLERİ --- */}
+                                            {/* --- ✅ İZİN HAREKETLERİ TABLOSU VE SİLME BUTONU --- */}
                                             <h6 className="border-bottom pb-2 fw-bold text-dark d-flex align-items-center"><FileDown size={18} className="me-2"/> Geçmiş İzin Hareketleri (Sistem)</h6>
                                             <div className="table-responsive bg-white border rounded" style={{maxHeight:'350px'}}>
                                                 <table className="table table-sm table-striped table-hover text-center mb-0">
                                                     <thead className="table-dark sticky-top">
-                                                        <tr><th>İzin Türü</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Durum</th></tr>
+                                                        <tr><th>İzin Türü</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Durum</th><th>İşlem</th></tr>
                                                     </thead>
                                                     <tbody>
                                                         {izinGecmisi.length > 0 ? (
@@ -699,10 +776,18 @@ export default function Settings() {
                                                                          izin.durum === 'REDDEDILDI' ? <span className="badge bg-danger">Red</span> : 
                                                                          <span className="badge bg-warning text-dark">Bekliyor</span>}
                                                                     </td>
+                                                                    {/* SİLME BUTONU (SADECE YETKİ VARSA) */}
+                                                                    <td>
+                                                                        {checkPermission('ayar_personel', 'sil') && (
+                                                                            <button className="btn btn-sm btn-outline-danger py-0 px-2" onClick={() => izinSil(izin.talep_id || izin.id)} title="Veritabanından Sil">
+                                                                                <Trash2 size={14}/>
+                                                                            </button>
+                                                                        )}
+                                                                    </td>
                                                                 </tr>
                                                             ))
                                                         ) : (
-                                                            <tr><td colSpan="5" className="text-muted py-4">Henüz kayıtlı izin hareketi bulunmamaktadır.</td></tr>
+                                                            <tr><td colSpan="6" className="text-muted py-4">Henüz kayıtlı izin hareketi bulunmamaktadır.</td></tr>
                                                         )}
                                                     </tbody>
                                                 </table>
@@ -727,7 +812,7 @@ export default function Settings() {
                                 <button className="btn btn-outline-danger fw-bold" onClick={()=>changeStatus(dondurmaModal.personel_id, 'dondur', 'İŞ AKDİ FESHİ')}>İş Akdi Fesih</button>
                                 <button className="btn btn-outline-danger fw-bold" onClick={()=>changeStatus(dondurmaModal.personel_id, 'dondur', 'VEFAT')}>Vefat</button>
                                 <button className="btn btn-outline-danger fw-bold" onClick={()=>changeStatus(dondurmaModal.personel_id, 'dondur', 'İSTİFA')}>İstifa</button>
-								<button className="btn btn-outline-danger fw-bold" onClick={()=>changeStatus(dondurmaModal.personel_id, 'dondur', 'DİĞER')}>Diğer..</button>
+                                <button className="btn btn-outline-danger fw-bold" onClick={()=>changeStatus(dondurmaModal.personel_id, 'dondur', 'DİĞER')}>Diğer..</button>
                                 <button className="btn btn-secondary mt-2" onClick={()=>setDondurmaModal(null)}>İptal</button>
                             </div>
                         </div>
