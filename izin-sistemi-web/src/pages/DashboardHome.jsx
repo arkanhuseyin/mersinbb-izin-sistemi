@@ -5,8 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area, LineChart, Line 
 } from 'recharts';
 import { 
-    FileCheck, Clock, FileX, Users, Calendar, TrendingUp, 
-    Activity, ArrowUpRight, Moon, Sun, Globe, BellRing, Sparkles, LayoutDashboard,
+    FileCheck, Clock, FileX, Users, Activity, Moon, Sun, Globe, BellRing, Sparkles, LayoutDashboard,
     BarChart2, PieChart as IconPie, LineChart as IconLine
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -21,12 +20,13 @@ export default function DashboardHome() {
     const [kullanici, setKullanici] = useState({ ad: 'Misafir', soyad: '' });
     const [darkMode, setDarkMode] = useState(false);
     const [lang, setLang] = useState('tr');
+    // eslint-disable-next-line no-unused-vars
     const [loaded, setLoaded] = useState(false); 
     const navigate = useNavigate();
 
     // ✅ GRAFİK TÜRÜ STATE'LERİ
-    const [trendChartType, setTrendChartType] = useState('area'); // Seçenekler: area, bar, line
-    const [typeChartType, setTypeChartType] = useState('bar');   // Seçenekler: bar, pie
+    const [trendChartType, setTrendChartType] = useState('area'); 
+    const [typeChartType, setTypeChartType] = useState('bar');   
 
     // --- DİL AYARLARI ---
     const TEXT = {
@@ -39,7 +39,7 @@ export default function DashboardHome() {
             developer: 'Hüseyin Arkan',
             today: 'BUGÜN',
             cards: { total: 'Toplam Başvuru', approved: 'Onaylanan İzin', pending: 'Bekleyen Talep', rejected: 'Reddedilen' },
-            charts: { trend: 'Başvuru Analizi', type: 'İzin Türü Dağılımı', status: 'Genel Durum', total: 'TOPLAM' },
+            charts: { trend: 'Başvuru Analizi (Bu Yıl)', type: 'İzin Türü Dağılımı', status: 'Genel Durum', total: 'TOPLAM' },
             activity: { title: 'Son Aktiviteler', all: 'Tümünü Gör', empty: 'Henüz işlem yok.' },
             status: { approved: 'ONAYLANDI', rejected: 'REDDEDİLDİ', pending: 'BEKLİYOR' }
         },
@@ -52,7 +52,7 @@ export default function DashboardHome() {
             developer: 'Huseyin Arkan',
             today: 'TODAY',
             cards: { total: 'Total Applications', approved: 'Approved Leaves', pending: 'Pending Requests', rejected: 'Rejected' },
-            charts: { trend: 'Application Analytics', type: 'Leave Type Dist.', status: 'General Status', total: 'TOTAL' },
+            charts: { trend: 'Application Analytics (This Year)', type: 'Leave Type Dist.', status: 'General Status', total: 'TOTAL' },
             activity: { title: 'Recent Activities', all: 'View All', empty: 'No recent activity.' },
             status: { approved: 'APPROVED', rejected: 'REJECTED', pending: 'PENDING' }
         }
@@ -100,9 +100,12 @@ export default function DashboardHome() {
         }
 
         const token = localStorage.getItem('token');
+        // Backend zaten role göre filtrelenmiş veriyi döndürüyor
         axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
             .then(res => {
                 const data = res.data;
+
+                // 1. İSTATİSTİK KARTLARI
                 setStats({
                     toplam: data.length,
                     onayli: data.filter(x => x.durum === 'IK_ONAYLADI' || x.durum === 'TAMAMLANDI').length,
@@ -110,16 +113,44 @@ export default function DashboardHome() {
                     reddedilen: data.filter(x => x.durum === 'REDDEDILDI' || x.durum === 'IPTAL_EDILDI').length
                 });
 
+                // 2. İZİN TÜRÜ DAĞILIMI
                 const turMap = {};
                 data.forEach(d => { turMap[d.izin_turu] = (turMap[d.izin_turu] || 0) + 1; });
                 setIzinTurleri(Object.keys(turMap).map(key => ({ name: key, value: turMap[key] })));
+
+                // 3. SON HAREKETLER (Ters çevirip ilk 5'i al)
                 setSonHareketler([...data].reverse().slice(0, 5));
-                setAylikData([
-                    { name: lang === 'tr' ? 'Oca' : 'Jan', talep: 4 }, { name: lang === 'tr' ? 'Şub' : 'Feb', talep: 8 },
-                    { name: lang === 'tr' ? 'Mar' : 'Mar', talep: 6 }, { name: lang === 'tr' ? 'Nis' : 'Apr', talep: 15 },
-                    { name: lang === 'tr' ? 'May' : 'May', talep: 12 }, { name: lang === 'tr' ? 'Haz' : 'Jun', talep: data.length }
-                ]);
-            });
+
+                // 4. ✅ AYLIK VERİ ANALİZİ (GERÇEK VERİYE GÖRE HESAPLAMA)
+                const currentYear = new Date().getFullYear();
+                const monthCounts = new Array(12).fill(0); // [0, 0, ... 0] 12 aylık sayaç
+
+                data.forEach(item => {
+                    // Oluşturma tarihini veya başlangıç tarihini baz alıyoruz
+                    const tarihStr = item.olusturma_tarihi || item.baslangic_tarihi;
+                    if (tarihStr) {
+                        const d = new Date(tarihStr);
+                        // Sadece bu yıla ait verileri grafiğe ekle
+                        if (d.getFullYear() === currentYear) {
+                            const monthIndex = d.getMonth(); // 0 = Ocak, 11 = Aralık
+                            monthCounts[monthIndex]++;
+                        }
+                    }
+                });
+
+                const aylarTR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+                const aylarEN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                const secilenAylar = lang === 'tr' ? aylarTR : aylarEN;
+
+                // Grafik formatına dönüştür
+                const dynamicAylikData = secilenAylar.map((ayAdi, index) => ({
+                    name: ayAdi,
+                    talep: monthCounts[index]
+                }));
+
+                setAylikData(dynamicAylikData);
+            })
+            .catch(err => console.error("Veri çekme hatası:", err));
     }, [lang]);
 
     const getGreeting = () => {
@@ -129,7 +160,8 @@ export default function DashboardHome() {
         return 'evening';
     };
 
-    // İSTATİSTİK KARTI
+    // İSTATİSTİK KARTI BİLEŞENİ
+    // eslint-disable-next-line react/prop-types
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
             <div className="card rounded-4 position-relative overflow-hidden border-0 hover-glass"
@@ -143,6 +175,7 @@ export default function DashboardHome() {
                              style={{ background: `linear-gradient(135deg, ${color}20 0%, ${color}10 100%)`, color: color, width:40, height:40 }}>
                             <Icon size={20} strokeWidth={2.5} />
                         </div>
+                        {/* Küçük Sparkline Grafik (Görsel amaçlı rastgele veri) */}
                         <div style={{width: 50, height: 25}}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={[{v:5}, {v:12}, {v:8}, {v:15}, {v:10}, {v:20}]}>
@@ -167,6 +200,7 @@ export default function DashboardHome() {
     );
 
     // --- YARDIMCI KOMPONENT: BUTON GRUBU ---
+    // eslint-disable-next-line react/prop-types
     const ChartToggleBtn = ({ icon: Icon, active, onClick }) => (
         <button onClick={onClick} 
             className={`btn btn-sm p-1 px-2 rounded-3 border-0 transition-all ${active ? 'bg-primary text-white shadow-sm' : 'bg-transparent text-secondary hover-bg-light'}`}
@@ -270,7 +304,6 @@ export default function DashboardHome() {
                                     <h6 className="fw-bold m-0" style={{color: current.text}}>{TEXT[lang].charts.trend}</h6>
                                     <p className="small m-0 opacity-50" style={{color: current.text, fontSize:'11px'}}>Aylık veri analizi</p>
                                 </div>
-                                {/* ✅ GRAFİK TÜRÜ DEĞİŞTİRME BUTONLARI */}
                                 <div className="d-flex bg-light rounded-3 p-1 gap-1 border">
                                     <ChartToggleBtn icon={Activity} active={trendChartType==='area'} onClick={()=>setTrendChartType('area')} />
                                     <ChartToggleBtn icon={BarChart2} active={trendChartType==='bar'} onClick={()=>setTrendChartType('bar')} />
