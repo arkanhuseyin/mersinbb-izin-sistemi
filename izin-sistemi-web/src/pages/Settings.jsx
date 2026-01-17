@@ -134,7 +134,7 @@ export default function Settings() {
         );
 
         if (uygunKural) {
-            return uygunKural.devreden_izin;
+            return uygunKural.gun_sayisi;
         }
 
         // Yedek Mantık (Eski Sistem)
@@ -169,7 +169,7 @@ export default function Settings() {
             if (izinGecmisi.length > 0) {
                 const toplamKullanilan = izinGecmisi
                     .filter(i => (i.durum === 'IK_ONAYLADI' || i.durum === 'TAMAMLANDI') && i.izin_turu === 'YILLIK İZİN')
-                    .reduce((acc, curr) => acc + (curr.devreden_izin || 0), 0);
+                    .reduce((acc, curr) => acc + (curr.gun_sayisi || 0), 0);
                 setKullanilanIzin(toplamKullanilan);
             } else {
                 setKullanilanIzin(0);
@@ -202,7 +202,7 @@ export default function Settings() {
         if (!yeniGecmisGun || yeniGecmisGun <= 0) return alert("Lütfen geçerli bir gün sayısı giriniz.");
         try {
             await axios.post(`${API_URL}/api/izin/gecmis-bakiye-ekle`, 
-                { personel_id: formData.personel_id, yil: yeniGecmisYil, devreden_izin: yeniGecmisGun },
+                { personel_id: formData.personel_id, yil: yeniGecmisYil, gun_sayisi: yeniGecmisGun },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             fetchGecmisBakiyeler(formData.personel_id);
@@ -672,7 +672,7 @@ export default function Settings() {
                                                 <div className="mt-3 d-flex flex-wrap gap-2">
                                                     {gecmisBakiyeler.length > 0 ? gecmisBakiyeler.map(g => (
                                                         <span key={g.id} className="badge bg-white text-dark border d-flex align-items-center gap-2 p-2 shadow-sm">
-                                                            {g.yil}: <strong className="text-success">+{g.devreden_izin} Gün</strong>
+                                                            {g.yil}: <strong className="text-success">+{g.gun_sayisi} Gün</strong>
                                                             <button onClick={()=>deleteGecmisBakiye(g.id)} className="btn btn-link text-danger p-0 m-0" style={{lineHeight:0}}><Trash2 size={14}/></button>
                                                         </span>
                                                     )) : <span className="text-muted small fst-italic">Henüz geçmiş kayıt eklenmemiş.</span>}
@@ -693,7 +693,7 @@ export default function Settings() {
                                                                     <td>{izin.izin_turu}</td>
                                                                     <td>{new Date(izin.baslangic_tarihi).toLocaleDateString('tr-TR')}</td>
                                                                     <td>{new Date(izin.bitis_tarihi).toLocaleDateString('tr-TR')}</td>
-                                                                    <td className="fw-bold">{izin.devreden_izin}</td>
+                                                                    <td className="fw-bold">{izin.gun_sayisi}</td>
                                                                     <td>
                                                                         {izin.durum === 'IK_ONAYLADI' || izin.durum === 'TAMAMLANDI' ? <span className="badge bg-success">Onaylı</span> : 
                                                                          izin.durum === 'REDDEDILDI' ? <span className="badge bg-danger">Red</span> : 
