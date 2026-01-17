@@ -17,10 +17,13 @@ export default function TalepYonetimi() {
     const [ilkMesaj, setIlkMesaj] = useState('');
     const [kvkkOnay, setKvkkOnay] = useState(false);
 
-    // Kullanıcı verisini güvenli çek
+    // 🔴 DÜZELTME: Kullanıcı verisini güvenli çekiyoruz
     let user = null;
     try {
-        user = JSON.parse(localStorage.getItem('user'));
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+            user = JSON.parse(storedUser);
+        }
     } catch (e) { console.error("User data error"); }
 
     const token = localStorage.getItem('token');
@@ -34,7 +37,7 @@ export default function TalepYonetimi() {
         try {
             const res = await axios.get(`${API_URL}/api/talep/listele`, { headers: { Authorization: `Bearer ${token}` } });
             setTalepler(res.data);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error("Talepler çekilemedi:", e); }
     };
 
     const fetchMesajlar = async (id) => {
@@ -64,7 +67,7 @@ export default function TalepYonetimi() {
         if (!yeniMesaj.trim()) return;
         try {
             let durum = null;
-            // Güvenli rol kontrolü
+            // 🔴 DÜZELTME: user?.rol kontrolü eklendi
             if (user && ['admin', 'ik', 'filo'].includes(user.rol)) durum = 'YANITLANDI';
             
             await axios.post(`${API_URL}/api/talep/cevapla`, 
@@ -128,7 +131,7 @@ export default function TalepYonetimi() {
                                     <h5 className="mb-0 fw-bold">{seciliTalep.konu}</h5>
                                     <small className="text-muted">Talep No: #{seciliTalep.id} | Durum: {seciliTalep.durum}</small>
                                 </div>
-                                {/* Güvenli Rol Kontrolü */}
+                                {/* 🔴 DÜZELTME: user?.rol kontrolü eklendi */}
                                 {seciliTalep.durum !== 'KAPANDI' && user && ['admin','ik','filo'].includes(user.rol) && (
                                     <button className="btn btn-sm btn-outline-danger" onClick={talepKapat}><Archive size={16} className="me-1"/> Konuyu Kapat</button>
                                 )}
@@ -136,6 +139,7 @@ export default function TalepYonetimi() {
                             
                             <div className="card-body bg-light overflow-auto flex-grow-1 p-3">
                                 {mesajlar.map((m, i) => {
+                                    // 🔴 DÜZELTME: user kontrolü
                                     const isMe = user && m.gonderen_id === user.personel_id;
                                     return (
                                         <div key={i} className={`d-flex mb-3 ${isMe ? 'justify-content-end' : 'justify-content-start'}`}>
