@@ -1,23 +1,34 @@
 const pool = require('../config/db');
 
-// 1. Talepleri Listele (Maskeleme Burada Yapılıyor)
+// 1. Talepleri Listele (Yetki ve Aidiyet Kontrolü)
 exports.talepleriGetir = async (req, res) => {
     try {
-        const { rol, personel_id } = req.user;
+        // Kullanıcı bilgilerini al
+        const { personel_id, rol } = req.user;
+        
+        // Rolü küçük harfe çevirip boşlukları temizle (Hata önleyici)
+        const userRol = rol ? rol.toLowerCase().trim() : 'personel';
+
+        console.log(`📡 TALEP SORGUSU -> ID: ${personel_id}, ROL: ${userRol}`);
+
         let query = '';
         let params = [];
 
-        // Eğer Admin, İK veya Filo ise -> HEPSİNİ GÖRÜR ama İsimler Maskelenir
-        if (['admin', 'ik', 'filo'].includes(rol)) {
+        // 🛑 YETKİLİ KONTROLÜ (SADECE: Admin, İK, Filo) - AMİR YOK!
+        if (['admin', 'ik', 'filo'].includes(userRol)) {
+            console.log("✅ YETKİLİ GÖRÜNÜMÜ: Tüm talepler listeleniyor.");
+            
             query = `
                 SELECT t.*, 
-                p.ad as gercek_ad, p.soyad as gercek_soyad 
+                p.ad as gercek_ad, p.soyad as gercek_soyad, p.rol as gonderen_rol
                 FROM talep_destek t
                 JOIN personeller p ON t.personel_id = p.personel_id
                 ORDER BY t.son_guncelleme DESC`;
         } 
-        // Eğer Personel ise -> SADECE KENDİSİNİ GÖRÜR
+        // 👤 PERSONEL GÖRÜNÜMÜ (Sadece Kendi Talepleri)
         else {
+            console.log("👤 PERSONEL GÖRÜNÜMÜ: Sadece kendi talepleri.");
+            
             query = `
                 SELECT t.*, 
                 p.ad as gercek_ad, p.soyad as gercek_soyad 
@@ -25,27 +36,37 @@ exports.talepleriGetir = async (req, res) => {
                 JOIN personeller p ON t.personel_id = p.personel_id
                 WHERE t.personel_id = $1
                 ORDER BY t.son_guncelleme DESC`;
+            
             params = [personel_id];
         }
 
         const result = await pool.query(query, params);
+        console.log(`📊 SONUÇ: ${result.rows.length} kayıt bulundu.`);
 
-        // 🔥 ANONİMLİK MANIPÜLASYONU 🔥
+        // 🔥 ANONİMLİK MASKELEME MANTIĞI 🔥
         const maskelenmisVeri = result.rows.map(item => {
-            // Eğer bakan kişi talebin sahibiyse -> Gerçek ismini görsün
+            // Eğer talebin sahibi kendisiyse -> "Siz" olarak görsün
             if (item.personel_id === personel_id) {
-                return { ...item, gorunen_ad: `${item.gercek_ad} ${item.gercek_soyad} (Siz)` };
+                return { 
+                    ...item, 
+                    gorunen_ad: `${item.gercek_ad} ${item.gercek_soyad} (Siz)` 
+                };
             }
-            // Eğer bakan kişi başkasıysa (Admin/İK) -> "Personel" görsün
+            // Eğer başkası bakıyorsa (Yetkili) -> "Personel (Anonim)" görsün
             else {
-                return { ...item, gorunen_ad: 'Personel (Anonim)', gercek_ad: null, gercek_soyad: null };
+                return { 
+                    ...item, 
+                    gorunen_ad: 'Personel (Anonim)', 
+                    gercek_ad: null, // Veriyi gizle
+                    gercek_soyad: null // Veriyi gizle
+                };
             }
         });
 
         res.json(maskelenmisVeri);
 
     } catch (error) {
-        console.error(error);
+        console.error("LİSTELEME HATASI:", error);
         res.status(500).json({ error: 'Listeleme hatası' });
     }
 };
@@ -55,7 +76,10 @@ exports.talepOlustur = async (req, res) => {
     const client = await pool.connect();
     try {
         const { tur, konu, mesaj, kvkk } = req.body;
+        
+        // Backend tarafında da KVKK ve veri kontrolü
         if(!kvkk) return res.status(400).json({mesaj: 'KVKK onayı zorunludur.'});
+        if(!konu || !mesaj) return res.status(400).json({mesaj: 'Konu ve mesaj boş olamaz.'});
 
         await client.query('BEGIN');
 
@@ -77,6 +101,7 @@ exports.talepOlustur = async (req, res) => {
 
     } catch (error) {
         await client.query('ROLLBACK');
+        console.error("OLUŞTURMA HATASI:", error);
         res.status(500).json({ error: 'Kayıt hatası' });
     } finally { client.release(); }
 };
@@ -93,14 +118,19 @@ exports.talepDetay = async (req, res) => {
              ORDER BY tm.gonderim_tarihi ASC`, [id]
         );
 
-        // Mesajlarda da isim gizleme yapılmalı
+        // Mesajlarda isim gizleme
         const mesajlar = msjRes.rows.map(m => {
+            // Mesajı atan "Ben" isem
             if (m.gonderen_id === req.user.personel_id) {
                 return { ...m, ad_soyad: 'Siz' };
-            } else if (['admin','ik','filo','amir'].includes(m.rol)) {
-                return { ...m, ad_soyad: 'Yetkili' }; // Cevaplayan yetkili
-            } else {
-                return { ...m, ad_soyad: 'Personel' }; // Karşı taraf personel ise
+            } 
+            // Mesajı atan "Yetkili" ise
+            else if (['admin','ik','filo'].includes(m.rol)) {
+                return { ...m, ad_soyad: 'Yetkili' }; 
+            } 
+            // Mesajı atan başka bir personel ise (Bu senaryoda olmaz ama)
+            else {
+                return { ...m, ad_soyad: 'Personel' }; 
             }
         });
 
@@ -119,9 +149,11 @@ exports.cevapYaz = async (req, res) => {
         );
 
         // Durumu güncelle (Örn: 'AÇIK' -> 'YANITLANDI')
+        // Sadece yetkili durumu değiştirebilir veya kapatabilir
         if (yeni_durum) {
             await pool.query(`UPDATE talep_destek SET durum = $1, son_guncelleme = NOW() WHERE id = $2`, [yeni_durum, talep_id]);
         } else {
+            // Kullanıcı cevap yazdıysa sadece tarihi güncelle
             await pool.query(`UPDATE talep_destek SET son_guncelleme = NOW() WHERE id = $1`, [talep_id]);
         }
 
