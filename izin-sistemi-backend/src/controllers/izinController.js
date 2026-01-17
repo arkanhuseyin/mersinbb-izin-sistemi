@@ -204,30 +204,62 @@ exports.talepOnayla = async (req, res) => {
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     try {
-        // SQL Sorgusu: Tüm personeli, doğum/ayrılma tarihi ve aktiflik durumuyla çekiyoruz.
+        // 🛠️ GÜNCELLEME BURADA YAPILDI:
+        // Eski 'p.devreden_izin' yerine, izin_gecmis_bakiyeler tablosundan toplam alan alt sorgu eklendi.
         const query = `
-            SELECT p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif, p.devreden_izin, b.birim_adi, 
-            COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan 
+            SELECT 
+                p.personel_id, 
+                p.ad, 
+                p.soyad, 
+                p.tc_no, 
+                p.ise_giris_tarihi, 
+                p.dogum_tarihi, 
+                p.ayrilma_tarihi, 
+                p.aktif, 
+                b.birim_adi, 
+                
+                -- 👇 KRİTİK DEĞİŞİKLİK BURADA:
+                -- Personeller tablosundaki sabit sütun yerine, eklediğin tablodan topluyoruz:
+                (
+                    SELECT COALESCE(SUM(gun_sayisi), 0) 
+                    FROM izin_gecmis_bakiyeler 
+                    WHERE personel_id = p.personel_id
+                ) as devreden_izin, 
+
+                COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan 
             FROM personeller p 
             LEFT JOIN birimler b ON p.birim_id = b.birim_id 
             LEFT JOIN izin_talepleri it ON p.personel_id = it.personel_id 
-            AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
-            AND it.izin_turu = 'YILLIK İZİN' 
-            AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE) 
-            GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif, p.devreden_izin 
+                AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
+                AND it.izin_turu = 'YILLIK İZİN' 
+                AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE) 
+            GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif
             ORDER BY p.ad ASC`;
             
         const result = await pool.query(query);
         
         const rapor = await Promise.all(result.rows.map(async (p) => {
+            // Net kalanı hesaplarken de veritabanından gelen güncel 'devreden_izin'i kullanır
             const netKalan = await hesaplaBakiye(p.personel_id);
             const buYilHak = await hesaplaBuYil(p.personel_id);
-            // MERKEZİ HESAP ÇAĞRISI (Tüm parametrelerle)
             const kumulatif = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
-            return { ...p, bu_yil_hakedis: buYilHak, kalan: netKalan, kumulatif_hak: kumulatif };
+            
+            // devreden_izin veritabanından string olarak gelebilir, sayıya çeviriyoruz
+            const devredenSayi = parseInt(p.devreden_izin) || 0;
+
+            return { 
+                ...p, 
+                devreden_izin: devredenSayi, // Frontend bunu okuyup tabloya basacak
+                bu_yil_hakedis: buYilHak, 
+                kalan: netKalan, 
+                kumulatif_hak: kumulatif 
+            };
         }));
         res.json(rapor);
-    } catch (err) { res.status(500).send('Rapor hatası'); }
+    } catch (err) { 
+        console.error(err);
+        res.status(500).send('Rapor hatası'); 
+    }
 };
 
 exports.getPersonelIzinDetay = async (req, res) => {

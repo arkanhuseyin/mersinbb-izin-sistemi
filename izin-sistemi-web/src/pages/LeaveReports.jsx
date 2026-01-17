@@ -24,8 +24,6 @@ export default function LeaveReports() {
         const token = localStorage.getItem('token');
         if(!token) { window.location.href = '/login'; return; }
 
-        // Sadece rapor verisini çekiyoruz. Hakediş kuralları veya hesaplama mantığına ihtiyacımız yok.
-        // Backend zaten (Giriş Yılından Başlatarak) doğru hesaplanmış veriyi gönderiyor.
         axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => { 
                 setRapor(res.data); 
@@ -61,22 +59,22 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (BACKEND'DEN GELEN HAZIR VERİYLE) ---
-    
+    // --- 📄 EXCEL ÇIKTILARI ---
     const generateDetailExcel = () => {
         if (!personelDetay || !secilenPersonel) return;
         const p = personelDetay.personel;
         
-        // Kümülatif hak verisi rapor listesindeki 'secilenPersonel' objesinde mevcut (Backend Hesapladı)
-        const kumulatifHak = secilenPersonel.kumulatif_hak || 0;
-        const buYilHak = secilenPersonel.bu_yil_hakedis || 0;
+        // Sayıya çevirme garantisi
+        const kumulatifHak = parseInt(secilenPersonel.kumulatif_hak) || 0;
+        const devredenHak = parseInt(secilenPersonel.devreden_izin) || 0;
+        const buYilHak = parseInt(secilenPersonel.bu_yil_hakedis) || 0;
 
         const wsData = [
             ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - PERSONEL İZİN DETAY RAPORU"], [" "],
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
             ["Kümülatif Hak", kumulatifHak],
-            ["Sisteme Devreden", p.devreden_izin], 
+            ["Geçmişten Devreden", devredenHak], // Excel'e de ekledik
             ["Bu Yıl Hakediş", buYilHak],
             ["Toplam Kullanılan", personelDetay.personel.kullanilan], 
             ["Kalan", personelDetay.personel.kalan],
@@ -104,12 +102,11 @@ export default function LeaveReports() {
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]
             ];
             
-            // Backend'den gelen hazır hesaplanmış veriyi kullanıyoruz (2007'den başlatan İK Modu)
             rapor.forEach((p) => {
-                const kumulatifHak = p.kumulatif_hak || 0;
-                const devreden = p.devreden_izin || 0;
-                const buYilHak = p.bu_yil_hakedis || 0;
-                const kalan = p.kalan || 0;
+                const kumulatifHak = parseInt(p.kumulatif_hak) || 0;
+                const devreden = parseInt(p.devreden_izin) || 0;
+                const buYilHak = parseInt(p.bu_yil_hakedis) || 0;
+                const kalan = parseInt(p.kalan) || 0;
                 
                 // Formül: Toplam Havuz = Kumulatif + Devreden
                 const toplamHavuz = kumulatifHak + devreden;
@@ -141,7 +138,7 @@ export default function LeaveReports() {
         } catch (e) { alert("Excel oluşturulurken hata oluştu."); }
     };
 
-    // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN - BLOB) ---
+    // --- 🎨 PDF ÇIKTILARI ---
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -172,13 +169,6 @@ export default function LeaveReports() {
     };
 
     const filtered = rapor.filter(p => p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama));
-
-    // Yardımcı: Seçilen personelin kümülatif hakkını bul
-    const getSelectedPersonelKumulatif = () => {
-        if(!secilenPersonel) return 0;
-        const p = rapor.find(r => r.personel_id === secilenPersonel.personel_id);
-        return p ? p.kumulatif_hak : 0;
-    };
 
     return (
         <div className="container-fluid p-4 p-lg-5">
@@ -215,11 +205,15 @@ export default function LeaveReports() {
                     </thead>
                     <tbody>
                         {yukleniyor ? <tr><td colSpan="9" className="text-center py-5">Yükleniyor...</td></tr> : filtered.map((p, i) => {
-                            // Backend'den gelen hazır değerler
-                            const kumulatif = p.kumulatif_hak || 0;
-                            const devreden = p.devreden_izin || 0;
+                            // ✅ GÜVENLİ MATEMATİK İÇİN PARSEINT KULLANIYORUZ
+                            const kumulatif = parseInt(p.kumulatif_hak) || 0;
+                            const devreden = parseInt(p.devreden_izin) || 0;
+                            const buYilHak = parseInt(p.bu_yil_hakedis) || 0;
+                            
+                            // Toplam Havuz = Otomatik Hesaplanan + Manuel Eklenen
                             const toplamHavuz = kumulatif + devreden;
-                            const kalan = p.kalan || 0;
+                            
+                            const kalan = parseInt(p.kalan) || 0;
                             const toplamKullanilan = toplamHavuz - kalan;
                             
                             return (
@@ -227,8 +221,13 @@ export default function LeaveReports() {
                                     <td className="ps-4 fw-bold">{p.ad} {p.soyad}<br/><small className="fw-normal text-muted">{p.tc_no}</small></td>
                                     <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                     <td className="text-center bg-secondary-subtle text-dark fw-bold border-start border-end fs-6">{kumulatif}</td>
-                                    <td className="text-center bg-warning-subtle text-dark">{devreden}</td>
-                                    <td className="text-center bg-info-subtle text-dark">{p.bu_yil_hakedis}</td>
+                                    
+                                    {/* DEVREDEN SÜTUNU */}
+                                    <td className="text-center bg-warning-subtle text-dark fw-bold">
+                                        {devreden > 0 ? `+${devreden}` : '-'}
+                                    </td>
+                                    
+                                    <td className="text-center bg-info-subtle text-dark">{buYilHak}</td>
                                     <td className="text-center fw-bold fs-6">{toplamHavuz}</td>
                                     <td className="text-center text-muted">{toplamKullanilan}</td>
                                     <td className="text-center"><span className={`badge ${kalan < 5 ? 'bg-danger' : 'bg-primary'} rounded-pill`}>{kalan}</span></td>
@@ -240,6 +239,7 @@ export default function LeaveReports() {
                 </table>
             </div></div></div>
 
+            {/* MODAL DETAY */}
             {secilenPersonel && (
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered">
@@ -270,16 +270,44 @@ export default function LeaveReports() {
                                                 
                                                 <div className="p-3 bg-primary bg-opacity-10 rounded-3 mb-3 border border-primary border-opacity-25 text-center">
                                                     <small className="text-primary fw-bold">Ömür Boyu Toplam Hak</small>
-                                                    {/* Kümülatif hak, modalda "secilenPersonel" üzerinden okunur çünkü o ana listeden gelir */}
-                                                    <div className="fs-2 fw-bold text-primary">{secilenPersonel.kumulatif_hak || 0} Gün</div>
+                                                    <div className="fs-2 fw-bold text-primary">{parseInt(secilenPersonel.kumulatif_hak) || 0} Gün</div>
                                                 </div>
 
                                                 <ul className="list-group list-group-flush small mb-4">
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Sisteme Devreden:</span><strong className="text-warning">+{secilenPersonel.devreden_izin || 0}</strong></li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Bu Yıl Hakediş:</span><strong className="text-info">+{secilenPersonel.bu_yil_hakedis || 0}</strong></li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold"><span>Toplam Havuz:</span><strong className="text-dark fs-6">{(secilenPersonel.kumulatif_hak || 0) + (secilenPersonel.devreden_izin || 0)}</strong></li>
-                                                    {/* Toplam Kullanılan = Toplam Havuz - Kalan */}
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent text-danger"><span>Toplam Kullanılan:</span><strong>-{((secilenPersonel.kumulatif_hak || 0) + (secilenPersonel.devreden_izin || 0)) - personelDetay.personel.kalan}</strong></li>
+                                                    {/* MODAL İÇİNDEKİ HESAPLAMALARI GÜNCELLEDİK */}
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent">
+                                                        <span>Sisteme Devreden:</span>
+                                                        <strong className="text-warning">
+                                                            +{parseInt(secilenPersonel.devreden_izin) || 0}
+                                                        </strong>
+                                                    </li>
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent">
+                                                        <span>Bu Yıl Hakediş:</span>
+                                                        <strong className="text-info">
+                                                            +{parseInt(secilenPersonel.bu_yil_hakedis) || 0}
+                                                        </strong>
+                                                    </li>
+                                                    
+                                                    {(() => {
+                                                        const kumulatif = parseInt(secilenPersonel.kumulatif_hak) || 0;
+                                                        const devreden = parseInt(secilenPersonel.devreden_izin) || 0;
+                                                        const toplamHavuz = kumulatif + devreden;
+                                                        const kalan = parseInt(personelDetay.personel.kalan) || 0;
+                                                        const kullanilan = toplamHavuz - kalan;
+
+                                                        return (
+                                                            <>
+                                                                <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold">
+                                                                    <span>Toplam Havuz:</span>
+                                                                    <strong className="text-dark fs-6">{toplamHavuz}</strong>
+                                                                </li>
+                                                                <li className="list-group-item d-flex justify-content-between px-0 bg-transparent text-danger">
+                                                                    <span>Toplam Kullanılan:</span>
+                                                                    <strong>-{kullanilan}</strong>
+                                                                </li>
+                                                            </>
+                                                        );
+                                                    })()}
                                                 </ul>
                                                 
                                                 <div className={`alert ${personelDetay.personel.kalan < 0 ? 'alert-danger' : 'alert-success'} mb-0 text-center`}>
