@@ -10,11 +10,10 @@ const path = require('path');
 // ============================================================
 
 // Tarih Formatlayıcı (GÜÇLENDİRİLDİ)
-// Hem "15.01.2026" hem de "2026-01-15T00:00..." formatlarını kabul eder.
+// "15.01.2026" -> "2026-01-15" çevirir.
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     
-    // Stringe çevirip boşlukları al
     const str = String(tarihStr).trim();
 
     // 1. Format: DD.MM.YYYY (Örn: 15.01.2026) -> YYYY-MM-DD
@@ -26,16 +25,16 @@ const tarihFormatla = (tarihStr) => {
         }
     }
 
-    // 2. Format: ISO (Örn: 2026-01-15T10:00:00.000Z) -> YYYY-MM-DD
+    // 2. Format: ISO (Örn: 2026-01-15T...) -> YYYY-MM-DD
     if (str.includes('T')) {
         return str.split('T')[0];
     }
 
-    // 3. Format: Zaten YYYY-MM-DD ise dokunma
+    // 3. Zaten düzgünse (YYYY-MM-DD)
     return str;
 };
 
-// Dosya isminde Türkçe karakterleri temizler
+// PDF için Türkçe karakter temizleyici
 const turkceKarakterTemizle = (str) => {
     if(!str) return "rapor";
     return str.replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
@@ -47,10 +46,11 @@ const turkceKarakterTemizle = (str) => {
               .replace(/[^a-zA-Z0-9]/g, '_'); 
 };
 
-// Ömür Boyu Kümülatif Hak Hesaplama
+// 🗓️ ÖMÜR BOYU KÜMÜLATİF HAK HESAPLAMA (TİS MANTIKLI)
 const hesaplaKumulatifHakBackend = async (girisTarihi) => {
     if (!girisTarihi) return 0;
     
+    // Veritabanındaki özel kuralları çek
     const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
     const kurallar = kuralRes.rows;
 
@@ -58,52 +58,69 @@ const hesaplaKumulatifHakBackend = async (girisTarihi) => {
     const bugun = new Date();
     let toplamHak = 0;
     
+    // Döngü: İşe giriş tarihinden başla, her yıl dönümünde hak ekle
     let currentCalcDate = new Date(giris);
-    currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
+    currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1); // 1. yıl dolduğunda hak kazanılır
 
     while (currentCalcDate <= bugun) {
-        const hesapYili = currentCalcDate.getFullYear();
+        const hesapYili = currentCalcDate.getFullYear(); // Hangi yıldayız? (Örn: 2018)
         const oAnkiKidem = Math.floor((currentCalcDate - giris) / (1000 * 60 * 60 * 24 * 365.25));
 
         if (oAnkiKidem >= 1) {
             let hak = 0;
+            
+            // 1. Önce Veritabanında Özel Kural Var mı?
             const uygunKural = kurallar.find(k => 
-                hesapYili >= k.baslangic_yili && 
-                hesapYili <= k.bitis_yili && 
-                oAnkiKidem >= k.kidem_alt && 
-                oAnkiKidem <= k.kidem_ust
+                hesapYili >= parseInt(k.baslangic_yili) && 
+                hesapYili <= parseInt(k.bitis_yili) && 
+                oAnkiKidem >= parseInt(k.kidem_alt) && 
+                oAnkiKidem <= parseInt(k.kidem_ust)
             );
 
             if (uygunKural) {
-                hak = uygunKural.gun_sayisi;
+                hak = parseInt(uygunKural.gun_sayisi);
             } else {
-                let bazYil = giris.getFullYear(); 
-                if(bazYil < 2007) bazYil = 2007;
-
-                if (bazYil < 2018) {
-                    if (oAnkiKidem <= 5) hak = 14; else if (oAnkiKidem <= 15) hak = 19; else hak = 25;
-                } else if (bazYil < 2024) {
-                    if (bazYil < 2019) { if (oAnkiKidem <= 5) hak = 14; else if (oAnkiKidem <= 15) hak = 19; else hak = 25; }
-                    else { if (oAnkiKidem <= 3) hak = 16; else if (oAnkiKidem <= 5) hak = 18; else if (oAnkiKidem <= 15) hak = 25; else hak = 30; }
-                } else {
-                    if (bazYil < 2025) { if (oAnkiKidem <= 3) hak = 16; else if (oAnkiKidem <= 5) hak = 18; else if (oAnkiKidem <= 15) hak = 25; else hak = 30; }
-                    else { if (oAnkiKidem <= 3) hak = 18; else if (oAnkiKidem <= 5) hak = 20; else if (oAnkiKidem <= 15) hak = 27; else hak = 32; }
+                // 2. Kural Yoksa: TİS TARİHÇESİNE GÖRE HESAPLA
+                
+                // DÖNEM 1: 2018 ÖNCESİ (Standart İş Kanunu)
+                if (hesapYili < 2018) {
+                    if (oAnkiKidem <= 5) hak = 14; 
+                    else if (oAnkiKidem <= 15) hak = 20; 
+                    else hak = 26;
+                } 
+                // DÖNEM 2: 2018 - 2023 ARASI (TİS 1)
+                else if (hesapYili < 2024) {
+                    // Tabloya göre: 5 yıllıklar 22 gün almış (yani 5. yıl üst dilimde)
+                    if (oAnkiKidem < 5) hak = 16; 
+                    else if (oAnkiKidem < 15) hak = 22; // 5-14 yıl
+                    else hak = 30; // 15 ve üzeri
+                } 
+                // DÖNEM 3: 2024 VE SONRASI (TİS 2)
+                else {
+                    // Tabloya göre: 5 yıllıklar 27 gün almış
+                    if (oAnkiKidem < 5) hak = 18; 
+                    else if (oAnkiKidem < 15) hak = 27; // 5-14 yıl
+                    else hak = 32; // 15 ve üzeri
                 }
             }
             toplamHak += hak;
         }
+        // Bir sonraki yıla geç
         currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
     }
     return toplamHak;
 };
 
-// Bakiye Hesaplama
+// Genel Bakiye Hesaplama
 const hesaplaBakiye = async (personel_id) => {
+    // Manuel eklenen geçmiş bakiyeler
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const devredenToplam = parseInt(gecmisRes.rows[0].toplam_gecmis) || 0;
 
+    // Bu yılki hak (Dinamik)
     const buYilHakedis = await dinamikHakedisHesapla(personel_id);
 
+    // Kullanılanlar
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -113,7 +130,10 @@ const hesaplaBakiye = async (personel_id) => {
     `, [personel_id]); 
 
     const toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
-    return (devredenToplam + buYilHakedis) - toplamKullanilan;
+    
+    // Formül: (Devreden + Bu Yıl) - Kullanılan
+    const totalBalance = (devredenToplam + buYilHakedis) - toplamKullanilan;
+    return totalBalance;
 };
 
 // ============================================================
@@ -174,7 +194,6 @@ exports.personelListesi = async (req, res) => {
     } catch (err) { res.status(500).json({ mesaj: 'Hata' }); }
 };
 
-// 🛑🛑🛑 HATA BURADAYDI, DÜZELTİLDİ 🛑🛑🛑
 exports.talepOlustur = async (req, res) => {
     let { baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, haftalik_izin, ise_baslama, izin_adresi, personel_imza } = req.body;
     const belge_yolu = req.file ? req.file.path : null;
@@ -195,7 +214,7 @@ exports.talepOlustur = async (req, res) => {
             }
         }
 
-        // ✅ DÜZELTME: Mobil uygulamadan gelen "15.01.2026" formatını "2026-01-15"e çeviriyoruz
+        // ✅ DÜZELTME: Güçlü tarih formatlayıcı kullanılıyor
         const dbBaslangic = tarihFormatla(baslangic_tarihi);
         const dbBitis = tarihFormatla(bitis_tarihi);
         const dbIseBaslama = tarihFormatla(ise_baslama);
