@@ -1,6 +1,7 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
-const dinamikHakedisHesapla = require('../utils/hakedisHesapla'); 
+// 🧠 MERKEZİ HESAPLAMA MOTORU BURADA
+const { hesaplaBuYil, hesaplaKumulatif } = require('../utils/hakedisHesapla'); 
 const PDFDocument = require('pdfkit'); 
 const fs = require('fs'); 
 const path = require('path'); 
@@ -9,23 +10,17 @@ const path = require('path');
 // 🛠️ YARDIMCI FONKSİYONLAR
 // ============================================================
 
-// 1. GÜÇLENDİRİLMİŞ TARİH FORMATLAYICI (Mobil Hatasını Çözer)
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     const str = String(tarihStr).trim();
-
-    // Format: 15.01.2026 -> 2026-01-15
     if (str.includes('.')) {
         const parts = str.split('.');
         if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
     }
-    // Format: ISO
     if (str.includes('T')) return str.split('T')[0];
-    
     return str;
 };
 
-// 2. PDF İÇİN GÖRÜNÜM FORMATI (2026-01-15 -> 15.01.2026)
 const tarihGoster = (tarihStr) => {
     if (!tarihStr) return '-';
     try {
@@ -35,7 +30,6 @@ const tarihGoster = (tarihStr) => {
     } catch { return '-'; }
 };
 
-// 3. DOSYA İSMİ TEMİZLEYİCİ (500 Hatasını Çözer)
 const turkceKarakterTemizle = (str) => {
     if(!str) return "rapor";
     return str.replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
@@ -48,92 +42,21 @@ const turkceKarakterTemizle = (str) => {
 };
 
 // ============================================================
-// 🧠 4. DİNAMİK ÖMÜR BOYU HAK HESAPLAMA (TİS MANTIKLI)
+// 🧠 ANA BAKİYE HESAPLAMA (MERKEZİ SİSTEM KULLANIR)
 // ============================================================
-const hesaplaKumulatifHakBackend = async (girisTarihi) => {
-    if (!girisTarihi) return 0;
-    
-    // Veritabanındaki özel kuralları çek
-    const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
-    const kurallar = kuralRes.rows;
-
-    const giris = new Date(girisTarihi);
-    const bugun = new Date();
-    let toplamHak = 0;
-    
-    // Döngü: İşe giriş tarihinden başla, her yıl dönümünde hak ekle
-    let currentCalcDate = new Date(giris);
-    currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1); // 1. yıl dolduğunda hak kazanılır
-
-    while (currentCalcDate <= bugun) {
-        const hesapYili = currentCalcDate.getFullYear(); // O anki yıl (Örn: 2008, 2018, 2024...)
-        const oAnkiKidem = Math.floor((currentCalcDate - giris) / (1000 * 60 * 60 * 24 * 365.25));
-
-        if (oAnkiKidem >= 1) {
-            let hak = 0;
-            
-            // 1. Önce Veritabanında Özel Kural Var mı?
-            const uygunKural = kurallar.find(k => 
-                hesapYili >= parseInt(k.baslangic_yili) && 
-                hesapYili <= parseInt(k.bitis_yili) && 
-                oAnkiKidem >= parseInt(k.kidem_alt) && 
-                oAnkiKidem <= parseInt(k.kidem_ust)
-            );
-
-            if (uygunKural) {
-                hak = parseInt(uygunKural.gun_sayisi);
-            } else {
-                // 2. Kural Yoksa: TİS TARİHÇESİNE GÖRE HESAPLA (BURASI GÜNCELLENDİ)
-                
-                // --- DÖNEM 1: 2018 ÖNCESİ (Eski Sistem) ---
-                if (hesapYili < 2018) {
-                    if (oAnkiKidem <= 5) hak = 14; 
-                    else if (oAnkiKidem <= 15) hak = 20; // Yasal standart 20, senin tabloda da genelde 20
-                    else hak = 26; // 15 yıl üstü
-                } 
-                
-                // --- DÖNEM 2: 2018 - 2023 ARASI (TİS 1 - İyileştirme) ---
-                else if (hesapYili < 2024) {
-                    // Tablona göre 2020-2023 arasında 25 gün alanlar var
-                    if (oAnkiKidem <= 5) hak = 16;  // Giriş seviyesi arttı
-                    else if (oAnkiKidem < 15) {
-                        // 2020 sonrası bir ara iyileştirme (22 -> 25) olmuş gibi görünüyor
-                        if(hesapYili >= 2020) hak = 25; 
-                        else hak = 22; 
-                    }
-                    else hak = 30; // 15 yıl üstü 30 güne çıktı
-                } 
-                
-                // --- DÖNEM 3: 2024 VE SONRASI (TİS 2 - Son Durum) ---
-                else {
-                    if (oAnkiKidem <= 3) hak = 18;  // Yeni girişler daha yüksek
-                    else if (oAnkiKidem <= 5) hak = 20;
-                    else if (oAnkiKidem < 15) hak = 27; // Orta kademe 27 oldu
-                    else hak = 32; // Kıdemliler 32 oldu
-                }
-            }
-            toplamHak += hak;
-        }
-        // Bir sonraki yıla geç
-        currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
-    }
-    return toplamHak;
-};
-
-// 5. ANLIK BAKİYE HESAPLAMA (Ömür Boyu - Kullanılan)
 const hesaplaBakiye = async (personel_id) => {
-    // Personel bilgisini al (Giriş tarihi için)
+    // 1. Personel Giriş Tarihini Al
     const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
-    // Ömür boyu toplam hakedişi hesapla
-    const toplamHakedis = await hesaplaKumulatifHakBackend(pRes.rows[0].ise_giris_tarihi);
+    // 2. ÖMÜR BOYU HAKKI MERKEZDEN ÇEK (hakedisHesapla.js)
+    const toplamHakedis = await hesaplaKumulatif(pRes.rows[0].ise_giris_tarihi);
 
-    // Manuel eklenen geçmiş bakiyeler (Eğer varsa sisteme ekle)
+    // 3. Manuel Eklenenleri Al
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const manuelEklenen = parseInt(gecmisRes.rows[0].toplam_gecmis) || 0;
 
-    // Toplam Kullanılan
+    // 4. Kullanılanları Al
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -143,7 +66,7 @@ const hesaplaBakiye = async (personel_id) => {
     `, [personel_id]); 
     const toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
 
-    // Formül: (Ömür Boyu Hak + Manuel Eklenenler) - Kullanılan
+    // 5. Sonuç
     return (toplamHakedis + manuelEklenen) - toplamKullanilan;
 };
 
@@ -195,7 +118,6 @@ exports.talepOlustur = async (req, res) => {
             }
         }
 
-        // ✅ TARİH FORMATI DÜZELTME
         const dbBaslangic = tarihFormatla(baslangic_tarihi);
         const dbBitis = tarihFormatla(bitis_tarihi);
         const dbIseBaslama = tarihFormatla(ise_baslama);
@@ -269,7 +191,7 @@ exports.talepOnayla = async (req, res) => {
     } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ mesaj: 'Hata oluştu.' }); } finally { client.release(); }
 };
 
-// RAPORLAR VE DETAYLAR
+// RAPORLAR VE DETAYLAR (GÜNCELLENDİ: HESAPLAMAYI MERKEZDEN ALIR)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     try {
@@ -277,8 +199,9 @@ exports.izinDurumRaporu = async (req, res) => {
         const result = await pool.query(query);
         const rapor = await Promise.all(result.rows.map(async (p) => {
             const netKalan = await hesaplaBakiye(p.personel_id);
-            const buYilHak = await dinamikHakedisHesapla(p.personel_id);
-            return { ...p, bu_yil_hakedis: buYilHak, kalan: netKalan };
+            const buYilHak = await hesaplaBuYil(p.personel_id); // MERKEZDEN
+            const kumulatif = await hesaplaKumulatif(p.ise_giris_tarihi); // MERKEZDEN
+            return { ...p, bu_yil_hakedis: buYilHak, kalan: netKalan, kumulatif_hak: kumulatif };
         }));
         res.json(rapor);
     } catch (err) { res.status(500).send('Rapor hatası'); }
@@ -296,7 +219,7 @@ exports.getPersonelIzinDetay = async (req, res) => {
         izinRes.rows.forEach(izin => { if (izin.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(izin.kac_gun); });
         
         const netKalan = await hesaplaBakiye(id);
-        const buYilHak = await dinamikHakedisHesapla(id);
+        const buYilHak = await hesaplaBuYil(id); // MERKEZDEN
         
         const personelVerisi = { ...pRes.rows[0], kullanilan: toplamKullanilan, kalan: netKalan, bu_yil_hak: buYilHak };
         res.json({ personel: personelVerisi, gecmisBakiyeler: gecmisRes.rows, izinler: izinRes.rows });
@@ -347,7 +270,7 @@ exports.personelListesi = async (req, res) => {
 };
 
 // ============================================================
-// 📄 PDF ÇIKTILARI
+// 📄 PDF ÇIKTILARI (MERKEZİ SİSTEME BAĞLANDI)
 // ============================================================
 
 // 1. TOPLU PDF
@@ -385,9 +308,8 @@ exports.topluPdfRaporu = async (req, res) => {
         for (let i = 0; i < personeller.length; i++) {
             const p = personeller[i];
             const kalan = await hesaplaBakiye(p.personel_id);
-            const buYilHak = await dinamikHakedisHesapla(p.personel_id);
-            const omurBoyu = await hesaplaKumulatifHakBackend(p.ise_giris_tarihi);
-            const toplamHavuz = kalan + 0; // Kalan zaten her şeyi içeriyor
+            const buYilHak = await hesaplaBuYil(p.personel_id); // MERKEZDEN
+            const omurBoyu = await hesaplaKumulatif(p.ise_giris_tarihi); // MERKEZDEN
 
             const giris = new Date(p.ise_giris_tarihi);
             const kidem = isNaN(giris.getTime()) ? 0 : Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
@@ -411,7 +333,7 @@ exports.topluPdfRaporu = async (req, res) => {
                 `${kidem} Yıl`, 
                 omurBoyu.toString(), 
                 buYilHak.toString(), 
-                omurBoyu.toString(), // Toplam havuz yerine ömür boyu yazdırıyoruz
+                omurBoyu.toString(), 
                 kalan.toString(), 
                 durumMetni
             ];
@@ -432,7 +354,6 @@ exports.topluPdfRaporu = async (req, res) => {
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
     try {
-        // 1. Veri Çekme
         const pRes = await pool.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id WHERE p.personel_id = $1`, [id]);
         if(pRes.rows.length === 0) return res.status(404).send('Personel bulunamadı');
         const p = pRes.rows[0];
@@ -440,7 +361,6 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         const gRes = await pool.query(`SELECT * FROM izin_gecmis_bakiyeler WHERE personel_id = $1`, [id]);
         const iRes = await pool.query(`SELECT * FROM izin_talepleri WHERE personel_id = $1 AND durum IN ('IK_ONAYLADI', 'TAMAMLANDI') ORDER BY baslangic_tarihi DESC`, [id]);
 
-        // 2. PDF Ayarları
         const doc = new PDFDocument({ margin: 40, size: 'A4' });
         const fontPath = path.join(__dirname, '../../templates/font.ttf');
         if (fs.existsSync(fontPath)) doc.registerFont('TrFont', fontPath);
@@ -451,12 +371,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         res.setHeader('Content-Disposition', `attachment; filename=${safeFilename}`);
         doc.pipe(res);
 
-        // --- 1. ÜST BİLGİ (FOTOĞRAF VE BAŞLIK) ---
-        const photoX = 40;
-        const photoY = 40;
-        const photoW = 80;
-        const photoH = 100;
-        
+        const photoX = 40; const photoY = 40; const photoW = 80; const photoH = 100;
         let photoFound = false;
         if (p.fotograf_yolu) {
             const relativePath = p.fotograf_yolu.replace(/\\/g, '/');
@@ -479,7 +394,6 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.fontSize(12).fillColor('#555').text('TOPLU TAŞIMA ŞUBE MÜDÜRLÜĞÜ - PERSONEL İZİN DETAYI', textStartX, 70);
         doc.moveDown(4);
 
-        // --- 2. PERSONEL BİLGİLERİ ---
         let y = doc.y + 20;
         doc.rect(40, y - 10, 515, 65).fill('#f8f9fa').stroke('#ddd');
         doc.fillColor('#000').fontSize(10);
@@ -492,20 +406,15 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.text(`İşe Giriş: ${tarihGoster(p.ise_giris_tarihi)}`, 300, y);
         doc.y = y + 40;
 
-        // --- 3. BAKİYE ÖZETİ ---
-        const kumulatifHak = await hesaplaKumulatifHakBackend(p.ise_giris_tarihi);
+        // --- 3. BAKİYE ÖZETİ (MERKEZİ HESAP) ---
+        const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi); // MERKEZDEN
         
-        // Manuel Eklenen (Geçmiş Bakiyeler Tablosu)
         let manuelGecmis = 0;
         gRes.rows.forEach(g => manuelGecmis += parseInt(g.gun_sayisi) || 0);
 
-        // Kullanılan
         let toplamKullanilan = 0;
-        iRes.rows.forEach(iz => { 
-            if(iz.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(iz.kac_gun) || 0; 
-        });
+        iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(iz.kac_gun) || 0; });
 
-        // Formül: (Otomatik Hesaplanan + Manuel Eklenen) - Kullanılan
         const kalanIzin = (kumulatifHak + manuelGecmis) - toplamKullanilan;
 
         doc.fontSize(12).fillColor('#1a3c6e').text('BAKİYE ÖZETİ (Ömür Boyu)', { underline: false });
@@ -518,7 +427,6 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica-Bold').text(`${kumulatifHak} Gün`, 250, ozetY);
         doc.font(fs.existsSync(fontPath) ? 'TrFont' : 'Helvetica');
 
-        // Manuel Ekleme varsa göster
         if(manuelGecmis !== 0) {
             doc.text(`• Manuel Eklenen / Devreden:`, 50, ozetY + 20);
             doc.fillColor('#f39c12').text(`+ ${manuelGecmis} Gün`, 250, ozetY + 20);
@@ -535,21 +443,15 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
 
         doc.moveDown(5);
 
-        // --- 4. İZİN HAREKETLERİ LİSTESİ ---
         doc.fontSize(12).fillColor('#000').text('GEÇMİŞ İZİN HAREKETLERİ', 40, doc.y);
         doc.moveDown(0.5);
 
         let tableY = doc.y;
         doc.rect(40, tableY, 515, 20).fill('#2c3e50');
         doc.fillColor('#fff').fontSize(9);
-        doc.text("İzin Türü", 50, tableY + 6); 
-        doc.text("Başlangıç", 200, tableY + 6); 
-        doc.text("Bitiş", 300, tableY + 6);
-        doc.text("Gün", 400, tableY + 6); 
-        doc.text("Durum", 480, tableY + 6);
-        
-        tableY += 20;
-        doc.fillColor('#000');
+        doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
+        doc.text("Gün", 400, tableY + 6); doc.text("Durum", 480, tableY + 6);
+        tableY += 20; doc.fillColor('#000');
 
         iRes.rows.forEach((iz, i) => {
             if (tableY > 750) { 
@@ -557,13 +459,9 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
                 tableY = 40; 
                 doc.rect(40, tableY, 515, 20).fill('#2c3e50');
                 doc.fillColor('#fff');
-                doc.text("İzin Türü", 50, tableY + 6); 
-                doc.text("Başlangıç", 200, tableY + 6); 
-                doc.text("Bitiş", 300, tableY + 6);
-                doc.text("Gün", 400, tableY + 6); 
-                doc.text("Durum", 480, tableY + 6);
-                tableY += 20;
-                doc.fillColor('#000');
+                doc.text("İzin Türü", 50, tableY + 6); doc.text("Başlangıç", 200, tableY + 6); doc.text("Bitiş", 300, tableY + 6);
+                doc.text("Gün", 400, tableY + 6); doc.text("Durum", 480, tableY + 6);
+                tableY += 20; doc.fillColor('#000');
             }
 
             if (i % 2 === 0) doc.rect(40, tableY, 515, 20).fill('#ecf0f1');

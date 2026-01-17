@@ -1,106 +1,91 @@
 const pool = require('../config/db');
 
-// --- 🧠 ANA HESAPLAMA MOTORU ---
-const dinamikHakedisHesapla = async (personel_id) => {
+// --- T?S ve YASAL MANTIK MOTORU ---
+// Bu fonksiyon belirli bir y?l ve k?deme gore kac gun hak edildi?ini soyler.
+const getHakForYear = (hesapYili, kidemYili, kurallar = []) => {
+    // 1. Once Veritaban?ndaki Ozel Kurala Bak
+    const uygunKural = kurallar.find(k => 
+        hesapYili >= parseInt(k.baslangic_yili) && 
+        hesapYili <= parseInt(k.bitis_yili) && 
+        kidemYili >= parseInt(k.kidem_alt) && 
+        kidemYili <= parseInt(k.kidem_ust)
+    );
+    if (uygunKural) return parseInt(uygunKural.gun_sayisi);
+
+    // 2. Kural Yoksa: T?S TAR?HCES? (TEK GERCEK KAYNAK BURASI)
+    let hak = 0;
+
+    // DONEM 1: 2018 ONCES? (Eski Sistem)
+    if (hesapYili < 2018) {
+        if (kidemYili <= 5) hak = 14; 
+        else if (kidemYili <= 15) hak = 20; 
+        else hak = 26;
+    } 
+    // DONEM 2: 2018 - 2023 ARASI (T?S 1 - ?yile?tirme)
+    else if (hesapYili < 2024) {
+        if (kidemYili <= 3) hak = 16;
+        else if (kidemYili <= 5) hak = 18; 
+        else if (kidemYili < 15) {
+            // Ara donem iyile?tirmesi (2020 sonras? 22'den 25'e c?k?? gibi)
+            if(hesapYili >= 2020) hak = 25; else hak = 22;
+        }
+        else hak = 30;
+    } 
+    // DONEM 3: 2024 VE SONRASI (T?S 2 - Son Durum)
+    else {
+        if (kidemYili <= 3) hak = 18;
+        else if (kidemYili <= 5) hak = 20;
+        else if (kidemYili < 15) hak = 27; 
+        else hak = 32;
+    }
+    return hak;
+};
+
+// --- BU YILIN HAKKINI HESAPLA ---
+const hesaplaBuYil = async (personel_id) => {
     try {
-        // 1. Personel Bilgisini Çek
         const pRes = await pool.query("SELECT ise_giris_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
         if (pRes.rows.length === 0) return 0;
         
-        const iseGiris = new Date(pRes.rows[0].ise_giris_tarihi);
+        const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
+        
+        const giris = new Date(pRes.rows[0].ise_giris_tarihi);
         const bugun = new Date();
-        const girisYili = iseGiris.getFullYear();
-        const suankiYil = bugun.getFullYear();
-
-        // Kıdem Yılı Hesabı (Tam yıl)
-        // Örn: 15.01.2015 girişli biri, 14.01.2026'da henüz 10 yılını doldurmamıştır.
-        let kidemYili = suankiYil - girisYili;
-        const buYilDonum = new Date(suankiYil, iseGiris.getMonth(), iseGiris.getDate());
-        if (bugun < buYilDonum) {
-            kidemYili--; 
-        }
-
-        // 1 Yılını doldurmamışsa izin yok
-        if (kidemYili < 1) return 0;
-
-        // ---------------------------------------------------------
-        // 🚀 2. VERİTABANI KONTROLÜ (ÖNCELİKLİ)
-        // ---------------------------------------------------------
-        // Yönetim panelinden eklenen özel bir kural var mı?
-        const kuralRes = await pool.query(`
-            SELECT gun_sayisi FROM hakedis_kurallari 
-            WHERE 
-                ($1 BETWEEN baslangic_yili AND bitis_yili) -- Giriş Yılı Aralığı
-                AND 
-                ($2 BETWEEN kidem_alt AND kidem_ust) -- Kıdem Aralığı
-        `, [girisYili, kidemYili]);
-
-        if (kuralRes.rows.length > 0) {
-            return kuralRes.rows[0].gun_sayisi;
-        }
-
-        // ---------------------------------------------------------
-        // 📜 3. EXCEL / METİN BELGESİ MANTIĞI (YEDEK SİSTEM)
-        // ---------------------------------------------------------
-        // Attığın "yıllık izin hakediş.txt" dosyasındaki mantık buraya işlendi.
+        const kidem = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
         
-        let hak = 0;
-
-        // GRUP 1: ESKİ GİRİŞLİLER (2018 Öncesi Girişler - Senin tablodaki 2007-2015 ve öncesi)
-        // Not: Tabloda 2007 öncesi de aynı mantık denildiği için < 2018 dedik.
-        if (girisYili < 2018) {
-            // Yıla göre değişen tarife (Enflasyon gibi artış var)
-            if (suankiYil < 2018) { 
-                // 2017 ve öncesi standart tarife
-                if (kidemYili <= 5) hak = 14;
-                else if (kidemYili <= 15) hak = 19;
-                else hak = 25;
-            } 
-            else if (suankiYil < 2024) { 
-                // 2018 - 2023 Arası (Tablonda artış var)
-                if (suankiYil < 2019) { // 2018 yılı özel
-                     if (kidemYili <= 5) hak = 14; 
-                     else if (kidemYili <= 15) hak = 19; 
-                     else hak = 25;
-                } else { // 2019 ve sonrası (Tablondaki 22, 25 günleri)
-                    if (kidemYili <= 3) hak = 16;
-                    else if (kidemYili <= 5) hak = 18;
-                    else if (kidemYili <= 15) hak = 25;
-                    else hak = 30; // 15 yıl üstü 30 olmuş
-                }
-            } 
-            else { 
-                // 2024 ve Sonrası (Tablonun en sağı - En yüksek oranlar)
-                if (girisYili < 2025) { // 2024 hesaplaması
-                    if (kidemYili <= 3) hak = 16;
-                    else if (kidemYili <= 5) hak = 18;
-                    else if (kidemYili <= 15) hak = 25;
-                    else hak = 30;
-                } else {
-                    // 2025 ve sonrası için tahmin/standart (Tabloya göre artıyor)
-                    if (kidemYili <= 3) hak = 18;
-                    else if (kidemYili <= 5) hak = 20;
-                    else if (kidemYili <= 15) hak = 27;
-                    else hak = 32; // 15 yıl üstü 32 olmuş
-                }
-            }
-        }
+        if (kidem < 1) return 0;
         
-        // GRUP 2: YENİ GİRİŞLİLER (2018 ve Sonrası)
-        else {
-            // Bunlar direkt yüksekten başlıyor (Tablodaki 2. kısım)
-            if (kidemYili <= 3) hak = 16; 
-            else if (kidemYili <= 5) hak = 18;
-            else if (kidemYili <= 15) hak = 26;
-            else hak = 30;
-        }
-
-        return hak;
-
-    } catch (err) {
-        console.error("Hakediş Hatası:", err);
-        return 0;
-    }
+        return getHakForYear(bugun.getFullYear(), kidem, kuralRes.rows);
+    } catch (e) { return 0; }
 };
 
-module.exports = dinamikHakedisHesapla;
+// --- OMUR BOYU HAK HESAPLA (Kumulatif) ---
+const hesaplaKumulatif = async (girisTarihi) => {
+    if (!girisTarihi) return 0;
+    const giris = new Date(girisTarihi);
+    const bugun = new Date();
+    let toplamHak = 0;
+
+    // Veritaban? kurallar?n? bir kere cek
+    const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
+    const kurallar = kuralRes.rows;
+
+    let currentCalcDate = new Date(giris);
+    currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1); // 1. y?l dolunca ba?lar
+
+    while (currentCalcDate <= bugun) {
+        const hesapYili = currentCalcDate.getFullYear();
+        const oAnkiKidem = Math.floor((currentCalcDate - giris) / (1000 * 60 * 60 * 24 * 365.25));
+
+        if (oAnkiKidem >= 1) {
+            toplamHak += getHakForYear(hesapYili, oAnkiKidem, kurallar);
+        }
+        currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
+    }
+    return toplamHak;
+};
+
+module.exports = {
+    hesaplaBuYil,
+    hesaplaKumulatif
+};
