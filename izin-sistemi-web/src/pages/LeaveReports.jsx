@@ -24,7 +24,8 @@ export default function LeaveReports() {
         const token = localStorage.getItem('token');
         if(!token) { window.location.href = '/login'; return; }
 
-        // Artık sadece rapor durumunu çekiyoruz, hesaplama backend'de yapılıyor
+        // Sadece rapor verisini çekiyoruz. Hakediş kuralları veya hesaplama mantığına ihtiyacımız yok.
+        // Backend zaten (Giriş Yılından Başlatarak) doğru hesaplanmış veriyi gönderiyor.
         axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => { 
                 setRapor(res.data); 
@@ -60,13 +61,13 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (BACKEND VERİSİ İLE) ---
+    // --- 📄 EXCEL ÇIKTILARI (BACKEND'DEN GELEN HAZIR VERİYLE) ---
     
     const generateDetailExcel = () => {
         if (!personelDetay || !secilenPersonel) return;
         const p = personelDetay.personel;
         
-        // Verileri rapordan veya detaydan alıyoruz
+        // Kümülatif hak verisi rapor listesindeki 'secilenPersonel' objesinde mevcut (Backend Hesapladı)
         const kumulatifHak = secilenPersonel.kumulatif_hak || 0;
         const buYilHak = secilenPersonel.bu_yil_hakedis || 0;
 
@@ -103,7 +104,7 @@ export default function LeaveReports() {
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]
             ];
             
-            // Backend'den gelen hazır hesaplanmış veriyi kullanıyoruz
+            // Backend'den gelen hazır hesaplanmış veriyi kullanıyoruz (2007'den başlatan İK Modu)
             rapor.forEach((p) => {
                 const kumulatifHak = p.kumulatif_hak || 0;
                 const devreden = p.devreden_izin || 0;
@@ -112,7 +113,6 @@ export default function LeaveReports() {
                 
                 // Formül: Toplam Havuz = Kumulatif + Devreden
                 const toplamHavuz = kumulatifHak + devreden;
-                // Kullanılan = Toplam Havuz - Kalan
                 const kullanilan = toplamHavuz - kalan;
                 
                 const kidem = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
@@ -141,7 +141,7 @@ export default function LeaveReports() {
         } catch (e) { alert("Excel oluşturulurken hata oluştu."); }
     };
 
-    // --- 🎨 PDF ÇIKTILARI ---
+    // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN - BLOB) ---
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -172,6 +172,13 @@ export default function LeaveReports() {
     };
 
     const filtered = rapor.filter(p => p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama));
+
+    // Yardımcı: Seçilen personelin kümülatif hakkını bul
+    const getSelectedPersonelKumulatif = () => {
+        if(!secilenPersonel) return 0;
+        const p = rapor.find(r => r.personel_id === secilenPersonel.personel_id);
+        return p ? p.kumulatif_hak : 0;
+    };
 
     return (
         <div className="container-fluid p-4 p-lg-5">
