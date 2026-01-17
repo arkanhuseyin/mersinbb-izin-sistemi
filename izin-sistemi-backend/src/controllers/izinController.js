@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
-// 🧠 MERKEZİ HESAPLAMA MOTORU (TİS, Yaş ve Kıdem kurallarını içerir)
+// 🧠 MERKEZİ HESAPLAMA MOTORU
 const { hesaplaBuYil, hesaplaKumulatif } = require('../utils/hakedisHesapla'); 
 const PDFDocument = require('pdfkit'); 
 const fs = require('fs'); 
@@ -10,7 +10,6 @@ const path = require('path');
 // 🛠️ YARDIMCI FONKSİYONLAR
 // ============================================================
 
-// Tarih Formatlayıcı (DB Kaydı İçin: YYYY-MM-DD)
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     const str = String(tarihStr).trim();
@@ -24,7 +23,6 @@ const tarihFormatla = (tarihStr) => {
     return str;
 };
 
-// Tarih Gösterici (PDF ve UI İçin: DD.MM.YYYY)
 const tarihGoster = (tarihStr) => {
     if (!tarihStr) return '-';
     try {
@@ -34,7 +32,6 @@ const tarihGoster = (tarihStr) => {
     } catch { return '-'; }
 };
 
-// Türkçe Karakter Temizleyici (Dosya isimleri için)
 const turkceKarakterTemizle = (str) => {
     if(!str) return "rapor";
     return str.replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
@@ -207,7 +204,7 @@ exports.talepOnayla = async (req, res) => {
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     try {
-        // GÜNCELLEME: Tüm kritik tarihleri ve durumu çekiyoruz
+        // SQL Sorgusu: Tüm personeli, doğum/ayrılma tarihi ve aktiflik durumuyla çekiyoruz.
         const query = `
             SELECT p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif, p.devreden_izin, b.birim_adi, 
             COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan 
@@ -306,6 +303,7 @@ exports.topluPdfRaporu = async (req, res) => {
 
     try {
         // Tüm personeli çekiyoruz (aktif veya pasif, rapor için hepsine bakılır)
+        // SQL Sorgusu: Tüm personeli, doğum/ayrılma tarihi ve aktiflik durumuyla çekiyoruz.
         const pRes = await pool.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id ORDER BY p.ad ASC`);
         const personeller = pRes.rows;
         const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
