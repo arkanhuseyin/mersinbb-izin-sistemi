@@ -10,7 +10,7 @@ import CreateLeave from './pages/CreateLeave';     // Yeni İzin Talebi Formu
 import Settings from './pages/Settings';           // Ayarlar ve Personel Yönetimi
 import LeaveReports from './pages/LeaveReports';   // İzin Takip Raporu (Excel İndirme)
 import Yetkilendirme from './pages/Yetkilendirme'; // <--- 1. YENİ EKLENEN IMPORT
-
+import TalepYonetimi from './pages/TalepYonetimi'; // ✅ Talep Yönetimi
 // --- LAYOUT BİLEŞENİ ---
 const DashboardLayout = () => (
   <div className="d-flex vh-100 vw-100 overflow-hidden">
@@ -51,6 +51,8 @@ function App() {
             <Route path="settings" element={<Settings />} />
             {/* 7. Yetkilendirme Paneli */}
             <Route path="yetkilendirme" element={<Yetkilendirme />} /> {/* <--- 2. YENİ EKLENEN ROTA */}
+			{/* 8. Öneri Talep Paneli */}
+            <Route path="requests" element={<TalepYonetimi />} /> {/* <--- 2. YENİ EKLENEN ROTA */}
         </Route>
       </Routes>
     </BrowserRouter>

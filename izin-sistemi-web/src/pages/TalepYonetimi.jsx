@@ -17,14 +17,14 @@ export default function TalepYonetimi() {
     const [ilkMesaj, setIlkMesaj] = useState('');
     const [kvkkOnay, setKvkkOnay] = useState(false);
 
-    // 🔴 GÜVENLİ KULLANICI VERİSİ ÇEKME
+    // 🔴 GÜVENLİ KULLANICI VERİSİ ÇEKME (try-catch içinde)
     let user = null;
     try {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
             user = JSON.parse(storedUser);
         }
-    } catch (e) { console.error("Kullanıcı verisi okunamadı."); }
+    } catch (e) { console.error("Kullanıcı verisi okunamadı"); }
 
     const token = localStorage.getItem('token');
     const bottomRef = useRef(null);
@@ -34,9 +34,10 @@ export default function TalepYonetimi() {
     useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mesajlar]);
 
     const fetchTalepler = async () => {
+        if(!token) return;
         try {
             const res = await axios.get(`${API_URL}/api/talep/listele`, { headers: { Authorization: `Bearer ${token}` } });
-            // Gelen veri dizi mi kontrol et (Hata objesi gelirse patlamasın)
+            // Gelen verinin dizi olduğundan emin ol
             if (Array.isArray(res.data)) {
                 setTalepler(res.data);
             } else {
