@@ -1,26 +1,53 @@
-const express = require("express");
-const cors = require("cors");
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
+import DashboardLayout from './components/DashboardLayout';
+import DashboardHome from './pages/DashboardHome';
+import CreateLeave from './pages/CreateLeave';
+import LeaveList from './pages/LeaveList';
+import LeaveReports from './pages/LeaveReports';
+import Settings from './pages/Settings';
+import Yetkilendirme from './pages/Yetkilendirme';
+import ProfileRequests from './pages/ProfileRequests';
+import TalepYonetimi from './pages/TalepYonetimi'; // ✅ IMPORT EKLENDİ
 
-// --- ROTA DOSYALARINI İMPORT ET ---
-const authRoutes = require("./routes/authRoutes");
-const personelRoutes = require("./routes/personelRoutes");
-const izinRoutes = require("./routes/izinRoutes");
-const ayarRoutes = require("./routes/ayarRoutes");    // ✅ Yeni eklediğimiz
-const yetkiRoutes = require("./routes/yetkiRoutes");  // ✅ Yetkilendirme
+const ProtectedRoute = ({ children }) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
 
-const app = express();
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Login />} />
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-// Statik dosyalar (Uploads klasörü vb. varsa buraya eklenir)
-app.use('/uploads', express.static('uploads'));
+        <Route path="/dashboard" element={
+          <ProtectedRoute>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
+          <Route index element={<Navigate to="home" replace />} />
+          
+          <Route path="home" element={<DashboardHome />} />
+          <Route path="create-leave" element={<CreateLeave />} />
+          <Route path="leaves" element={<LeaveList />} />
+          <Route path="reports" element={<LeaveReports />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="yetkilendirme" element={<Yetkilendirme />} />
+          <Route path="profile-requests" element={<ProfileRequests />} />
+          
+          {/* ✅ YENİ SAYFA ROTASI */}
+          <Route path="requests" element={<TalepYonetimi />} />
+          
+        </Route>
 
-// --- ROTALARI KULLAN ---
-app.use("/api/auth", authRoutes);
-app.use("/api/personel", personelRoutes);
-app.use("/api/izin", izinRoutes);
-app.use("/api/ayar", ayarRoutes);    // ✅ Ayarlar sayfası (Hakediş ekleme) için şart
-app.use("/api/yetki", yetkiRoutes);  // ✅ Yetkiler sayfası için şart
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
 
-module.exports = app;
+export default App;
