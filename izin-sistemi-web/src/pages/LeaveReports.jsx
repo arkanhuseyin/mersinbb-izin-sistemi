@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Search, FileBarChart, CheckCircle, User, FileText, History, Calculator, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
@@ -10,7 +10,8 @@ export default function LeaveReports() {
     const [rapor, setRapor] = useState([]);
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
-    const [hakedisKurallari, setHakedisKurallari] = useState([]);
+    // İsteğin üzerine: Hakediş Kuralları state'i ve verisi eklendi
+    const [hakedisKurallari, setHakedisKurallari] = useState([]); 
 
     // Modal States
     const [secilenPersonel, setSecilenPersonel] = useState(null);
@@ -26,7 +27,6 @@ export default function LeaveReports() {
     const verileriGetir = () => {
         const token = localStorage.getItem('token');
         
-        // Token kontrolü: Yoksa giriş sayfasına at
         if(!token) {
             window.location.href = '/login';
             return;
@@ -37,7 +37,7 @@ export default function LeaveReports() {
             axios.get(`${API_URL}/api/ayar/hakedis-listele`, { headers: { Authorization: `Bearer ${token}` } })
         ]).then(([raporRes, kuralRes]) => {
             setRapor(raporRes.data);
-            setHakedisKurallari(kuralRes.data);
+            setHakedisKurallari(kuralRes.data); // Kuralları kaydettik
             setYukleniyor(false);
         }).catch(err => {
             console.error("Veri çekme hatası:", err);
@@ -45,65 +45,20 @@ export default function LeaveReports() {
         });
     };
 
-    // --- 📸 FOTOĞRAF URL DÜZELTİCİ (AKILLI VERSİYON) ---
-    // Bu fonksiyon, veritabanındaki karmaşık dosya yollarını (C:\Users\...) 
-    // sunucunun anlayacağı web adresine (https://.../uploads/...) çevirir.
+    // --- 📸 FOTOĞRAF URL DÜZELTİCİ ---
     const getPhotoUrl = (path) => {
         if (!path) return DEFAULT_PHOTO;
-        
-        // 1. Zaten internet adresi ise (http/https) direkt döndür
         if (path.startsWith('http')) return path;
-        
-        // 2. Windows ters slash (\) karakterlerini düz slash (/) yap
         let cleanPath = path.replace(/\\/g, '/');
-        
-        // 3. Yolun içinde 'uploads/' geçiyor mu?
         if (cleanPath.includes('uploads/')) {
-            // 'uploads/' ve sonrasını al (Örn: "C:/Users/.../uploads/personel/resim.jpg" -> "uploads/personel/resim.jpg")
             const relativePath = cleanPath.substring(cleanPath.indexOf('uploads/'));
             return `${API_URL}/${relativePath}`;
         }
-        
-        // 4. Eğer 'uploads/' yoksa ama dosya ismi varsa, varsayılan uploads klasöründe ara
         const fileName = cleanPath.split('/').pop();
         return `${API_URL}/uploads/${fileName}`;
     };
 
-    // --- 🧮 HESAPLAMA MOTORLARI (Sadece Arayüzde Gösterim İçin) ---
-    // Not: PDF hesaplaması artık Backend tarafında yapılıyor. Burası sadece ekranda anlık görmek için.
-    const getSingleYearRights = (girisYili, hesaplanacakYil, kidemYili) => {
-        const uygunKural = hakedisKurallari.find(k => hesaplanacakYil >= k.baslangic_yili && hesaplanacakYil <= k.bitis_yili && kidemYili >= k.kidem_alt && kidemYili <= k.kidem_ust);
-        if (uygunKural) return uygunKural.gun_sayisi;
-        let hak = 0; if (kidemYili < 1) return 0;
-        let bazYil = girisYili < 2007 ? 2007 : girisYili;
-        if (bazYil < 2018) { if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25; }
-        else if (bazYil < 2024) { if (bazYil < 2019) { if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25; } else { if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30; } }
-        else { if (bazYil < 2025) { if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30; } else { if (kidemYili <= 3) hak = 18; else if (kidemYili <= 5) hak = 20; else if (kidemYili <= 15) hak = 27; else hak = 32; } }
-        return hak;
-    };
-
-    const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
-        if (!iseGirisTarihi) return 0;
-        const giris = new Date(iseGirisTarihi); const bugun = new Date();
-        const kidemYili = Math.floor((bugun - giris) / (1000 * 60 * 60 * 24 * 365.25));
-        if (kidemYili < 1) return 0;
-        return getSingleYearRights(giris.getFullYear(), bugun.getFullYear(), kidemYili);
-    }, [hakedisKurallari]);
-
-    const hesaplaKumulatifHakedis = useCallback((iseGirisTarihi) => {
-        if (!iseGirisTarihi) return 0;
-        const giris = new Date(iseGirisTarihi); const bugun = new Date(); const girisYili = giris.getFullYear();
-        let toplamHak = 0; let currentCalcDate = new Date(giris);
-        currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
-        while (currentCalcDate <= bugun) {
-            const oAnkiKidem = Math.floor((currentCalcDate - giris) / (1000 * 60 * 60 * 24 * 365.25));
-            if (oAnkiKidem >= 1) toplamHak += getSingleYearRights(girisYili, currentCalcDate.getFullYear(), oAnkiKidem);
-            currentCalcDate.setFullYear(currentCalcDate.getFullYear() + 1);
-        }
-        return toplamHak;
-    }, [hakedisKurallari]);
-
-
+    // --- PERSONEL DETAY MODALI ---
     const handlePersonelClick = async (personel) => {
         setSecilenPersonel(personel);
         setDetayYukleniyor(true);
@@ -117,19 +72,28 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (Tarayıcı Tarafında Oluşturulur) ---
+    // --- 📄 EXCEL ÇIKTILARI (HESAPLAMASIZ - DİREKT VERİ) ---
+    
+    // 1. TEKİL EXCEL
     const generateDetailExcel = () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
-        const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
         
+        // Verileri rapordan veya detaydan alıyoruz (Hesaplama yok)
+        // Eğer detayda kümülatif hak yoksa, ana listeden buluyoruz
+        const pRapor = rapor.find(r => r.personel_id === p.personel_id) || {};
+        const kumulatifHak = pRapor.kumulatif_hak || 0;
+        const buYilHak = pRapor.bu_yil_hakedis || 0;
+
         const wsData = [
             ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - PERSONEL İZİN DETAY RAPORU"], [" "],
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
-            ["Kümülatif Hak", hesaplaKumulatifHakedis(p.ise_giris_tarihi)],
-            ["Sisteme Devreden", p.devreden_izin], ["Bu Yıl Hakediş", buYilHak],
-            ["Toplam Kullanılan", personelDetay.personel.kullanilan], ["Kalan", personelDetay.personel.kalan],
+            ["Kümülatif Hak", kumulatifHak],
+            ["Sisteme Devreden", p.devreden_izin], 
+            ["Bu Yıl Hakediş", buYilHak],
+            ["Toplam Kullanılan", personelDetay.personel.kullanilan], 
+            ["Kalan", personelDetay.personel.kalan],
             [" "], ["İZİN HAREKETLERİ"], ["Tür", "Başlangıç", "Bitiş", "Gün", "Durum"],
             ...personelDetay.izinler.map(iz => [iz.izin_turu, new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR'), new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR'), iz.kac_gun, "ONAYLI"])
         ];
@@ -139,91 +103,89 @@ export default function LeaveReports() {
         XLSX.utils.book_append_sheet(wb, ws, "Rapor"); XLSX.writeFile(wb, `${p.ad}_${p.soyad}.xlsx`);
     };
 
+    // 2. TOPLU EXCEL
     const downloadBulkExcel = async () => {
-        if(!confirm("Toplu Excel indirilsin mi?")) return; setYukleniyor(true);
+        if(!confirm("Toplu Excel indirilsin mi?")) return; 
+        
+        // Backend'deki rapor verisi zaten hazır, tekrar çekmeye veya hesaplamaya gerek yok
+        // Mevcut "rapor" state'ini kullanıyoruz
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.get(`${API_URL}/api/izin/rapor/tum-personel-detay`, { headers: { Authorization: `Bearer ${token}` } });
-            const { personeller, gecmisBakiyeler, izinler } = res.data;
             const excelRows = [["MERSİN BÜYÜKŞEHİR BELEDİYESİ"], ["GENEL İZİN RAPORU"], [" "],
                 ["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Devreden", "Bu Yıl", "TOPLAM HAVUZ", "KULLANILAN", "KALAN", "DURUM"]];
-            personeller.forEach((p) => {
-                const pGecmis = gecmisBakiyeler.filter(g => g.personel_id === p.personel_id);
-                const pIzinler = izinler.filter(iz => iz.personel_id === p.personel_id);
-                let devreden = 0; pGecmis.forEach(g => devreden += g.gun_sayisi);
-                const buYilHak = hesaplaDinamikHakedis(p.ise_giris_tarihi);
-                const kumulatifHak = hesaplaKumulatifHakedis(p.ise_giris_tarihi);
-                const toplamHavuz = devreden + buYilHak;
-                let kullanilan = 0; pIzinler.forEach(iz => kullanilan += iz.kac_gun);
-                const kalan = toplamHavuz - kullanilan;
+            
+            rapor.forEach((p) => {
+                const kumulatifHak = p.kumulatif_hak || 0;
+                const devreden = p.devreden_izin || 0;
+                const buYilHak = p.bu_yil_hakedis || 0; // Bu aslında kümülatifin içinde olabilir veya ayrı, backend mantığına göre
+                
+                // Formül: Toplam Havuz = Kumulatif + Devreden
+                const toplamHavuz = kumulatifHak + devreden;
+                const kalan = p.kalan || 0;
+                const kullanilan = toplamHavuz - kalan;
+                
                 const kidem = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
-                excelRows.push([p.tc_no, `${p.ad} ${p.soyad}`, p.birim_adi, new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), kidem, kumulatifHak, devreden, buYilHak, toplamHavuz, kullanilan, kalan, kalan < 0 ? "LİMİT AŞIMI" : (kalan < 5 ? "AZALDI" : "NORMAL")]);
+                
+                excelRows.push([
+                    p.tc_no, 
+                    `${p.ad} ${p.soyad}`, 
+                    p.birim_adi, 
+                    new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), 
+                    kidem, 
+                    kumulatifHak, 
+                    devreden, 
+                    buYilHak, 
+                    toplamHavuz, 
+                    kullanilan, 
+                    kalan, 
+                    kalan < 0 ? "LİMİT AŞIMI" : (kalan < 5 ? "AZALDI" : "NORMAL")
+                ]);
             });
+
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(excelRows);
             ws['!cols'] = [{wch:12}, {wch:25}, {wch:20}, {wch:12}, {wch:8}, {wch:15}, {wch:10}, {wch:10}, {wch:12}, {wch:12}, {wch:10}, {wch:15}];
             ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:11}}, {s:{r:1,c:0},e:{r:1,c:11}}];
             XLSX.utils.book_append_sheet(wb, ws, "Genel Rapor"); XLSX.writeFile(wb, `Genel_Rapor_${new Date().toISOString().slice(0,10)}.xlsx`);
-        } catch (e) { alert("Hata"); } finally { setYukleniyor(false); }
+        } catch (e) { alert("Excel oluşturulurken hata oluştu."); }
     };
 
     // --- 🎨 PDF ÇIKTILARI (BACKEND ÜZERİNDEN - BLOB) ---
-    
-    // 1. KİŞİSEL DETAYLI PDF
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
         const token = localStorage.getItem('token');
-
         try {
-            // Settings.jsx'teki aynı blob indirme mantığı
             const response = await axios.get(`${API_URL}/api/izin/rapor/pdf-detay/${p.personel_id}`, { 
-                headers: { Authorization: `Bearer ${token}` }, 
-                responseType: 'blob' 
+                headers: { Authorization: `Bearer ${token}` }, responseType: 'blob' 
             });
-
             const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            // Türkçe karakter sorununu önlemek için basit isimlendirme
+            const link = document.createElement('a'); link.href = url;
             link.setAttribute('download', `Personel_Izin_Detay_${p.tc_no}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        } catch (e) {
-            console.error("PDF indirme hatası:", e);
-            alert("PDF indirilemedi. Lütfen sistem yöneticisine başvurun.");
-        }
+            document.body.appendChild(link); link.click(); link.remove();
+        } catch (e) { alert("PDF indirilemedi."); }
     };
 
-    // 2. TOPLU PDF
     const downloadBulkPDF = async () => {
         if(!confirm("Toplu PDF raporu oluşturulsun mu?")) return; 
-        setYukleniyor(true);
-        const token = localStorage.getItem('token');
-
+        setYukleniyor(true); const token = localStorage.getItem('token');
         try {
             const response = await axios.get(`${API_URL}/api/izin/rapor/pdf-toplu`, { 
-                headers: { Authorization: `Bearer ${token}` }, 
-                responseType: 'blob' 
+                headers: { Authorization: `Bearer ${token}` }, responseType: 'blob' 
             });
-
             const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
+            const link = document.createElement('a'); link.href = url;
             link.setAttribute('download', `Genel_Izin_Raporu_${new Date().toISOString().slice(0,10)}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-        } catch (e) {
-            console.error("Toplu PDF hatası:", e);
-            alert("Rapor oluşturulamadı."); 
-        } finally {
-            setYukleniyor(false);
-        }
+            document.body.appendChild(link); link.click(); link.remove();
+        } catch (e) { alert("Rapor oluşturulamadı."); } finally { setYukleniyor(false); }
     };
 
-
     const filtered = rapor.filter(p => p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama));
+
+    // Yardımcı: Seçilen personelin kümülatif hakkını bul
+    const getSelectedPersonelKumulatif = () => {
+        if(!secilenPersonel) return 0;
+        const p = rapor.find(r => r.personel_id === secilenPersonel.personel_id);
+        return p ? p.kumulatif_hak : 0;
+    };
 
     return (
         <div className="container-fluid p-4 p-lg-5">
@@ -260,9 +222,11 @@ export default function LeaveReports() {
                     </thead>
                     <tbody>
                         {yukleniyor ? <tr><td colSpan="9" className="text-center py-5">Yükleniyor...</td></tr> : filtered.map((p, i) => {
-                            const toplamHavuz = (p.devreden_izin || 0) + (p.bu_yil_hakedis || 0);
-                            const kumulatif = hesaplaKumulatifHakedis(p.ise_giris_tarihi); 
-                            const toplamKullanilan = p.bu_yil_kullanilan || 0; 
+                            // Backend'den gelen hazır değerler
+                            const kumulatif = p.kumulatif_hak || 0;
+                            const toplamHavuz = (p.kumulatif_hak || 0) + (p.devreden_izin || 0); // Ömür boyu + Devreden
+                            // Kullanılanı bulmak için: (Havuz) - Kalan
+                            const toplamKullanilan = toplamHavuz - (p.kalan || 0); 
                             
                             return (
                                 <tr key={i} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer'}}>
@@ -286,7 +250,6 @@ export default function LeaveReports() {
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered">
                         <div className="modal-content shadow-lg border-0 rounded-4">
-                            {/* --- MODAL BAŞLIĞI (FOTOĞRAFLI - DÜZELTİLDİ) --- */}
                             <div className="modal-header bg-primary text-white p-4 align-items-center">
                                 <div className="d-flex align-items-center gap-3">
                                     <img 
@@ -313,13 +276,13 @@ export default function LeaveReports() {
                                                 
                                                 <div className="p-3 bg-primary bg-opacity-10 rounded-3 mb-3 border border-primary border-opacity-25 text-center">
                                                     <small className="text-primary fw-bold">Ömür Boyu Toplam Hak</small>
-                                                    <div className="fs-2 fw-bold text-primary">{hesaplaKumulatifHakedis(secilenPersonel.ise_giris_tarihi)} Gün</div>
+                                                    <div className="fs-2 fw-bold text-primary">{getSelectedPersonelKumulatif()} Gün</div>
                                                 </div>
 
                                                 <ul className="list-group list-group-flush small mb-4">
                                                     <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Sisteme Devreden:</span><strong className="text-warning">+{secilenPersonel.devreden_izin}</strong></li>
                                                     <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Bu Yıl Hakediş:</span><strong className="text-info">+{secilenPersonel.bu_yil_hakedis}</strong></li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold"><span>Kullanılabilir Toplam:</span><strong className="text-dark fs-6">{(secilenPersonel.devreden_izin || 0) + (secilenPersonel.bu_yil_hakedis || 0)}</strong></li>
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold"><span>Kullanılabilir Toplam:</span><strong className="text-dark fs-6">{(getSelectedPersonelKumulatif() + (secilenPersonel.devreden_izin || 0))}</strong></li>
                                                     <li className="list-group-item d-flex justify-content-between px-0 bg-transparent text-danger"><span>Toplam Kullanılan:</span><strong>-{personelDetay.personel.kullanilan}</strong></li>
                                                 </ul>
                                                 
@@ -334,7 +297,6 @@ export default function LeaveReports() {
                                                 <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                                                     <h6 className="m-0 fw-bold text-primary d-flex align-items-center gap-2"><History size={18}/> İzin Geçmişi</h6>
                                                     
-                                                    {/* --- PDF BUTONLARI (BACKEND ÜZERİNDEN) --- */}
                                                     <div className="d-flex gap-2">
                                                         <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1 fw-bold" onClick={generateDetailExcel}>
                                                             <FileSpreadsheet size={16}/> Excel
