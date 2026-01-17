@@ -59,7 +59,7 @@ const hesaplaBakiye = async (personel_id) => {
     const toplamHakedis = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
 
     // 3. Manuel Eklenenleri Al (Sisteme devredenler)
-    const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
+    const gecmisRes = await pool.query("SELECT COALESCE(SUM(devreden_izin), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const manuelEklenen = parseInt(gecmisRes.rows[0].toplam_gecmis) || 0;
 
     // 4. Kullanılanları Al (Onaylanmış izinler)
@@ -82,10 +82,10 @@ const hesaplaBakiye = async (personel_id) => {
 
 // GEÇMİŞ BAKİYE YÖNETİMİ
 exports.gecmisBakiyeEkle = async (req, res) => {
-    const { personel_id, yil, gun_sayisi } = req.body;
+    const { personel_id, yil, devreden_izin } = req.body;
     try {
         await pool.query('BEGIN');
-        await pool.query("INSERT INTO izin_gecmis_bakiyeler (personel_id, yil, gun_sayisi) VALUES ($1, $2, $3)", [personel_id, yil, gun_sayisi]);
+        await pool.query("INSERT INTO izin_gecmis_bakiyeler (personel_id, yil, devreden_izin) VALUES ($1, $2, $3)", [personel_id, yil, devreden_izin]);
         await pool.query('COMMIT');
         res.json({ mesaj: 'Geçmiş bakiye eklendi.' });
     } catch (e) { await pool.query('ROLLBACK'); res.status(500).json({ mesaj: 'Hata oluştu.' }); }
@@ -440,7 +440,7 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
         
         let manuelGecmis = 0;
-        gRes.rows.forEach(g => manuelGecmis += parseInt(g.gun_sayisi) || 0);
+        gRes.rows.forEach(g => manuelGecmis += parseInt(g.devreden_izin) || 0);
 
         let toplamKullanilan = 0;
         iRes.rows.forEach(iz => { if(iz.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(iz.kac_gun) || 0; });
