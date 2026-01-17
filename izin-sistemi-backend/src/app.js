@@ -1,53 +1,41 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import Login from './pages/Login';
-import DashboardLayout from './components/DashboardLayout';
-import DashboardHome from './pages/DashboardHome';
-import CreateLeave from './pages/CreateLeave';
-import LeaveList from './pages/LeaveList';
-import LeaveReports from './pages/LeaveReports';
-import Settings from './pages/Settings';
-import Yetkilendirme from './pages/Yetkilendirme';
-import ProfileRequests from './pages/ProfileRequests';
-import TalepYonetimi from './pages/TalepYonetimi'; // ✅ IMPORT EKLENDİ
+const express = require("express");
+const cors = require("cors");
+const path = require('path');
+const fs = require('fs');
 
-const ProtectedRoute = ({ children }) => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    return <Navigate to="/" replace />;
-  }
-  return children;
-};
+// --- ROTA DOSYALARI ---
+const authRoutes = require("./src/routes/authRoutes");
+const personelRoutes = require("./src/routes/personelRoutes");
+const izinRoutes = require("./src/routes/izinRoutes");
+const ayarRoutes = require("./src/routes/ayarRoutes");
+const yetkiRoutes = require("./src/routes/yetkiRoutes");
+const talepRoutes = require("./src/routes/talepRoutes"); // ✅ Talep Rotası
 
-function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
+const app = express();
 
-        <Route path="/dashboard" element={
-          <ProtectedRoute>
-            <DashboardLayout />
-          </ProtectedRoute>
-        }>
-          <Route index element={<Navigate to="home" replace />} />
-          
-          <Route path="home" element={<DashboardHome />} />
-          <Route path="create-leave" element={<CreateLeave />} />
-          <Route path="leaves" element={<LeaveList />} />
-          <Route path="reports" element={<LeaveReports />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="yetkilendirme" element={<Yetkilendirme />} />
-          <Route path="profile-requests" element={<ProfileRequests />} />
-          
-          {/* ✅ YENİ SAYFA ROTASI */}
-          <Route path="requests" element={<TalepYonetimi />} />
-          
-        </Route>
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
-  );
+// Statik Dosyalar (Uploads)
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)){
+    fs.mkdirSync(uploadsDir, { recursive: true });
 }
+app.use('/uploads', express.static(uploadsDir));
 
-export default App;
+// --- ROTALARI KULLAN ---
+app.use("/api/auth", authRoutes);
+app.use("/api/personel", personelRoutes);
+app.use("/api/izin", izinRoutes);
+app.use("/api/ayar", ayarRoutes);
+app.use("/api/yetki", yetkiRoutes);
+app.use("/api/talep", talepRoutes); // ✅ Backend API Rotası
+
+// Test Rotası
+app.get('/', (req, res) => {
+    res.send('API Çalışıyor...');
+});
+
+module.exports = app;
