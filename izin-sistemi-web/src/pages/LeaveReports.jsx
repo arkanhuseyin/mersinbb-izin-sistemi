@@ -24,7 +24,7 @@ export default function LeaveReports() {
         const token = localStorage.getItem('token');
         if(!token) { window.location.href = '/login'; return; }
 
-        // Sadece rapor verisini çekiyoruz. Hakediş kuralları veya hesaplama mantığına ihtiyacımız yok.
+        // Artık sadece rapor durumunu çekiyoruz, hesaplama backend'de yapılıyor
         axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } })
             .then(res => { 
                 setRapor(res.data); 
@@ -60,13 +60,13 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI (ARKA PLANDAN GELEN VERİYLE) ---
+    // --- 📄 EXCEL ÇIKTILARI (BACKEND VERİSİ İLE) ---
     
     const generateDetailExcel = () => {
         if (!personelDetay || !secilenPersonel) return;
         const p = personelDetay.personel;
         
-        // Kümülatif hak verisi rapor listesindeki 'secilenPersonel' objesinde mevcut
+        // Verileri rapordan veya detaydan alıyoruz
         const kumulatifHak = secilenPersonel.kumulatif_hak || 0;
         const buYilHak = secilenPersonel.bu_yil_hakedis || 0;
 
@@ -111,8 +111,8 @@ export default function LeaveReports() {
                 const kalan = p.kalan || 0;
                 
                 // Formül: Toplam Havuz = Kumulatif + Devreden
-                // Not: Kümülatif hak içinde geçmiş yıllar + bu yıl vardır. Devreden ise manuel eklenendir.
                 const toplamHavuz = kumulatifHak + devreden;
+                // Kullanılan = Toplam Havuz - Kalan
                 const kullanilan = toplamHavuz - kalan;
                 
                 const kidem = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
@@ -263,14 +263,16 @@ export default function LeaveReports() {
                                                 
                                                 <div className="p-3 bg-primary bg-opacity-10 rounded-3 mb-3 border border-primary border-opacity-25 text-center">
                                                     <small className="text-primary fw-bold">Ömür Boyu Toplam Hak</small>
-                                                    <div className="fs-2 fw-bold text-primary">{secilenPersonel.kumulatif_hak} Gün</div>
+                                                    {/* Kümülatif hak, modalda "secilenPersonel" üzerinden okunur çünkü o ana listeden gelir */}
+                                                    <div className="fs-2 fw-bold text-primary">{secilenPersonel.kumulatif_hak || 0} Gün</div>
                                                 </div>
 
                                                 <ul className="list-group list-group-flush small mb-4">
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Sisteme Devreden:</span><strong className="text-warning">+{secilenPersonel.devreden_izin}</strong></li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Bu Yıl Hakediş:</span><strong className="text-info">+{secilenPersonel.bu_yil_hakedis}</strong></li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold"><span>Kullanılabilir Toplam:</span><strong className="text-dark fs-6">{(secilenPersonel.kumulatif_hak + (secilenPersonel.devreden_izin || 0))}</strong></li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent text-danger"><span>Toplam Kullanılan:</span><strong>-{personelDetay.personel.kullanilan}</strong></li>
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Sisteme Devreden:</span><strong className="text-warning">+{secilenPersonel.devreden_izin || 0}</strong></li>
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent"><span>Bu Yıl Hakediş:</span><strong className="text-info">+{secilenPersonel.bu_yil_hakedis || 0}</strong></li>
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold"><span>Toplam Havuz:</span><strong className="text-dark fs-6">{(secilenPersonel.kumulatif_hak || 0) + (secilenPersonel.devreden_izin || 0)}</strong></li>
+                                                    {/* Toplam Kullanılan = Toplam Havuz - Kalan */}
+                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent text-danger"><span>Toplam Kullanılan:</span><strong>-{((secilenPersonel.kumulatif_hak || 0) + (secilenPersonel.devreden_izin || 0)) - personelDetay.personel.kalan}</strong></li>
                                                 </ul>
                                                 
                                                 <div className={`alert ${personelDetay.personel.kalan < 0 ? 'alert-danger' : 'alert-success'} mb-0 text-center`}>

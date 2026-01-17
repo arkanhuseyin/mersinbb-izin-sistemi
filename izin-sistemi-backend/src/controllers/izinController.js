@@ -1,6 +1,6 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
-// 🧠 MERKEZİ HESAPLAMA MOTORU
+// 🧠 MERKEZİ HESAPLAMA MOTORU (TİS, Yaş ve Kıdem kurallarını içerir)
 const { hesaplaBuYil, hesaplaKumulatif } = require('../utils/hakedisHesapla'); 
 const PDFDocument = require('pdfkit'); 
 const fs = require('fs'); 
@@ -10,17 +10,21 @@ const path = require('path');
 // 🛠️ YARDIMCI FONKSİYONLAR
 // ============================================================
 
+// Tarih Formatlayıcı (DB Kaydı İçin: YYYY-MM-DD)
 const tarihFormatla = (tarihStr) => {
     if (!tarihStr) return null;
     const str = String(tarihStr).trim();
+    // 15.01.2026 -> 2026-01-15
     if (str.includes('.')) {
         const parts = str.split('.');
         if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
     }
+    // ISO Format
     if (str.includes('T')) return str.split('T')[0];
     return str;
 };
 
+// Tarih Gösterici (PDF ve UI İçin: DD.MM.YYYY)
 const tarihGoster = (tarihStr) => {
     if (!tarihStr) return '-';
     try {
@@ -30,6 +34,7 @@ const tarihGoster = (tarihStr) => {
     } catch { return '-'; }
 };
 
+// Türkçe Karakter Temizleyici (Dosya isimleri için)
 const turkceKarakterTemizle = (str) => {
     if(!str) return "rapor";
     return str.replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
@@ -42,21 +47,25 @@ const turkceKarakterTemizle = (str) => {
 };
 
 // ============================================================
-// 🧠 ANA BAKİYE HESAPLAMA (GÜNCELLENDİ: DOĞUM TARİHİ EKLENDİ)
+// 🧠 ANA BAKİYE HESAPLAMA 
+// (Doğum Tarihi, Ayrılma Tarihi ve Aktiflik Durumunu Dikkate Alır)
 // ============================================================
 const hesaplaBakiye = async (personel_id) => {
-    // 1. Personel Giriş ve Doğum Tarihini Al (YAŞ KURALI İÇİN ÖNEMLİ)
-    const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi FROM personeller WHERE personel_id = $1", [personel_id]);
+    // 1. Personel Kritik Bilgilerini Çek
+    const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi, ayrilma_tarihi, aktif FROM personeller WHERE personel_id = $1", [personel_id]);
     if (pRes.rows.length === 0) return 0;
     
-    // 2. ÖMÜR BOYU HAKKI MERKEZDEN ÇEK (Doğum tarihi ile beraber)
-    const toplamHakedis = await hesaplaKumulatif(pRes.rows[0].ise_giris_tarihi, pRes.rows[0].dogum_tarihi);
+    const p = pRes.rows[0];
 
-    // 3. Manuel Eklenenleri Al
+    // 2. ÖMÜR BOYU HAKKI MERKEZDEN ÇEK
+    // (Giriş, Doğum, Ayrılma ve Aktiflik bilgilerini paslıyoruz)
+    const toplamHakedis = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
+
+    // 3. Manuel Eklenenleri Al (Sisteme devredenler)
     const gecmisRes = await pool.query("SELECT COALESCE(SUM(gun_sayisi), 0) as toplam_gecmis FROM izin_gecmis_bakiyeler WHERE personel_id = $1", [personel_id]);
     const manuelEklenen = parseInt(gecmisRes.rows[0].toplam_gecmis) || 0;
 
-    // 4. Kullanılanları Al
+    // 4. Kullanılanları Al (Onaylanmış izinler)
     const uRes = await pool.query(`
         SELECT COALESCE(SUM(kac_gun), 0) as used 
         FROM izin_talepleri 
@@ -66,7 +75,7 @@ const hesaplaBakiye = async (personel_id) => {
     `, [personel_id]); 
     const toplamKullanilan = parseInt(uRes.rows[0].used) || 0;
 
-    // 5. Sonuç
+    // 5. Sonuç: (Hakediş + Manuel) - Kullanılan
     return (toplamHakedis + manuelEklenen) - toplamKullanilan;
 };
 
@@ -74,7 +83,7 @@ const hesaplaBakiye = async (personel_id) => {
 // 🚀 CONTROLLER FONKSİYONLARI
 // ============================================================
 
-// GEÇMİŞ BAKİYE
+// GEÇMİŞ BAKİYE YÖNETİMİ
 exports.gecmisBakiyeEkle = async (req, res) => {
     const { personel_id, yil, gun_sayisi } = req.body;
     try {
@@ -98,7 +107,7 @@ exports.gecmisBakiyeSil = async (req, res) => {
     } catch (e) { res.status(500).json({ mesaj: 'Hata.' }); }
 };
 
-// TALEP OLUŞTUR
+// TALEP OLUŞTURMA
 exports.talepOlustur = async (req, res) => {
     let { baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, haftalik_izin, ise_baslama, izin_adresi, personel_imza } = req.body;
     const belge_yolu = req.file ? req.file.path : null;
@@ -110,9 +119,11 @@ exports.talepOlustur = async (req, res) => {
         const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [rol_id]);
         const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
 
+        // Bakiye Kontrolü (Yıllık İzin ise)
         if (izin_turu === 'YILLIK İZİN') {
             const kalanHak = await hesaplaBakiye(personel_id);
-            if (parseInt(kac_gun) > kalanHak) {
+            const istenen = parseInt(kac_gun);
+            if (istenen > kalanHak) {
                 return res.status(400).json({ mesaj: `Sayın ${ad} ${soyad}, Kullanmak istediğiniz izin (${istenen} Gün), Mevcut hakkınızdan (${kalanHak} Gün) fazladır.` });
             }
         }
@@ -121,6 +132,7 @@ exports.talepOlustur = async (req, res) => {
         const dbBitis = tarihFormatla(bitis_tarihi);
         const dbIseBaslama = tarihFormatla(ise_baslama);
 
+        // Otomatik Onay Mekanizması
         let baslangicDurumu = 'ONAY_BEKLIYOR'; 
         if (userRole === 'amir') baslangicDurumu = 'AMIR_ONAYLADI';
         else if (userRole === 'yazici' || userRole === 'ik') baslangicDurumu = 'YAZICI_ONAYLADI';
@@ -142,7 +154,7 @@ exports.talepOlustur = async (req, res) => {
     } catch (err) { console.error("HATA:", err); res.status(500).json({ mesaj: 'Hata oluştu: ' + err.message }); }
 };
 
-// LİSTELEME VE ONAY
+// İZİN LİSTELEME
 exports.izinleriGetir = async (req, res) => {
     try {
         let query = `SELECT t.*, p.ad, p.soyad, p.tc_no, p.birim_id, p.gorev FROM izin_talepleri t JOIN personeller p ON t.personel_id = p.personel_id`;
@@ -156,6 +168,7 @@ exports.izinleriGetir = async (req, res) => {
     } catch (err) { res.status(500).json({ mesaj: 'Veri çekilemedi' }); }
 };
 
+// TALEP ONAYLAMA
 exports.talepOnayla = async (req, res) => {
     const { talep_id, imza_data, yeni_durum } = req.body;
     const onaylayan_id = req.user.id;
@@ -190,18 +203,30 @@ exports.talepOnayla = async (req, res) => {
     } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ mesaj: 'Hata oluştu.' }); } finally { client.release(); }
 };
 
-// 1. RAPOR İÇİN VERİ (GÜNCELLENDİ)
+// RAPOR VERİSİ (FRONTEND İÇİN)
 exports.izinDurumRaporu = async (req, res) => {
     if (!['admin', 'ik'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz' });
     try {
-        // GÜNCELLEME: dogum_tarihi EKLENDİ
-        const query = `SELECT p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.devreden_izin, b.birim_adi, COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id LEFT JOIN izin_talepleri it ON p.personel_id = it.personel_id AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') AND it.izin_turu = 'YILLIK İZİN' AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE) WHERE p.aktif = TRUE GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.devreden_izin ORDER BY p.ad ASC`;
+        // GÜNCELLEME: Tüm kritik tarihleri ve durumu çekiyoruz
+        const query = `
+            SELECT p.personel_id, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif, p.devreden_izin, b.birim_adi, 
+            COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan 
+            FROM personeller p 
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id 
+            LEFT JOIN izin_talepleri it ON p.personel_id = it.personel_id 
+            AND it.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') 
+            AND it.izin_turu = 'YILLIK İZİN' 
+            AND it.baslangic_tarihi >= date_trunc('year', CURRENT_DATE) 
+            GROUP BY p.personel_id, b.birim_adi, p.ad, p.soyad, p.tc_no, p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif, p.devreden_izin 
+            ORDER BY p.ad ASC`;
+            
         const result = await pool.query(query);
+        
         const rapor = await Promise.all(result.rows.map(async (p) => {
             const netKalan = await hesaplaBakiye(p.personel_id);
             const buYilHak = await hesaplaBuYil(p.personel_id);
-            // GÜNCELLEME: dogum_tarihi paslandı
-            const kumulatif = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi);
+            // MERKEZİ HESAP ÇAĞRISI (Tüm parametrelerle)
+            const kumulatif = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
             return { ...p, bu_yil_hakedis: buYilHak, kalan: netKalan, kumulatif_hak: kumulatif };
         }));
         res.json(rapor);
@@ -227,6 +252,7 @@ exports.getPersonelIzinDetay = async (req, res) => {
     } catch (e) { res.status(500).json({ mesaj: 'Veri çekilemedi.' }); }
 };
 
+// ... Diğer basit listeleme fonksiyonları ...
 exports.tumPersonelDetayliVeri = async (req, res) => {
     if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).json({ mesaj: 'Yetkisiz işlem' });
     try {
@@ -271,15 +297,16 @@ exports.personelListesi = async (req, res) => {
 };
 
 // ============================================================
-// 📄 PDF ÇIKTILARI
+// 📄 PDF ÇIKTILARI (GÜNCEL HESAPLAMA SİSTEMİ)
 // ============================================================
 
-// 1. TOPLU PDF (GÜNCELLENDİ)
+// 1. TOPLU PDF
 exports.topluPdfRaporu = async (req, res) => {
     if (!['admin', 'ik', 'filo'].includes(req.user.rol)) return res.status(403).send('Yetkisiz işlem');
 
     try {
-        const pRes = await pool.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id WHERE p.aktif = TRUE ORDER BY p.ad ASC`);
+        // Tüm personeli çekiyoruz (aktif veya pasif, rapor için hepsine bakılır)
+        const pRes = await pool.query(`SELECT p.*, b.birim_adi FROM personeller p LEFT JOIN birimler b ON p.birim_id = b.birim_id ORDER BY p.ad ASC`);
         const personeller = pRes.rows;
         const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
         
@@ -310,8 +337,8 @@ exports.topluPdfRaporu = async (req, res) => {
             const p = personeller[i];
             const kalan = await hesaplaBakiye(p.personel_id);
             const buYilHak = await hesaplaBuYil(p.personel_id);
-            // GÜNCELLEME: dogum_tarihi paslandı
-            const omurBoyu = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi);
+            // MERKEZİ HESAPLAMA (Tüm parametreler paslandı)
+            const omurBoyu = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
 
             const giris = new Date(p.ise_giris_tarihi);
             const kidem = isNaN(giris.getTime()) ? 0 : Math.floor((new Date() - giris) / (1000 * 60 * 60 * 24 * 365.25));
@@ -335,7 +362,7 @@ exports.topluPdfRaporu = async (req, res) => {
                 `${kidem} Yıl`, 
                 omurBoyu.toString(), 
                 buYilHak.toString(), 
-                omurBoyu.toString(), 
+                omurBoyu.toString(), // Toplam havuz genelde Ömür Boyu ile aynı baz alınır
                 kalan.toString(), 
                 durumMetni
             ];
@@ -411,8 +438,8 @@ exports.kisiOzelPdfRaporu = async (req, res) => {
         doc.y = y + 40;
 
         // --- 3. BAKİYE ÖZETİ ---
-        // GÜNCELLEME: dogum_tarihi paslandı
-        const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi);
+        // MERKEZİ HESAPLAMA (Tüm parametreler paslandı)
+        const kumulatifHak = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
         
         let manuelGecmis = 0;
         gRes.rows.forEach(g => manuelGecmis += parseInt(g.gun_sayisi) || 0);
