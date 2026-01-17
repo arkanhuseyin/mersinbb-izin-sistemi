@@ -138,7 +138,7 @@ exports.pdfOlustur = async (req, res) => {
         if (result.rows.length === 0) return res.status(404).send('Talep bulunamadı');
         const veri = result.rows[0];
 
-        // İmzalar (Sadece Form 1 İçin)
+        // İmzalar (Sadece Form 1 için)
         let amirImza = '', yaziciImza = '', personelImza = '';
         if (veri.personel_imza) personelImza = veri.personel_imza;
 
@@ -164,9 +164,10 @@ exports.pdfOlustur = async (req, res) => {
             aitOlduguYil = await getIzninAitOlduguYilFIFO(veri.personel_id, veri.talep_id);
         }
 
-        const logoMBB = resimOku('logo1.png'); 
-        const logoTSE = resimOku('logo2.png'); 
-        const logo100 = resimOku('logo3.png');
+        // --- 🛑 LOGO AYARLARI (İSTEĞİNE GÖRE DÜZENLENDİ) ---
+        // Hem Form 1 hem Form 2 için: Sol=logo1.png (MBB), Sağ=logo3.png (TSE/100)
+        const logoMBB = resimOku('logo1.png');  // SOL
+        const logoTSE = resimOku('logo3.png');  // SAĞ
 
         // Dinamik İsimler ve Unvanlar (Vekalet Desteği)
         const hrName = query.hrName || '................................'; 
@@ -175,12 +176,13 @@ exports.pdfOlustur = async (req, res) => {
         const headName = query.headName || 'Ersan TOPÇUOĞLU';
         const headTitle = query.headTitle || 'Ulaşım Dairesi Başkanı';
 
+        // --- ORTAK CSS ---
         const commonCSS = `
-            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.2; }
+            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.1; }
             .no-border td { border: none; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .imza-img { height: 40px; max-width: 100px; display: block; margin: 0 auto; }
+            .imza-img { height: 35px; max-width: 90px; display: block; margin: 0 auto; }
             .logo-img { height: 60px; width: auto; }
             table { width: 100%; border-collapse: collapse; }
         `;
@@ -188,7 +190,7 @@ exports.pdfOlustur = async (req, res) => {
         let htmlContent = '';
 
         if (form_tipi === 'form1') {
-            // ================= FORM 1 (DİJİTAL SÜREÇ - STANDART) =================
+            // ================= FORM 1 (DİJİTAL SÜREÇ) =================
             const isType = (tur) => veri.izin_turu === tur ? 'X' : ' ';
             let formBasligi = "İZİN TALEP FORMU";
             if (veri.izin_turu) formBasligi = `${veri.izin_turu} TALEP FORMU`.toUpperCase();
@@ -263,25 +265,25 @@ exports.pdfOlustur = async (req, res) => {
 
         } else {
             // ============================================================
-            // FORM 2: KÜLTÜR A.Ş. FORMATI (A4 OTURAN + DİNAMİK ALTBİLGİ)
+            // FORM 2: KÜLTÜR A.Ş. (A4 TAM BOY + ALT BİLGİ TABLOSU)
             // ============================================================
             htmlContent = `
             <html>
             <head>
                 <style>
                     ${commonCSS}
-                    .page-container { padding: 15px 30px; height: 98vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
+                    .page-container { padding: 20px 30px; height: 98vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
                     .header-tbl td { text-align: center; vertical-align: middle; padding: 2px; }
                     
-                    /* Form Tablosu */
+                    /* Form Tablosu - 11px */
                     .form-tbl { width: 100%; margin-top: 15px; font-size: 11px; }
-                    .form-tbl td { padding: 4px 0; vertical-align: top; }
+                    .form-tbl td { padding: 5px 0; vertical-align: top; }
                     .lbl { font-weight: bold; width: 30%; }
                     .sep { width: 2%; text-align: center; }
                     .val { width: 68%; border-bottom: 1px dotted #999; } 
 
                     /* İmzalar */
-                    .imza-row { margin-top: 30px; width: 100%; font-size:11px; }
+                    .imza-row { margin-top: 25px; width: 100%; font-size:11px; }
                     .imza-row td { vertical-align: top; text-align:center; padding: 0 5px; }
                     
                     /* KVKK */
@@ -289,19 +291,21 @@ exports.pdfOlustur = async (req, res) => {
                     .kvkk-table { width:100%; margin-top:10px; font-size:10px; }
                     .kvkk-table td { vertical-align: top; }
 
-                    /* ALT BİLGİ KUTUCUĞU (EN ALT) */
+                    /* ALT BİLGİ TABLOSU (EN ALT) */
                     .footer-box { 
-                        margin-top: 20px; 
+                        margin-top: 15px; 
                         width: 100%; 
                         border: 1px solid #000; 
-                        font-size: 9px;
+                        font-size: 10px;
                         border-collapse: collapse;
                     }
                     .footer-box td { 
                         border: 1px solid #000; 
-                        padding: 3px 5px; 
+                        padding: 5px; 
                         vertical-align: middle;
+                        text-align: center;
                     }
+                    .footer-left { text-align: left !important; }
                 </style>
             </head>
             <body>
@@ -313,7 +317,7 @@ exports.pdfOlustur = async (req, res) => {
                                 <td width="64%">
                                     <div class="bold" style="font-size:14px;">T.C.<br>MERSİN BÜYÜKŞEHİR BELEDİYESİ<br>ULAŞIM DAİRESİ BAŞKANLIĞI</div>
                                 </td>
-                                <td width="18%"><img src="${logo100}" class="logo-img"></td>
+                                <td width="18%"><img src="${logoTSE}" class="logo-img"></td>
                             </tr>
                             <tr>
                                 <td colspan="3" class="bold" style="font-size:12px; padding-top:10px;">
@@ -392,10 +396,10 @@ exports.pdfOlustur = async (req, res) => {
 
                     <table class="footer-box">
                         <tr>
-                            <td width="25%"><strong>Doküman No:</strong> <İNK.02.FR.06></td>
-                            <td width="25%"><strong>Yayın Tarihi:</strong> <25.03.2015></td>
-                            <td width="30%"><strong>Rev. No ve Tarihi:</strong> <REV_NO> / <REV_TARIHI></td>
-                            <td width="20%"><strong>Sayfa No:</strong> 1</td>
+                            <td width="20%" class="footer-left"><strong>Doküman No</strong><br>İNK.02.FR.06</td>
+                            <td width="20%" class="footer-left"><strong>Yayın Tarihi</strong><br>25.03.2015</td>
+                            <td width="30%" class="footer-left"><strong>Rev. No ve Tarihi</strong><br>00 / --</td>
+                            <td width="20%" class="footer-left"><strong>Sayfa No</strong><br>1</td>
                         </tr>
                     </table>
 
