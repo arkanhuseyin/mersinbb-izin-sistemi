@@ -16,6 +16,8 @@ const izinRoutes = require('./src/routes/izinRoutes');
 const personelRoutes = require('./src/routes/personelRoutes');
 const yetkiRoutes = require('./src/routes/yetkiRoutes');
 const ayarRoutes = require('./src/routes/ayarRoutes');
+const talepRoutes = require('./src/routes/talepRoutes'); // ✅ YENİ EKLENDİ
+
 const app = express();
 
 // --- MIDDLEWARE (Ara Katmanlar) ---
@@ -28,14 +30,12 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// --- 2. EKLEME: Uploads Klasörü Kontrolü ve Dışa Açma ---
+// --- Uploads Klasörü Kontrolü ---
 const uploadsDir = path.join(__dirname, 'uploads');
-
 if (!fs.existsSync(uploadsDir)){
     fs.mkdirSync(uploadsDir, { recursive: true });
     console.log('📂 Uploads klasörü oluşturuldu.');
 }
-
 app.use('/uploads', express.static(uploadsDir));
 
 // --- ROTALAR ---
@@ -44,6 +44,7 @@ app.use('/api/izin', izinRoutes);
 app.use('/api/personel', personelRoutes); 
 app.use('/api/yetki', yetkiRoutes);  
 app.use('/api/ayar', ayarRoutes);
+app.use('/api/talep', talepRoutes); // ✅ YENİ EKLENDİ
 
 // Test Rotası
 app.get('/', (req, res) => {

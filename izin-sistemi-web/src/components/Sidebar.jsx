@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck, MessageSquare } from 'lucide-react';
 import logoMbb from '../assets/logombb.png'; 
 
 export default function Sidebar() {
@@ -31,16 +31,18 @@ export default function Sidebar() {
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
 
-        // 3. Eğer veritabanında bu modül için kayıt VARSA:
+        // 3. Veritabanı kaydı varsa oradan bak
         if (permission) {
             return permission.goruntule === true; 
         }
 
-        // 4. Eğer veritabanında kayıt YOKSA (Varsayılanlar):
+        // 4. Varsayılanlar (Veritabanında kayıt yoksa)
         if (modulKey === 'dashboard') return true;
         if (modulKey === 'izin_talep' && user?.rol === 'personel') return true;
+        
+        // ✅ Öneri/Talep herkese açık olmalı (Varsayılan)
+        if (modulKey === 'talep_yonetim') return true;
 
-        // Diğer her şey varsayılan olarak KAPALI.
         return false; 
     };
 
@@ -61,7 +63,6 @@ export default function Sidebar() {
             title: 'İzin Talepleri', 
             path: '/dashboard/leaves', 
             icon: <FileText size={20}/>, 
-            // Onay yetkisi veya talep yetkisi olan görsün
             show: checkPermission('izin_onay') || checkPermission('izin_talep') 
         },
         { 
@@ -70,8 +71,13 @@ export default function Sidebar() {
             icon: <FileBarChart size={20}/>, 
             show: checkPermission('rapor') 
         },
-        // ❌ Form 1 ve Form 2 linkleri buradan SİLİNDİ (Menüde görünmeyecek)
-        // Ancak altyapıda yetkileri çalışmaya devam edecek.
+        // ✅ YENİ EKLENEN TALEP MODÜLÜ
+        {
+            title: 'Öneri / Talep',
+            path: '/dashboard/requests',
+            icon: <MessageSquare size={20}/>,
+            show: checkPermission('talep_yonetim') // Herkese açık yaptık
+        },
         { 
             title: 'Personel Yönetimi', 
             path: '/dashboard/profile-requests', 
