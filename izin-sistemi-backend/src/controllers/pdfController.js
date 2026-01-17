@@ -138,19 +138,30 @@ exports.pdfOlustur = async (req, res) => {
         if (result.rows.length === 0) return res.status(404).send('Talep bulunamadı');
         const veri = result.rows[0];
 
-        // İmzalar (Sadece Form 1 İçin)
+        // İmzalar (Form 1 için İsim ve Soyad ile Birlikte)
         let amirImza = '', yaziciImza = '', personelImza = '';
+        let amirAdi = '', yaziciAdi = ''; // Yeni değişkenler
+
         if (veri.personel_imza) personelImza = veri.personel_imza;
 
         if (form_tipi === 'form1') {
+            // Sadece imza datasını değil, personelin adını ve soyadını da çekiyoruz
             const imzalarRes = await pool.query(`
-                SELECT i.imza_data, r.rol_adi FROM imzalar i
+                SELECT i.imza_data, r.rol_adi, p.ad, p.soyad 
+                FROM imzalar i
                 JOIN personeller p ON i.personel_id = p.personel_id
                 JOIN roller r ON p.rol_id = r.rol_id WHERE i.talep_id = $1
             `, [talep_id]);
+            
             imzalarRes.rows.forEach(img => {
-                if (img.rol_adi === 'amir') amirImza = img.imza_data;
-                if (img.rol_adi === 'yazici') yaziciImza = img.imza_data;
+                if (img.rol_adi === 'amir') {
+                    amirImza = img.imza_data;
+                    amirAdi = `${img.ad} ${img.soyad}`; // Amir Adı Soyadı
+                }
+                if (img.rol_adi === 'yazici') {
+                    yaziciImza = img.imza_data;
+                    yaziciAdi = `${img.ad} ${img.soyad}`; // Yazıcı Adı Soyadı
+                }
             });
         }
 
@@ -164,8 +175,9 @@ exports.pdfOlustur = async (req, res) => {
             aitOlduguYil = await getIzninAitOlduguYilFIFO(veri.personel_id, veri.talep_id);
         }
 
+        // --- LOGOLAR ---
         const logoMBB = resimOku('logo1.png'); 
-        const logoTSE = resimOku('logo3.png'); // Form 2 Sağ Logo Değiştirildi
+        const logoTSE = resimOku('logo3.png'); // Form 2 için de, Form 1 için de Sağ logo logo3.png
 
         // Dinamik İsimler ve Unvanlar (Vekalet Desteği)
         const hrName = query.hrName || '................................'; 
@@ -175,7 +187,7 @@ exports.pdfOlustur = async (req, res) => {
         const headTitle = query.headTitle || 'Ulaşım Dairesi Başkanı';
 
         const commonCSS = `
-            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.4; } /* Satır aralığı açıldı */
+            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.4; }
             .no-border td { border: none; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
@@ -187,7 +199,7 @@ exports.pdfOlustur = async (req, res) => {
         let htmlContent = '';
 
         if (form_tipi === 'form1') {
-            // ================= FORM 1 (DİJİTAL SÜREÇ) =================
+            // ================= FORM 1 (DİJİTAL SÜREÇ + İSİMLER EKLENDİ) =================
             const isType = (tur) => veri.izin_turu === tur ? 'X' : ' ';
             let formBasligi = "İZİN TALEP FORMU";
             if (veri.izin_turu) formBasligi = `${veri.izin_turu} TALEP FORMU`.toUpperCase();
@@ -247,12 +259,12 @@ exports.pdfOlustur = async (req, res) => {
                             <td height="80" class="center" style="vertical-align:top;">
                                 <div style="margin-bottom:5px;">Uygun Görüşle Arz Ederim</div>
                                 ${amirImza ? `<img src="${amirImza}" class="imza-img">` : ''}
-                                <div>Birim Amiri</div>
+                                <div style="font-weight:bold; font-size:10px;">${amirAdi}</div> <div>Birim Amiri</div>
                             </td>
                             <td height="80" class="center" style="vertical-align:top;">
                                 <div style="margin-bottom:5px;">Kontrol Edilmiştir</div>
                                 ${yaziciImza ? `<img src="${yaziciImza}" class="imza-img">` : ''}
-                                <div>Amirlik Yazıcısı</div>
+                                <div style="font-weight:bold; font-size:10px;">${yaziciAdi}</div> <div>Amirlik Yazıcısı</div>
                             </td>
                         </tr>
                     </table>
@@ -262,35 +274,35 @@ exports.pdfOlustur = async (req, res) => {
 
         } else {
             // ============================================================
-            // FORM 2: KÜLTÜR A.Ş. FORMATI (DAHA FERAH & 11px)
+            // FORM 2: KÜLTÜR A.Ş. FORMATI (A4 + ALT BİLGİ + İSİMLİ)
             // ============================================================
             htmlContent = `
             <html>
             <head>
                 <style>
                     ${commonCSS}
-                    .page-container { padding: 15px 30px; height: 98vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
+                    .page-container { padding: 20px 30px; height: 98vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
                     .header-tbl td { text-align: center; vertical-align: middle; padding: 2px; }
                     
-                    /* Form Tablosu - Ferahlatıldı */
-                    .form-tbl { width: 100%; margin-top: 25px; font-size: 11px; }
-                    .form-tbl td { padding: 6px 0; vertical-align: top; } /* Boşluklar arttı */
+                    /* Form Tablosu - 11px */
+                    .form-tbl { width: 100%; margin-top: 15px; font-size: 11px; }
+                    .form-tbl td { padding: 5px 0; vertical-align: top; }
                     .lbl { font-weight: bold; width: 30%; }
                     .sep { width: 2%; text-align: center; }
                     .val { width: 68%; border-bottom: 1px dotted #999; } 
 
                     /* İmzalar */
-                    .imza-row { margin-top: 35px; width: 100%; font-size:11px; }
+                    .imza-row { margin-top: 25px; width: 100%; font-size:11px; }
                     .imza-row td { vertical-align: top; text-align:center; padding: 0 5px; }
                     
                     /* KVKK */
-                    .kvkk-area { margin-top: 25px; font-size: 9px; text-align: justify; border-top: 1px solid #000; padding-top: 5px; line-height: 1.3; }
+                    .kvkk-area { margin-top: 20px; font-size: 9px; text-align: justify; border-top: 1px solid #000; padding-top: 5px; line-height: 1.2; }
                     .kvkk-table { width:100%; margin-top:10px; font-size:10px; }
                     .kvkk-table td { vertical-align: top; }
 
                     /* ALT BİLGİ TABLOSU (EN ALT) */
                     .footer-box { 
-                        margin-top: 20px; 
+                        margin-top: 15px; 
                         width: 100%; 
                         border: 1px solid #000; 
                         font-size: 10px;
@@ -298,7 +310,7 @@ exports.pdfOlustur = async (req, res) => {
                     }
                     .footer-box td { 
                         border: 1px solid #000; 
-                        padding: 6px; 
+                        padding: 5px; 
                         vertical-align: middle;
                         text-align: center;
                     }
@@ -341,10 +353,10 @@ exports.pdfOlustur = async (req, res) => {
                             <tr><td class="lbl">İŞ BAŞI TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_baslama_tarihi)}</td></tr>
                             <tr><td class="lbl">İKAMETGAH ADRESİ VE TELEFON</td><td class="sep">:</td><td class="val">${veri.adres} / ${veri.telefon}</td></tr>
                             <tr><td class="lbl">İZNİNİ GEÇİRECEĞİ ADRES</td><td class="sep">:</td><td class="val">${veri.izin_adresi || veri.adres}</td></tr>
-                            <tr><td class="lbl" style="padding-top:15px;">İŞÇİNİN İMZASI</td><td class="sep" style="padding-top:15px;">:</td><td class="val" style="height:35px; padding-top:15px;">............................................. (İmza)</td></tr>
+                            <tr><td class="lbl" style="padding-top:10px;">İŞÇİNİN İMZASI</td><td class="sep" style="padding-top:10px;">:</td><td class="val" style="height:30px; padding-top:10px;">............................................. (İmza)</td></tr>
                         </table>
 
-                        <div style="font-size:11px; margin-top:20px; line-height: 1.6; text-align: justify;">
+                        <div style="font-size:11px; margin-top:15px; line-height: 1.5; text-align: justify;">
                             Belediyemiz personeli <strong>${veri.ad} ${veri.soyad}</strong>'ın izine ayrılmasında sakınca bulunmamaktadır.
                             Adı geçen personel <strong>(${veri.kac_gun})</strong> iş günü ücretli ${veri.izin_turu.toLowerCase()} kullanacaktır.
                             ${veri.izin_turu === 'YILLIK İZİN' ? `İzin kullanım sonrası <strong>(${kalanIzinMetni})</strong> gün izni kalacaktır.` : ''}
@@ -356,17 +368,17 @@ exports.pdfOlustur = async (req, res) => {
                                 <td width="33%">
                                     <div class="bold">${headTitle}</div>
                                     <div style="margin-top:2px;">${headName}</div>
-                                    <div style="margin-top:35px;">.........................</div>
+                                    <div style="margin-top:30px;">.........................</div>
                                 </td>
                                 <td width="33%">
                                     <div class="bold">${managerTitle}</div>
                                     <div style="margin-top:2px;">${managerName}</div>
-                                    <div style="margin-top:35px;">.........................</div>
+                                    <div style="margin-top:30px;">.........................</div>
                                 </td>
                                 <td width="33%">
                                     <div class="bold">Hazırlayan</div>
                                     <div style="margin-top:2px;">${hrName}</div>
-                                    <div style="margin-top:35px;">.........................</div>
+                                    <div style="margin-top:30px;">.........................</div>
                                 </td>
                             </tr>
                         </table>
@@ -406,7 +418,7 @@ exports.pdfOlustur = async (req, res) => {
             `;
         }
 
-        const options = { format: 'A4', margin: { top: "8mm", bottom: "8mm", left: "10mm", right: "10mm" } };
+        const options = { format: 'A4', margin: { top: "5mm", bottom: "5mm", left: "10mm", right: "10mm" } };
         const file = { content: htmlContent };
 
         pdf.generatePdf(file, options).then(pdfBuffer => {
