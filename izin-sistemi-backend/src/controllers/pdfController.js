@@ -138,6 +138,7 @@ exports.pdfOlustur = async (req, res) => {
         if (result.rows.length === 0) return res.status(404).send('Talep bulunamadı');
         const veri = result.rows[0];
 
+        // İmzalar (Sadece Form 1 İçin)
         let amirImza = '', yaziciImza = '', personelImza = '';
         if (veri.personel_imza) personelImza = veri.personel_imza;
 
@@ -153,6 +154,7 @@ exports.pdfOlustur = async (req, res) => {
             });
         }
 
+        // --- HESAPLAMALAR ---
         let kalanIzinMetni = "...";
         let aitOlduguYil = new Date().getFullYear();
 
@@ -166,24 +168,27 @@ exports.pdfOlustur = async (req, res) => {
         const logoTSE = resimOku('logo2.png'); 
         const logo100 = resimOku('logo3.png');
 
+        // Dinamik İsimler ve Unvanlar (Vekalet Desteği)
         const hrName = query.hrName || '................................'; 
         const managerName = query.managerName || 'Bayram DEMİR';
+        const managerTitle = query.managerTitle || 'Toplu Taşıma Şube Müdürü'; 
         const headName = query.headName || 'Ersan TOPÇUOĞLU';
+        const headTitle = query.headTitle || 'Ulaşım Dairesi Başkanı';
 
         const commonCSS = `
-            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1; }
+            body { font-family: 'Times New Roman', serif; padding: 0; margin: 0; color: #000; line-height: 1.2; }
             .no-border td { border: none; }
             .center { text-align: center; }
             .bold { font-weight: bold; }
-            .imza-img { height: 35px; max-width: 90px; display: block; margin: 0 auto; }
-            .logo-img { height: 50px; width: auto; }
+            .imza-img { height: 40px; max-width: 100px; display: block; margin: 0 auto; }
+            .logo-img { height: 60px; width: auto; }
             table { width: 100%; border-collapse: collapse; }
         `;
 
         let htmlContent = '';
 
         if (form_tipi === 'form1') {
-            // ================= FORM 1 (DİJİTAL - AYNI KALDI) =================
+            // ================= FORM 1 (DİJİTAL SÜREÇ - STANDART) =================
             const isType = (tur) => veri.izin_turu === tur ? 'X' : ' ';
             let formBasligi = "İZİN TALEP FORMU";
             if (veri.izin_turu) formBasligi = `${veri.izin_turu} TALEP FORMU`.toUpperCase();
@@ -193,11 +198,11 @@ exports.pdfOlustur = async (req, res) => {
             <head>
                 <style>
                     ${commonCSS}
-                    .cerceve { border: 2px solid black; padding: 10px; height: 98vh; box-sizing: border-box; }
-                    td { border: 1px solid black; padding: 3px; font-size: 10px; vertical-align: middle; }
-                    .section-title { background-color: #e0e0e0; font-weight: bold; text-align: center; font-size: 10px; padding: 3px; border: 1px solid black; margin-top: 5px; }
+                    .cerceve { border: 3px solid black; padding: 15px; height: 98vh; box-sizing: border-box; }
+                    td { border: 1px solid black; padding: 4px; font-size: 10px; vertical-align: middle; }
+                    .section-title { background-color: #e0e0e0; font-weight: bold; text-align: center; font-size: 11px; padding: 4px; border: 1px solid black; margin-top: 10px; }
                     .label { font-weight: bold; background-color: #f9f9f9; width: 25%; }
-                    .adres-kutu { vertical-align: top; height: 35px; }
+                    .adres-kutu { vertical-align: top; height: 40px; }
                 </style>
             </head>
             <body>
@@ -206,9 +211,9 @@ exports.pdfOlustur = async (req, res) => {
                         <tr>
                             <td width="20%" class="center"><img src="${logoMBB}" class="logo-img"></td>
                             <td width="60%" class="center">
-                                <div style="font-weight:bold; font-size:11px;">Ulaşım Dairesi Başkanlığı</div>
-                                <div style="font-size:11px;">Toplu Taşıma Şube Müdürlüğü</div>
-                                <div style="margin-top:3px; text-decoration:underline; font-weight:bold; font-size:12px;">${formBasligi}</div>
+                                <div style="font-weight:bold; font-size:12px;">Ulaşım Dairesi Başkanlığı</div>
+                                <div style="font-size:12px;">Toplu Taşıma Şube Müdürlüğü</div>
+                                <div style="margin-top:5px; text-decoration:underline; font-weight:bold; font-size:14px;">${formBasligi}</div>
                             </td>
                             <td width="20%" class="center"><img src="${logoTSE}" class="logo-img"></td>
                         </tr>
@@ -227,7 +232,7 @@ exports.pdfOlustur = async (req, res) => {
                     <table>
                         <tr>
                             <td colspan="2" class="label">İşe Giriş Tarihi: ${fmt(veri.ise_giris_tarihi)}</td>
-                            <td colspan="2" class="center bold" style="height:40px; vertical-align:bottom;">
+                            <td colspan="2" class="center bold" style="height:50px; vertical-align:bottom;">
                                 İMZA<br>${personelImza ? `<img src="${personelImza}" class="imza-img">` : ''}
                             </td>
                         </tr>
@@ -240,13 +245,13 @@ exports.pdfOlustur = async (req, res) => {
                     <table>
                         <tr><td width="50%" class="center bold">AMİR GÖRÜŞÜ</td><td width="50%" class="center bold">YAZICI KONTROLÜ</td></tr>
                         <tr>
-                            <td height="60" class="center" style="vertical-align:top;">
-                                <div style="margin-bottom:3px;">Uygun Görüşle Arz Ederim</div>
+                            <td height="80" class="center" style="vertical-align:top;">
+                                <div style="margin-bottom:5px;">Uygun Görüşle Arz Ederim</div>
                                 ${amirImza ? `<img src="${amirImza}" class="imza-img">` : ''}
                                 <div>Birim Amiri</div>
                             </td>
-                            <td height="60" class="center" style="vertical-align:top;">
-                                <div style="margin-bottom:3px;">Kontrol Edilmiştir</div>
+                            <td height="80" class="center" style="vertical-align:top;">
+                                <div style="margin-bottom:5px;">Kontrol Edilmiştir</div>
                                 ${yaziciImza ? `<img src="${yaziciImza}" class="imza-img">` : ''}
                                 <div>Amirlik Yazıcısı</div>
                             </td>
@@ -258,117 +263,141 @@ exports.pdfOlustur = async (req, res) => {
 
         } else {
             // ============================================================
-            // FORM 2: TEK SAYFAYA SIĞAN KÜLTÜR A.Ş. FORMATI (GÜNCELLENDİ)
+            // FORM 2: KÜLTÜR A.Ş. FORMATI (A4 OTURAN + DİNAMİK ALTBİLGİ)
             // ============================================================
             htmlContent = `
             <html>
             <head>
                 <style>
                     ${commonCSS}
-                    .page-container { padding: 10px 25px; height: 98vh; box-sizing: border-box; }
+                    .page-container { padding: 15px 30px; height: 98vh; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; }
                     .header-tbl td { text-align: center; vertical-align: middle; padding: 2px; }
                     
                     /* Form Tablosu */
-                    .form-tbl { width: 100%; margin-top: 5px; font-size: 10px; }
-                    .form-tbl td { padding: 2px 0; vertical-align: top; }
-                    .lbl { font-weight: bold; width: 32%; }
+                    .form-tbl { width: 100%; margin-top: 15px; font-size: 11px; }
+                    .form-tbl td { padding: 4px 0; vertical-align: top; }
+                    .lbl { font-weight: bold; width: 30%; }
                     .sep { width: 2%; text-align: center; }
-                    .val { width: 66%; border-bottom: 1px dotted #999; } 
+                    .val { width: 68%; border-bottom: 1px dotted #999; } 
 
                     /* İmzalar */
-                    .imza-row { margin-top: 20px; width: 100%; font-size:10px; }
-                    .imza-row td { vertical-align: top; text-align:center; }
+                    .imza-row { margin-top: 30px; width: 100%; font-size:11px; }
+                    .imza-row td { vertical-align: top; text-align:center; padding: 0 5px; }
                     
                     /* KVKK */
-                    .kvkk-area { margin-top: 10px; font-size: 8px; text-align: justify; border-top: 1px solid #000; padding-top: 5px; line-height: 1.2; }
-                    .kvkk-table { width:100%; margin-top:5px; font-size:9px; }
+                    .kvkk-area { margin-top: 20px; font-size: 9px; text-align: justify; border-top: 1px solid #000; padding-top: 5px; line-height: 1.2; }
+                    .kvkk-table { width:100%; margin-top:10px; font-size:10px; }
                     .kvkk-table td { vertical-align: top; }
+
+                    /* ALT BİLGİ KUTUCUĞU (EN ALT) */
+                    .footer-box { 
+                        margin-top: 20px; 
+                        width: 100%; 
+                        border: 1px solid #000; 
+                        font-size: 9px;
+                        border-collapse: collapse;
+                    }
+                    .footer-box td { 
+                        border: 1px solid #000; 
+                        padding: 3px 5px; 
+                        vertical-align: middle;
+                    }
                 </style>
             </head>
             <body>
                 <div class="page-container">
-                    
-                    <table class="header-tbl no-border">
-                        <tr>
-                            <td width="18%"><img src="${logoMBB}" class="logo-img"></td>
-                            <td width="64%">
-                                <div class="bold" style="font-size:13px;">T.C.<br>MERSİN BÜYÜKŞEHİR BELEDİYESİ<br>ULAŞIM DAİRESİ BAŞKANLIĞI</div>
-                            </td>
-                            <td width="18%"><img src="${logo100}" class="logo-img"></td>
-                        </tr>
-                        <tr>
-                            <td colspan="3" class="bold" style="font-size:11px; padding-top:5px;">
-                                MERSİN BÜYÜKŞEHİR KÜLTÜR SANAT BİLİM ULŞ.TİC. ve SAN. A.Ş.
-                            </td>
-                        </tr>
-                        <tr>
-                            <td colspan="3" class="bold" style="font-size:15px; text-decoration: underline; padding-top:5px;">
-                                İŞÇİ İZİN FORMU
-                            </td>
-                        </tr>
-                    </table>
-
-                    <table class="form-tbl">
-                        <tr><td class="lbl">ADI SOYADI ve T.C.NO</td><td class="sep">:</td><td class="val">${veri.ad} ${veri.soyad} / ${veri.tc_no}</td></tr>
-                        <tr><td class="lbl">İŞE GİRİŞ TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_giris_tarihi)}</td></tr>
-                        <tr><td class="lbl">POZİSYONU</td><td class="sep">:</td><td class="val">${veri.kadro_tipi || 'Sürekli İşçi'}</td></tr>
-                        <tr><td class="lbl">BAĞLI OLDUĞU BİRİM</td><td class="sep">:</td><td class="val">${veri.birim_adi}</td></tr>
-                        <tr><td class="lbl">İZİN TÜRÜ</td><td class="sep">:</td><td class="val">${veri.izin_turu}</td></tr>
-                        <tr><td class="lbl">İZNİN AİT OLDUĞU YIL</td><td class="sep">:</td><td class="val">${aitOlduguYil}</td></tr>
-                        <tr><td class="lbl">DİLEKÇE TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.olusturma_tarihi)}</td></tr>
-                        <tr><td class="lbl">İZİNİ KULLANACAĞI TARİH</td><td class="sep">:</td><td class="val">${fmt(veri.baslangic_tarihi)}</td></tr>
-                        <tr><td class="lbl">İZİN BİTİŞ TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.bitis_tarihi)}</td></tr>
-                        <tr><td class="lbl">İŞ BAŞI TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_baslama_tarihi)}</td></tr>
-                        <tr><td class="lbl">İKAMETGAH ADRESİ VE TELEFON</td><td class="sep">:</td><td class="val">${veri.adres} / ${veri.telefon}</td></tr>
-                        <tr><td class="lbl">İZNİNİ GEÇİRECEĞİ ADRES</td><td class="sep">:</td><td class="val">${veri.izin_adresi || veri.adres}</td></tr>
-                        <tr><td class="lbl">İŞÇİNİN İMZASI</td><td class="sep">:</td><td class="val" style="height:25px; padding-top:10px;">............................................. (İmza)</td></tr>
-                    </table>
-
-                    <div style="font-size:10px; margin-top:10px; line-height: 1.4; text-align: justify;">
-                        Belediyemiz personeli <strong>${veri.ad} ${veri.soyad}</strong>'ın izine ayrılmasında sakınca bulunmamaktadır.
-                        Adı geçen personel <strong>(${veri.kac_gun})</strong> iş günü ücretli ${veri.izin_turu.toLowerCase()} kullanacaktır.
-                        ${veri.izin_turu === 'YILLIK İZİN' ? `İzin kullanım sonrası <strong>(${kalanIzinMetni})</strong> gün izni kalacaktır.` : ''}
-                        <br>Gereğini arz ederim.
-                    </div>
-
-                    <table class="no-border imza-row">
-                        <tr>
-                            <td width="33%">
-                                <div class="bold">Daire Başkanı</div>
-                                <div style="margin-top:2px;">${headName}</div>
-                                <div style="margin-top:20px;">.........................</div>
-                            </td>
-                            <td width="33%">
-                                <div class="bold">Şube Müdürü</div>
-                                <div style="margin-top:2px;">${managerName}</div>
-                                <div style="margin-top:20px;">.........................</div>
-                            </td>
-                            <td width="33%">
-                                <div class="bold">Hazırlayan</div>
-                                <div style="margin-top:2px;">${hrName}</div>
-                                <div style="margin-top:20px;">.........................</div>
-                            </td>
-                        </tr>
-                    </table>
-
-                    <div class="kvkk-area">
-                        <strong>6698 Sayılı Kişisel Verilerin Korunması Kanunu</strong> hakkındaki bilgilendirme www.mersin.bel.tr adresinde KVK Kapsamında Aydınlatma Beyanı ile gerçekleştirilmiştir.<br>
-                        İşbu Formda Mersin Büyükşehir Belediyesi ile paylaştığım kişisel ve özel nitelikli kişisel verilerimin sadece bu işlem ile sınırlı olmak üzere Mersin Büyükşehir Belediyesi ve İştirakleri tarafından işlenmesine, kanunen gerekli görülen yerlere aktarılmasına, kişisel verileri saklama ve imha politikasına uygun olarak saklanmasına açık rıza gösterdiğimi ve bu hususta tarafıma gerekli aydınlatmanın yapıldığını, işbu metni okuduğumu ve anladığımı beyan ediyorum.
-                        
-                        <table class="no-border kvkk-table">
+                    <div>
+                        <table class="header-tbl no-border">
                             <tr>
-                                <td width="55%" style="padding-top:10px;">
-                                    [  ] Onay Veriyorum &nbsp;&nbsp;&nbsp;&nbsp; [  ] Onay Vermiyorum
+                                <td width="18%"><img src="${logoMBB}" class="logo-img"></td>
+                                <td width="64%">
+                                    <div class="bold" style="font-size:14px;">T.C.<br>MERSİN BÜYÜKŞEHİR BELEDİYESİ<br>ULAŞIM DAİRESİ BAŞKANLIĞI</div>
                                 </td>
-                                <td width="45%" style="padding-left:10px;">
-                                    <strong>Kişisel Veri Sahibi'nin:</strong><br>
-                                    Adı Soyadı: ${veri.ad} ${veri.soyad}<br>
-                                    Tarih: ${fmt(new Date())}<br>
-                                    İmza: .......................................
+                                <td width="18%"><img src="${logo100}" class="logo-img"></td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="bold" style="font-size:12px; padding-top:10px;">
+                                    MERSİN BÜYÜKŞEHİR KÜLTÜR SANAT BİLİM ULŞ.TİC. ve SAN. A.Ş.
+                                </td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="bold" style="font-size:16px; text-decoration: underline; padding-top:10px;">
+                                    İŞÇİ İZİN FORMU
                                 </td>
                             </tr>
                         </table>
+
+                        <table class="form-tbl">
+                            <tr><td class="lbl">ADI SOYADI ve T.C.NO</td><td class="sep">:</td><td class="val">${veri.ad} ${veri.soyad} / ${veri.tc_no}</td></tr>
+                            <tr><td class="lbl">İŞE GİRİŞ TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_giris_tarihi)}</td></tr>
+                            <tr><td class="lbl">POZİSYONU</td><td class="sep">:</td><td class="val">${veri.kadro_tipi || 'Sürekli İşçi'}</td></tr>
+                            <tr><td class="lbl">BAĞLI OLDUĞU BİRİM</td><td class="sep">:</td><td class="val">${veri.birim_adi}</td></tr>
+                            <tr><td class="lbl">İZİN TÜRÜ</td><td class="sep">:</td><td class="val">${veri.izin_turu}</td></tr>
+                            <tr><td class="lbl">İZNİN AİT OLDUĞU YIL</td><td class="sep">:</td><td class="val">${aitOlduguYil}</td></tr>
+                            <tr><td class="lbl">DİLEKÇE TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.olusturma_tarihi)}</td></tr>
+                            <tr><td class="lbl">İZİNİ KULLANACAĞI TARİH</td><td class="sep">:</td><td class="val">${fmt(veri.baslangic_tarihi)}</td></tr>
+                            <tr><td class="lbl">İZİN BİTİŞ TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.bitis_tarihi)}</td></tr>
+                            <tr><td class="lbl">İŞ BAŞI TARİHİ</td><td class="sep">:</td><td class="val">${fmt(veri.ise_baslama_tarihi)}</td></tr>
+                            <tr><td class="lbl">İKAMETGAH ADRESİ VE TELEFON</td><td class="sep">:</td><td class="val">${veri.adres} / ${veri.telefon}</td></tr>
+                            <tr><td class="lbl">İZNİNİ GEÇİRECEĞİ ADRES</td><td class="sep">:</td><td class="val">${veri.izin_adresi || veri.adres}</td></tr>
+                            <tr><td class="lbl" style="padding-top:10px;">İŞÇİNİN İMZASI</td><td class="sep" style="padding-top:10px;">:</td><td class="val" style="height:30px; padding-top:10px;">............................................. (İmza)</td></tr>
+                        </table>
+
+                        <div style="font-size:11px; margin-top:15px; line-height: 1.5; text-align: justify;">
+                            Belediyemiz personeli <strong>${veri.ad} ${veri.soyad}</strong>'ın izine ayrılmasında sakınca bulunmamaktadır.
+                            Adı geçen personel <strong>(${veri.kac_gun})</strong> iş günü ücretli ${veri.izin_turu.toLowerCase()} kullanacaktır.
+                            ${veri.izin_turu === 'YILLIK İZİN' ? `İzin kullanım sonrası <strong>(${kalanIzinMetni})</strong> gün izni kalacaktır.` : ''}
+                            <br>Gereğini arz ederim.
+                        </div>
+
+                        <table class="no-border imza-row">
+                            <tr>
+                                <td width="33%">
+                                    <div class="bold">${headTitle}</div>
+                                    <div style="margin-top:2px;">${headName}</div>
+                                    <div style="margin-top:30px;">.........................</div>
+                                </td>
+                                <td width="33%">
+                                    <div class="bold">${managerTitle}</div>
+                                    <div style="margin-top:2px;">${managerName}</div>
+                                    <div style="margin-top:30px;">.........................</div>
+                                </td>
+                                <td width="33%">
+                                    <div class="bold">Hazırlayan</div>
+                                    <div style="margin-top:2px;">${hrName}</div>
+                                    <div style="margin-top:30px;">.........................</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <div class="kvkk-area">
+                            <strong>6698 Sayılı Kişisel Verilerin Korunması Kanunu</strong> hakkındaki bilgilendirme www.mersin.bel.tr adresinde KVK Kapsamında Aydınlatma Beyanı ile gerçekleştirilmiştir.<br>
+                            İşbu Formda Mersin Büyükşehir Belediyesi ile paylaştığım kişisel ve özel nitelikli kişisel verilerimin sadece bu işlem ile sınırlı olmak üzere Mersin Büyükşehir Belediyesi ve İştirakleri tarafından işlenmesine, kanunen gerekli görülen yerlere aktarılmasına, kişisel verileri saklama ve imha politikasına uygun olarak saklanmasına açık rıza gösterdiğimi ve bu hususta tarafıma gerekli aydınlatmanın yapıldığını, işbu metni okuduğumu ve anladığımı beyan ediyorum.
+                            
+                            <table class="no-border kvkk-table">
+                                <tr>
+                                    <td width="55%" style="padding-top:10px;">
+                                        [  ] Onay Veriyorum &nbsp;&nbsp;&nbsp;&nbsp; [  ] Onay Vermiyorum
+                                    </td>
+                                    <td width="45%" style="padding-left:10px;">
+                                        <strong>Kişisel Veri Sahibi'nin:</strong><br>
+                                        Adı Soyadı: ${veri.ad} ${veri.soyad}<br>
+                                        Tarih: ${fmt(new Date())}<br>
+                                        İmza: .......................................
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
                     </div>
+
+                    <table class="footer-box">
+                        <tr>
+                            <td width="25%"><strong>Doküman No:</strong> <İNK.02.FR.06></td>
+                            <td width="25%"><strong>Yayın Tarihi:</strong> <25.03.2015></td>
+                            <td width="30%"><strong>Rev. No ve Tarihi:</strong> <REV_NO> / <REV_TARIHI></td>
+                            <td width="20%"><strong>Sayfa No:</strong> 1</td>
+                        </tr>
+                    </table>
 
                 </div>
             </body>
