@@ -1,33 +1,33 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, TouchableOpacity, TextInput, Modal, StyleSheet, Alert, ActivityIndicator, StatusBar, SafeAreaView } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import { View, Text, FlatList, TouchableOpacity, TextInput, Modal, StyleSheet, Alert, ActivityIndicator, SafeAreaView, StatusBar } from 'react-native';
+import axios from 'axios'; // AsyncStorage sildik, gerek kalmadı.
 import { useFocusEffect } from '@react-navigation/native'; 
-import { Plus, CheckCircle, Clock, X, ChevronRight, MessageSquare } from 'lucide-react-native';
+import { Plus, CheckCircle, Clock, X, MessageSquare } from 'lucide-react-native';
 import moment from 'moment';
 import 'moment/locale/tr'; 
 
 import { API_URL } from '../config'; 
 
-// 🎨 KURUMSAL RENK PALETİ
+// Renk Paleti
 const COLORS = {
-    primary: '#2563EB',    // Ana Mavi
-    secondary: '#F8FAFC',  // Arka Plan
-    card: '#FFFFFF',       // Kart Rengi
-    textDark: '#1E293B',   // Koyu Yazı
-    textLight: '#64748B',  // Gri Yazı
-    success: '#10B981',    // Yeşil (Öneri)
-    danger: '#EF4444',     // Kırmızı (Şikayet)
-    warning: '#F59E0B',    // Turuncu (Talep)
-    border: '#E2E8F0'      // İnce Çizgiler
+    primary: '#2563EB',
+    secondary: '#F8FAFC',
+    card: '#FFFFFF',
+    textDark: '#1E293B',
+    textLight: '#64748B',
+    success: '#10B981',
+    danger: '#EF4444',
+    border: '#E2E8F0'
 };
 
-export default function TalepYonetimiScreen({ navigation }) {
+export default function TalepYonetimiScreen({ route, navigation }) {
+    // 🛠️ KRİTİK DEĞİŞİKLİK: Token'ı artık parametreden alıyoruz! (İzinTalepScreen ile aynı)
+    const { user, token } = route.params; 
+
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(false);
     const [modalVisible, setModalVisible] = useState(false);
     
-    // Form State
     const [type, setType] = useState('Öneri');
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
@@ -35,31 +35,22 @@ export default function TalepYonetimiScreen({ navigation }) {
 
     useFocusEffect(
         useCallback(() => {
-            fetchRequests();
-        }, [])
+            if(token) fetchRequests();
+        }, [token])
     );
-
-    // 🛠️ YARDIMCI: Token Temizleme
-    const getToken = async () => {
-        try {
-            let token = await AsyncStorage.getItem('userToken');
-            if (token) return token.replace(/^"|"$/g, '');
-            return null;
-        } catch (e) { return null; }
-    };
 
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const token = await getToken();
-            if (!token) return;
-            
+            // AsyncStorage kullanmıyoruz, doğrudan elimizdeki token'ı kullanıyoruz
             const res = await axios.get(`${API_URL}/api/talep/listele`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setRequests(res.data);
         } catch (error) {
             console.log("Liste Hatası:", error.message);
+            // 401 Hatası (Yetkisiz) durumunda listeyi boşalt
+            if(error.response && error.response.status === 401) setRequests([]);
         } finally {
             setLoading(false);
         }
@@ -70,11 +61,6 @@ export default function TalepYonetimiScreen({ navigation }) {
         if (!subject.trim() || !message.trim()) return Alert.alert("Eksik Bilgi", "Konu ve mesaj alanları zorunludur.");
 
         try {
-            const token = await getToken();
-            if (!token) {
-                return Alert.alert("Hata", "Oturum süreniz dolmuş. Tekrar giriş yapın.");
-            }
-
             await axios.post(`${API_URL}/api/talep/olustur`, 
                 { tur: type, konu: subject, mesaj: message, kvkk: true }, 
                 { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
@@ -120,7 +106,7 @@ export default function TalepYonetimiScreen({ navigation }) {
                 <View style={styles.cardFooter}>
                     <View style={styles.senderContainer}>
                         <View style={styles.avatar}>
-                            <Text style={styles.avatarText}>{item.gorunen_ad.charAt(0)}</Text>
+                            <Text style={styles.avatarText}>{item.gorunen_ad?.charAt(0) || '?'}</Text>
                         </View>
                         <Text style={styles.sender}>{item.gorunen_ad}</Text>
                     </View>
@@ -142,7 +128,6 @@ export default function TalepYonetimiScreen({ navigation }) {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor={COLORS.secondary} />
             
-            {/* Header */}
             <View style={styles.header}>
                 <View>
                     <Text style={styles.headerTitle}>Destek Merkezi</Text>
@@ -153,7 +138,6 @@ export default function TalepYonetimiScreen({ navigation }) {
                 </TouchableOpacity>
             </View>
 
-            {/* Liste */}
             {loading ? <ActivityIndicator size="large" color={COLORS.primary} style={{marginTop: 50}} /> : (
                 <FlatList
                     data={requests}
@@ -163,13 +147,12 @@ export default function TalepYonetimiScreen({ navigation }) {
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <MessageSquare size={64} color="#CBD5E1" />
-                            <Text style={styles.emptyText}>Henüz bir talep oluşturmadınız.</Text>
+                            <Text style={styles.emptyText}>Henüz bir talep bulunamadı.</Text>
                         </View>
                     }
                 />
             )}
 
-            {/* Modal */}
             <Modal visible={modalVisible} animationType="fade" transparent>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
@@ -196,8 +179,7 @@ export default function TalepYonetimiScreen({ navigation }) {
                         <Text style={styles.label}>Konu</Text>
                         <TextInput 
                             style={styles.input} 
-                            placeholder="Örn: Yemekhane hk." 
-                            placeholderTextColor="#94A3B8"
+                            placeholder="Konu Başlığını Yazınız..." 
                             value={subject} 
                             onChangeText={setSubject} 
                         />
@@ -206,7 +188,6 @@ export default function TalepYonetimiScreen({ navigation }) {
                         <TextInput 
                             style={[styles.input, styles.textArea]} 
                             placeholder="Detayları buraya yazınız..." 
-                            placeholderTextColor="#94A3B8"
                             multiline 
                             value={message} 
                             onChangeText={setMessage} 
@@ -231,19 +212,13 @@ export default function TalepYonetimiScreen({ navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.secondary },
-    
-    // Header Stilleri
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 20, backgroundColor: COLORS.secondary },
     headerTitle: { fontSize: 24, fontWeight: '800', color: COLORS.textDark, letterSpacing: -0.5 },
     headerSubtitle: { fontSize: 14, color: COLORS.textLight, marginTop: 2 },
     addButton: { backgroundColor: COLORS.primary, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', shadowColor: COLORS.primary, shadowOffset: {width:0, height:4}, shadowOpacity:0.3, shadowRadius:8, elevation: 5 },
-
-    // Liste
     listContent: { paddingHorizontal: 20, paddingBottom: 100 },
     emptyContainer: { alignItems: 'center', marginTop: 100, opacity: 0.7 },
     emptyText: { marginTop: 16, color: COLORS.textLight, fontSize: 16 },
-
-    // Kart Tasarımı
     card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2, borderWidth: 1, borderColor: '#F1F5F9' },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
@@ -257,8 +232,6 @@ const styles = StyleSheet.create({
     avatarText: { fontSize: 12, fontWeight: 'bold', color: COLORS.primary },
     sender: { fontSize: 12, color: COLORS.textLight, fontWeight: '500' },
     statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, borderWidth: 1 },
-
-    // Modal
     modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', padding: 20 },
     modalContent: { backgroundColor: '#fff', borderRadius: 24, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.25, shadowRadius: 20, elevation: 10 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
