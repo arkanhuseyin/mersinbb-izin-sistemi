@@ -27,21 +27,32 @@ export default function TalepYonetimiScreen({ navigation }) {
         }, [])
     );
 
+    // 🛠️ YARDIMCI: Token Temizleme Fonksiyonu
+    const getToken = async () => {
+        try {
+            let token = await AsyncStorage.getItem('userToken');
+            if (token) {
+                // Tırnakları temizle (Çift koruma)
+                return token.replace(/^"|"$/g, '');
+            }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    };
+
     const fetchRequests = async () => {
         setLoading(true);
         try {
-            const token = await AsyncStorage.getItem('userToken');
-            if (!token) return;
+            const token = await getToken();
+            if (!token) return; // Token yoksa işlem yapma
             
-            // Backend URL'in sonundaki / işaretine dikkat ediyoruz
-            const url = `${API_URL}/api/talep/listele`;
-            
-            const res = await axios.get(url, {
+            const res = await axios.get(`${API_URL}/api/talep/listele`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setRequests(res.data);
         } catch (error) {
-            console.error("Liste Çekme Hatası:", error);
+            console.log("Liste Çekme Hatası:", error.message);
         } finally {
             setLoading(false);
         }
@@ -49,63 +60,55 @@ export default function TalepYonetimiScreen({ navigation }) {
 
     const handleCreate = async () => {
         // Validasyonlar
-        if (!kvkk) {
-            return Alert.alert("Eksik İşlem", "Lütfen KVKK metnini okuyup onaylayınız.");
-        }
-        if (!subject.trim()) {
-            return Alert.alert("Eksik Bilgi", "Lütfen bir konu başlığı giriniz.");
-        }
-        if (!message.trim()) {
-            return Alert.alert("Eksik Bilgi", "Lütfen mesajınızı yazınız.");
-        }
+        if (!kvkk) return Alert.alert("Onay Gerekli", "Lütfen KVKK aydınlatma metnini onaylayınız.");
+        if (!subject.trim()) return Alert.alert("Eksik Bilgi", "Lütfen bir konu başlığı giriniz.");
+        if (!message.trim()) return Alert.alert("Eksik Bilgi", "Lütfen mesajınızı yazınız.");
 
         try {
-            const token = await AsyncStorage.getItem('userToken');
+            const token = await getToken();
             
-            // Debug için veriyi konsola basalım
-            const postData = { 
-                tur: type, 
-                konu: subject, 
-                mesaj: message, 
-                kvkk: true 
-            };
-            console.log("Mobilden Gönderilen Veri:", postData);
+            if (!token) {
+                Alert.alert("Oturum Hatası", "Oturumunuz sonlanmış. Lütfen tekrar giriş yapın.");
+                // İstersen burada otomatik login ekranına atabilirsin
+                // navigation.replace('Login');
+                return;
+            }
 
-            await axios.post(`${API_URL}/api/talep/olustur`, postData, { 
-                headers: { 
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json' // İçerik tipini netleştiriyoruz
-                } 
-            });
+            console.log("Giden Veri:", { tur: type, konu: subject, mesaj: message });
+
+            await axios.post(`${API_URL}/api/talep/olustur`, 
+                { 
+                    tur: type, 
+                    konu: subject, 
+                    mesaj: message, 
+                    kvkk: true 
+                }, 
+                { 
+                    headers: { 
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json' 
+                    } 
+                }
+            );
             
-            Alert.alert("Başarılı", "Talebiniz başarıyla iletildi.");
+            Alert.alert("Başarılı", "Talebiniz sisteme iletildi.");
             setModalVisible(false);
             
-            // Formu temizle
+            // Formu Temizle
             setSubject(''); 
             setMessage(''); 
             setKvkk(false);
+            setType('Öneri');
             
-            // Listeyi yenile
+            // Listeyi Güncelle
             fetchRequests();
 
         } catch (error) {
-            console.error("TALEP OLUŞTURMA HATASI:", error);
+            console.error("Kayıt Hatası Detayı:", error);
             
-            // Hata mesajını ayrıştırıp kullanıcıya gösterelim
-            let errorMessage = "Talep oluşturulamadı.";
-            
-            if (error.response) {
-                // Sunucudan gelen hata mesajı (Backend'de res.status(x).json({mesaj: ...}) demiştik)
-                errorMessage = error.response.data.mesaj || error.response.data.error || "Sunucu hatası.";
-                console.log("Sunucu Cevabı:", error.response.data);
-            } else if (error.request) {
-                errorMessage = "Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.";
-            } else {
-                errorMessage = error.message;
-            }
-
-            Alert.alert("Hata", errorMessage);
+            // Sunucudan gelen net hatayı göster
+            const sunucuMesaji = error.response?.data?.mesaj || error.response?.data?.error || "Sunucuya bağlanılamadı.";
+            Alert.alert("İşlem Başarısız", sunucuMesaji);
         }
     };
 
@@ -180,7 +183,7 @@ export default function TalepYonetimiScreen({ navigation }) {
                             onChangeText={setSubject}
                         />
                         <TextInput 
-                            style={[styles.input, { height: 100, textAlignVertical: 'top' }]} // textAlignVertical Android için önemli
+                            style={[styles.input, { height: 100, textAlignVertical: 'top' }]} 
                             placeholder="Mesajınız..." 
                             multiline 
                             value={message} 
@@ -224,8 +227,6 @@ const styles = StyleSheet.create({
     sender: { fontSize: 12, color: '#6b7280' },
     statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
     emptyText: { textAlign: 'center', marginTop: 50, color: '#9ca3af' },
-    
-    // Modal Styles
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 20 },
     modalContent: { backgroundColor: '#fff', borderRadius: 16, padding: 20 },
     modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' },

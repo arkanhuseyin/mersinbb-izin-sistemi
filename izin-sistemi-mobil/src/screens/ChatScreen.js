@@ -2,11 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { Send, Archive, Check } from 'lucide-react-native'; // İkonları güncelledik
+import { Send, Archive, Check } from 'lucide-react-native';
 import moment from 'moment';
-import 'moment/locale/tr'; // Türkçe tarih formatı
+import 'moment/locale/tr'; 
 
-// ✅ MERKEZİ KONFİGÜRASYONDAN API URL'İ ÇEKİYORUZ
+// ✅ Config'den çekiyoruz
 import { API_URL } from '../config';
 
 export default function ChatScreen({ route, navigation }) {
@@ -14,25 +14,25 @@ export default function ChatScreen({ route, navigation }) {
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [isClosed, setIsClosed] = useState(request.durum === 'KAPANDI');
-    const [sending, setSending] = useState(false); // Mesaj gönderiliyor mu kontrolü
+    const [sending, setSending] = useState(false);
     
-    // Auto-scroll için ref
     const flatListRef = useRef();
 
     useEffect(() => {
         fetchMessages();
-        // 3 saniyede bir yeni mesaj var mı kontrol et (Polling)
+        // 3 saniyede bir yeni mesaj var mı bak
         const interval = setInterval(fetchMessages, 3000);
         return () => clearInterval(interval);
     }, []);
 
     const fetchMessages = async () => {
         try {
-            const token = await AsyncStorage.getItem('userToken');
+            let token = await AsyncStorage.getItem('userToken');
+            if (token) token = token.replace(/^"|"$/g, '');
+
             const res = await axios.get(`${API_URL}/api/talep/detay/${request.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            // Sadece veri değiştiyse set et (Opsiyonel performans optimizasyonu yapılabilir ama şimdilik doğrudan set ediyoruz)
             setMessages(res.data);
         } catch (error) {
             console.error("Mesajlar çekilemedi:", error);
@@ -44,9 +44,9 @@ export default function ChatScreen({ route, navigation }) {
         setSending(true);
         
         try {
-            const token = await AsyncStorage.getItem('userToken');
+            let token = await AsyncStorage.getItem('userToken');
+            if (token) token = token.replace(/^"|"$/g, '');
             
-            // Personel mesaj atıyor, durumu backend yönetir (Genelde 'YANITLANDI' olmaz, personel atınca 'AÇIK' kalır veya değişmez)
             let yeniDurum = null; 
             
             await axios.post(`${API_URL}/api/talep/cevapla`, 
@@ -55,15 +55,14 @@ export default function ChatScreen({ route, navigation }) {
             );
             
             setNewMessage('');
-            fetchMessages(); // Listeyi hemen güncelle
+            fetchMessages(); 
             
-            // Listeyi en alta kaydır
             setTimeout(() => {
                 flatListRef.current?.scrollToEnd({ animated: true });
             }, 100);
 
         } catch (error) {
-            Alert.alert("Hata", "Mesaj gönderilemedi. Lütfen internet bağlantınızı kontrol edin.");
+            Alert.alert("Hata", "Mesaj gönderilemedi.");
         } finally {
             setSending(false);
         }
@@ -77,14 +76,16 @@ export default function ChatScreen({ route, navigation }) {
                 { text: "Vazgeç", style: "cancel" },
                 { text: "Kapat", style: 'destructive', onPress: async () => {
                     try {
-                        const token = await AsyncStorage.getItem('userToken');
+                        let token = await AsyncStorage.getItem('userToken');
+                        if (token) token = token.replace(/^"|"$/g, '');
+
                         await axios.post(`${API_URL}/api/talep/cevapla`, 
-                            { talep_id: request.id, mesaj: '🔴 [SİSTEM]: Konu kullanıcı tarafından kapatıldı.', yeni_durum: 'KAPANDI' },
+                            { talep_id: request.id, mesaj: '🔴 [SİSTEM]: Konu kapatıldı.', yeni_durum: 'KAPANDI' },
                             { headers: { Authorization: `Bearer ${token}` } }
                         );
                         setIsClosed(true);
                         fetchMessages();
-                    } catch (e) { Alert.alert("Hata", "İşlem gerçekleştirilemedi."); }
+                    } catch (e) { Alert.alert("Hata", "İşlem başarısız."); }
                 }}
             ]
         );
@@ -92,7 +93,6 @@ export default function ChatScreen({ route, navigation }) {
 
     const renderMessage = ({ item }) => {
         const isMe = item.taraf === 'me';
-        // Sistem mesajlarını ortada göster
         const isSystem = item.mesaj.includes('[SİSTEM') || item.mesaj.includes('KAPATILDI');
 
         if (isSystem) {
@@ -126,7 +126,6 @@ export default function ChatScreen({ route, navigation }) {
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
         >
-            {/* --- HEADER --- */}
             <View style={styles.header}>
                 <View style={{flex: 1}}>
                     <Text style={styles.headerTitle} numberOfLines={1}>{request.konu}</Text>
@@ -139,7 +138,6 @@ export default function ChatScreen({ route, navigation }) {
                 )}
             </View>
 
-            {/* --- MESAJ LİSTESİ --- */}
             <FlatList
                 ref={flatListRef}
                 data={messages}
@@ -150,7 +148,6 @@ export default function ChatScreen({ route, navigation }) {
                 onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
             />
 
-            {/* --- INPUT ALANI --- */}
             {!isClosed ? (
                 <View style={styles.inputContainer}>
                     <TextInput
@@ -166,17 +163,13 @@ export default function ChatScreen({ route, navigation }) {
                         onPress={sendMessage}
                         disabled={!newMessage.trim() || sending}
                     >
-                        {sending ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                            <Send size={20} color="#fff" />
-                        )}
+                        {sending ? <ActivityIndicator size="small" color="#fff" /> : <Send size={20} color="#fff" />}
                     </TouchableOpacity>
                 </View>
             ) : (
                 <View style={styles.closedFooter}>
                     <Archive size={18} color="#6b7280" style={{marginRight: 8}} />
-                    <Text style={styles.closedText}>Bu konu kapatılmıştır. Mesaj gönderilemez.</Text>
+                    <Text style={styles.closedText}>Bu konu kapatılmıştır.</Text>
                 </View>
             )}
         </KeyboardAvoidingView>
@@ -184,45 +177,31 @@ export default function ChatScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#ece5dd' }, // WhatsApp benzeri bej renk
-    
-    // Header
+    container: { flex: 1, backgroundColor: '#ece5dd' }, 
     header: { padding: 15, backgroundColor: '#fff', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 3, shadowOpacity: 0.1, zIndex: 10 },
     headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#1f2937' },
     headerSub: { fontSize: 12, color: '#6b7280' },
     closeBtn: { padding: 8, backgroundColor: '#fee2e2', borderRadius: 8 },
-
     listContent: { padding: 15, paddingBottom: 20 },
-    
-    // System Message
     systemMessageContainer: { alignSelf: 'center', backgroundColor: '#e5e7eb', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 8, marginBottom: 15 },
     systemMessageText: { fontSize: 11, color: '#4b5563', fontStyle: 'italic' },
-
-    // Bubbles
     bubbleContainer: { marginBottom: 10, width: '100%' },
     rightContainer: { alignItems: 'flex-end' },
     leftContainer: { alignItems: 'flex-start' },
-    
     bubble: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1 },
     rightBubble: { backgroundColor: '#dcf8c6', borderTopRightRadius: 0 },
     leftBubble: { backgroundColor: '#fff', borderTopLeftRadius: 0 },
-    
     senderName: { fontSize: 11, fontWeight: 'bold', color: '#ea580c', marginBottom: 4 },
     messageText: { fontSize: 15, lineHeight: 20 },
     rightText: { color: '#111827' },
     leftText: { color: '#111827' },
-    
     timeContainer: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
     time: { fontSize: 10, color: '#6b7280' },
     rightTime: { color: '#6b7280' },
-    
-    // Input
     inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#fff', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#e5e5e5' },
     input: { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, maxHeight: 100, fontSize: 15 },
     sendButton: { backgroundColor: '#128c7e', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
     disabledButton: { backgroundColor: '#9ca3af' },
-
-    // Closed State
     closedFooter: { padding: 20, backgroundColor: '#f3f4f6', alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
     closedText: { color: '#6b7280', fontWeight: 'bold', fontSize: 14 }
 });
