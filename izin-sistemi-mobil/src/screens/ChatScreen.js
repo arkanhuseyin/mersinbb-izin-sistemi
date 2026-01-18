@@ -1,13 +1,22 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, SafeAreaView, StatusBar } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { Send, Archive, Check } from 'lucide-react-native';
+import { Send, Archive, CheckCheck, User } from 'lucide-react-native';
 import moment from 'moment';
 import 'moment/locale/tr'; 
 
-// ✅ Config'den çekiyoruz
 import { API_URL } from '../config';
+
+const COLORS = {
+    bg: '#F0F2F5', // WhatsApp Web arkaplanına benzer
+    white: '#FFFFFF',
+    primary: '#2563EB',
+    myBubble: '#2563EB', // Benim mesajım (Koyu Mavi)
+    otherBubble: '#FFFFFF', // Karşı taraf (Beyaz)
+    textDark: '#111827',
+    textLight: '#6B7280'
+};
 
 export default function ChatScreen({ route, navigation }) {
     const { request } = route.params;
@@ -20,7 +29,6 @@ export default function ChatScreen({ route, navigation }) {
 
     useEffect(() => {
         fetchMessages();
-        // 3 saniyede bir yeni mesaj var mı bak
         const interval = setInterval(fetchMessages, 3000);
         return () => clearInterval(interval);
     }, []);
@@ -34,71 +42,54 @@ export default function ChatScreen({ route, navigation }) {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setMessages(res.data);
-        } catch (error) {
-            console.error("Mesajlar çekilemedi:", error);
-        }
+        } catch (error) { console.error(error); }
     };
 
     const sendMessage = async () => {
         if (!newMessage.trim()) return;
         setSending(true);
-        
         try {
             let token = await AsyncStorage.getItem('userToken');
             if (token) token = token.replace(/^"|"$/g, '');
             
-            let yeniDurum = null; 
-            
             await axios.post(`${API_URL}/api/talep/cevapla`, 
-                { talep_id: request.id, mesaj: newMessage, yeni_durum: yeniDurum },
+                { talep_id: request.id, mesaj: newMessage, yeni_durum: null },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             
             setNewMessage('');
             fetchMessages(); 
-            
-            setTimeout(() => {
-                flatListRef.current?.scrollToEnd({ animated: true });
-            }, 100);
-
-        } catch (error) {
-            Alert.alert("Hata", "Mesaj gönderilemedi.");
-        } finally {
-            setSending(false);
-        }
+            setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+        } catch (error) { Alert.alert("Hata", "Mesaj gönderilemedi."); } 
+        finally { setSending(false); }
     };
 
     const closeRequest = async () => {
-        Alert.alert(
-            "Konuyu Kapat",
-            "Bu talebi sonlandırmak istediğinize emin misiniz?",
-            [
-                { text: "Vazgeç", style: "cancel" },
-                { text: "Kapat", style: 'destructive', onPress: async () => {
-                    try {
-                        let token = await AsyncStorage.getItem('userToken');
-                        if (token) token = token.replace(/^"|"$/g, '');
-
-                        await axios.post(`${API_URL}/api/talep/cevapla`, 
-                            { talep_id: request.id, mesaj: '🔴 [SİSTEM]: Konu kapatıldı.', yeni_durum: 'KAPANDI' },
-                            { headers: { Authorization: `Bearer ${token}` } }
-                        );
-                        setIsClosed(true);
-                        fetchMessages();
-                    } catch (e) { Alert.alert("Hata", "İşlem başarısız."); }
-                }}
-            ]
-        );
+        Alert.alert("Konuyu Kapat", "Talebi sonlandırmak istiyor musunuz?", [
+            { text: "Vazgeç", style: "cancel" },
+            { text: "Kapat", style: 'destructive', onPress: async () => {
+                try {
+                    let token = await AsyncStorage.getItem('userToken');
+                    if (token) token = token.replace(/^"|"$/g, '');
+                    await axios.post(`${API_URL}/api/talep/cevapla`, 
+                        { talep_id: request.id, mesaj: '🔴 Konu kapatıldı.', yeni_durum: 'KAPANDI' },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                    );
+                    setIsClosed(true);
+                    fetchMessages();
+                } catch (e) { Alert.alert("Hata"); }
+            }}
+        ]);
     };
 
     const renderMessage = ({ item }) => {
         const isMe = item.taraf === 'me';
-        const isSystem = item.mesaj.includes('[SİSTEM') || item.mesaj.includes('KAPATILDI');
+        const isSystem = item.mesaj.includes('🔴') || item.mesaj.includes('SİSTEM');
 
         if (isSystem) {
             return (
-                <View style={styles.systemMessageContainer}>
-                    <Text style={styles.systemMessageText}>{item.mesaj}</Text>
+                <View style={styles.systemMsg}>
+                    <Text style={styles.systemMsgText}>{item.mesaj}</Text>
                 </View>
             );
         }
@@ -106,14 +97,22 @@ export default function ChatScreen({ route, navigation }) {
         return (
             <View style={[styles.bubbleContainer, isMe ? styles.rightContainer : styles.leftContainer]}>
                 <View style={[styles.bubble, isMe ? styles.rightBubble : styles.leftBubble]}>
-                    {!isMe && <Text style={styles.senderName}>{item.gorunen_isim}</Text>}
-                    <Text style={[styles.messageText, isMe ? styles.rightText : styles.leftText]}>{item.mesaj}</Text>
+                    {!isMe && (
+                        <View style={styles.senderHeader}>
+                            <User size={12} color={COLORS.primary} style={{marginRight: 4}} />
+                            <Text style={styles.senderName}>{item.gorunen_isim}</Text>
+                        </View>
+                    )}
                     
-                    <View style={styles.timeContainer}>
-                        <Text style={[styles.time, isMe ? styles.rightTime : styles.leftTime]}>
+                    <Text style={[styles.messageText, isMe ? {color:'#fff'} : {color:COLORS.textDark}]}>
+                        {item.mesaj}
+                    </Text>
+                    
+                    <View style={styles.metaContainer}>
+                        <Text style={[styles.time, isMe ? {color:'#BFDBFE'} : {color:COLORS.textLight}]}>
                             {moment(item.gonderim_tarihi).format('HH:mm')}
                         </Text>
-                        {isMe && <Check size={12} color="#e5e5e5" style={{marginLeft: 4}} />}
+                        {isMe && <CheckCheck size={14} color="#BFDBFE" style={{marginLeft: 4}} />}
                     </View>
                 </View>
             </View>
@@ -121,23 +120,23 @@ export default function ChatScreen({ route, navigation }) {
     };
 
     return (
-        <KeyboardAvoidingView 
-            style={styles.container} 
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        >
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="dark-content" backgroundColor="#fff" />
+            
+            {/* Header */}
             <View style={styles.header}>
-                <View style={{flex: 1}}>
+                <View style={{flex:1}}>
                     <Text style={styles.headerTitle} numberOfLines={1}>{request.konu}</Text>
-                    <Text style={styles.headerSub}>{request.gorunen_ad}</Text>
+                    <Text style={styles.headerSub}>Talep No: #{request.id}</Text>
                 </View>
                 {!isClosed && (
-                    <TouchableOpacity onPress={closeRequest} style={styles.closeBtn}>
-                        <Archive size={20} color="#dc2626" />
+                    <TouchableOpacity onPress={closeRequest} style={styles.actionBtn}>
+                        <Archive size={20} color={COLORS.textLight} />
                     </TouchableOpacity>
                 )}
             </View>
 
+            {/* Chat Alanı */}
             <FlatList
                 ref={flatListRef}
                 data={messages}
@@ -145,30 +144,32 @@ export default function ChatScreen({ route, navigation }) {
                 keyExtractor={item => item.id.toString()}
                 contentContainerStyle={styles.listContent}
                 onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-                onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
             />
 
+            {/* Input Alanı */}
             {!isClosed ? (
-                <View style={styles.inputContainer}>
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Mesaj yazın..."
-                        value={newMessage}
-                        onChangeText={setNewMessage}
-                        multiline
-                        maxLength={500}
-                    />
-                    <TouchableOpacity 
-                        style={[styles.sendButton, (!newMessage.trim() || sending) && styles.disabledButton]} 
-                        onPress={sendMessage}
-                        disabled={!newMessage.trim() || sending}
-                    >
-                        {sending ? <ActivityIndicator size="small" color="#fff" /> : <Send size={20} color="#fff" />}
-                    </TouchableOpacity>
+                <View style={styles.inputWrapper}>
+                    <View style={styles.inputContainer}>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Mesaj yazın..."
+                            value={newMessage}
+                            onChangeText={setNewMessage}
+                            multiline
+                            placeholderTextColor="#9CA3AF"
+                        />
+                        <TouchableOpacity 
+                            style={[styles.sendButton, (!newMessage.trim()) && styles.sendButtonDisabled]} 
+                            onPress={sendMessage}
+                            disabled={!newMessage.trim() || sending}
+                        >
+                            {sending ? <ActivityIndicator color="#fff" size="small"/> : <Send size={20} color="#fff" />}
+                        </TouchableOpacity>
+                    </View>
                 </View>
             ) : (
                 <View style={styles.closedFooter}>
-                    <Archive size={18} color="#6b7280" style={{marginRight: 8}} />
+                    <Archive size={18} color={COLORS.textLight} />
                     <Text style={styles.closedText}>Bu konu kapatılmıştır.</Text>
                 </View>
             )}
@@ -177,31 +178,43 @@ export default function ChatScreen({ route, navigation }) {
 }
 
 const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#ece5dd' }, 
-    header: { padding: 15, backgroundColor: '#fff', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 3, shadowOpacity: 0.1, zIndex: 10 },
-    headerTitle: { fontSize: 16, fontWeight: 'bold', color: '#1f2937' },
-    headerSub: { fontSize: 12, color: '#6b7280' },
-    closeBtn: { padding: 8, backgroundColor: '#fee2e2', borderRadius: 8 },
-    listContent: { padding: 15, paddingBottom: 20 },
-    systemMessageContainer: { alignSelf: 'center', backgroundColor: '#e5e7eb', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 8, marginBottom: 15 },
-    systemMessageText: { fontSize: 11, color: '#4b5563', fontStyle: 'italic' },
-    bubbleContainer: { marginBottom: 10, width: '100%' },
+    container: { flex: 1, backgroundColor: COLORS.bg },
+    
+    // Header
+    header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', elevation: 2 },
+    headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textDark },
+    headerSub: { fontSize: 12, color: COLORS.textLight },
+    actionBtn: { padding: 8, backgroundColor: '#F3F4F6', borderRadius: 8 },
+
+    // Liste
+    listContent: { padding: 16, paddingBottom: 24 },
+    systemMsg: { alignSelf: 'center', backgroundColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 12 },
+    systemMsgText: { fontSize: 12, color: COLORS.textLight, fontWeight: '500' },
+
+    // Baloncuklar
+    bubbleContainer: { marginBottom: 12, width: '100%' },
     rightContainer: { alignItems: 'flex-end' },
     leftContainer: { alignItems: 'flex-start' },
-    bubble: { maxWidth: '80%', padding: 10, borderRadius: 12, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 1 },
-    rightBubble: { backgroundColor: '#dcf8c6', borderTopRightRadius: 0 },
-    leftBubble: { backgroundColor: '#fff', borderTopLeftRadius: 0 },
-    senderName: { fontSize: 11, fontWeight: 'bold', color: '#ea580c', marginBottom: 4 },
-    messageText: { fontSize: 15, lineHeight: 20 },
-    rightText: { color: '#111827' },
-    leftText: { color: '#111827' },
-    timeContainer: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
-    time: { fontSize: 10, color: '#6b7280' },
-    rightTime: { color: '#6b7280' },
-    inputContainer: { flexDirection: 'row', padding: 10, backgroundColor: '#fff', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#e5e5e5' },
-    input: { flex: 1, backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 15, paddingVertical: 10, maxHeight: 100, fontSize: 15 },
-    sendButton: { backgroundColor: '#128c7e', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', marginLeft: 10 },
-    disabledButton: { backgroundColor: '#9ca3af' },
-    closedFooter: { padding: 20, backgroundColor: '#f3f4f6', alignItems: 'center', flexDirection: 'row', justifyContent: 'center' },
-    closedText: { color: '#6b7280', fontWeight: 'bold', fontSize: 14 }
+    
+    bubble: { maxWidth: '80%', padding: 12, borderRadius: 16, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+    rightBubble: { backgroundColor: COLORS.myBubble, borderBottomRightRadius: 2 },
+    leftBubble: { backgroundColor: COLORS.otherBubble, borderBottomLeftRadius: 2 },
+    
+    senderHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+    senderName: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
+    
+    messageText: { fontSize: 15, lineHeight: 22 },
+    
+    metaContainer: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
+    time: { fontSize: 10 },
+
+    // Input
+    inputWrapper: { backgroundColor: '#fff', padding: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
+    inputContainer: { flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#F3F4F6', borderRadius: 24, padding: 4 },
+    input: { flex: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, maxHeight: 100, color: COLORS.textDark },
+    sendButton: { width: 40, height: 40, backgroundColor: COLORS.primary, borderRadius: 20, alignItems: 'center', justifyContent: 'center', margin: 4 },
+    sendButtonDisabled: { backgroundColor: '#9CA3AF' },
+
+    closedFooter: { padding: 20, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, backgroundColor: '#F9FAFB' },
+    closedText: { color: COLORS.textLight, fontWeight: '600' }
 });
