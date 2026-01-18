@@ -26,6 +26,15 @@ export default function DashboardScreen({ route, navigation }) {
       renk: '#6610f2', // Mor
       hedef: 'GecmisIzinler' 
     },
+    // ✅ YENİ EKLENEN DESTEK BUTONU
+    {
+      id: 4,
+      baslik: 'Destek Merkezi',
+      aciklama: 'Öneri, şikayet ve taleplerini ilet.',
+      ikon: 'chatbubbles', 
+      renk: '#0ea5e9', // Açık Mavi
+      hedef: 'TalepYonetimi' 
+    },
     {
       id: 3,
       baslik: 'Görevlerim',
@@ -100,7 +109,7 @@ export default function DashboardScreen({ route, navigation }) {
                 <Ionicons name="notifications" size={24} color="#fff" />
             </TouchableOpacity>
 
-            {/* PROFİL (YENİ) */}
+            {/* PROFİL */}
             <TouchableOpacity 
                 style={[styles.iconButton, {backgroundColor: '#0d6efd'}]}
                 onPress={() => navigation.navigate('Profil', { user, token })}

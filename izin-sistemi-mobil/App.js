@@ -15,7 +15,11 @@ import ProfilScreen from './src/screens/ProfilScreen';
 import BildirimScreen from './src/screens/BildirimScreen';
 import SifreUnuttumScreen from './src/screens/SifreUnuttumScreen';
 import KiyafetScreen from './src/screens/KiyafetScreen';
-import AyarlarScreen from './src/screens/AyarlarScreen'; // ✅ YENİ EKLENDİ
+import AyarlarScreen from './src/screens/AyarlarScreen';
+
+// ✅ YENİ EKLENEN EKRANLAR
+import TalepYonetimiScreen from './src/screens/TalepYonetimiScreen';
+import ChatScreen from './src/screens/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -70,11 +74,22 @@ export default function App() {
         {/* Profil ve Ayarlar */}
         <Stack.Screen name="Profil" component={ProfilScreen} />
         
-        {/* ✅ YENİ EKLENEN AYARLAR EKRANI */}
         <Stack.Screen 
           name="Ayarlar" 
           component={AyarlarScreen} 
           options={{ headerShown: true, title: 'Ayarlar & Güncelleme' }} 
+        />
+
+        {/* ✅ DESTEK MERKEZİ (TALEP SİSTEMİ) */}
+        <Stack.Screen 
+          name="TalepYonetimi" 
+          component={TalepYonetimiScreen} 
+          options={{ headerShown: true, title: 'Öneri / Şikayet / Talep' }} 
+        />
+        <Stack.Screen 
+          name="ChatScreen" 
+          component={ChatScreen} 
+          options={{ headerShown: true, title: 'Mesajlaşma' }} 
         />
 
         {/* Diğer */}
