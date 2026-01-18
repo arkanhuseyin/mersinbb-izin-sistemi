@@ -1,40 +1,42 @@
 const pool = require('../config/db');
 
-// 1. Talepleri Listele
+// 1. Talepleri Listele (Gelişmiş Görünürlük Ayarı)
 exports.talepleriGetir = async (req, res) => {
     try {
-        // Kullanıcı bilgilerini güvenli al (ID sorunu çözümü)
         const user = req.user || {};
-        const personel_id = user.personel_id || user.id; // ID veya personel_id hangisi varsa
-        const rol = user.rol || 'personel';
-        
-        // Rolü güvenli hale getir
-        const userRol = rol ? rol.toLowerCase().trim() : 'personel';
+        const personel_id = user.personel_id || user.id;
+        // Rol kontrolü: Büyük/küçük harf duyarlılığını kaldır
+        const rol = user.rol ? user.rol.toLowerCase().trim() : 'personel';
 
-        console.log(`📡 TALEP LİSTESİ İSTENİYOR -> İsteyen ID: ${personel_id}, Rol: ${userRol}`);
-
-        if (!personel_id) {
-            console.error("❌ HATA: Kullanıcı ID'si (personel_id) bulunamadı! Token hatalı olabilir.");
-            return res.status(401).json({ error: "Kimlik doğrulama hatası. ID bulunamadı." });
-        }
+        console.log(`📡 TALEP LİSTESİ İSTEĞİ -> ID: ${personel_id}, Rol: ${rol}`);
 
         let query = '';
         let params = [];
 
-        // 🛑 YETKİLİ KONTROLÜ (Admin, İK, Filo)
-        if (['admin', 'ik', 'filo'].includes(userRol)) {
-            // DÜZELTME: p.rol yerine p.rol_adi kullanıldı
+        // 🛑 DURUM 1: YETKİLİLER (Admin, İK, Filo)
+        // Bunlar HERKESİN talebini görmeli.
+        if (['admin', 'ik', 'filo'].includes(rol)) {
+            console.log("✅ YETKİLİ GİRİŞİ: Tüm liste çekiliyor...");
+            
+            // WHERE koşulu YOK, herkesin talebi gelir.
+            // p.rol_adi kullanıyoruz (veritabanı yapına göre)
             query = `
                 SELECT t.*, 
-                COALESCE(p.ad, 'Bilinmeyen') as gercek_ad, 
-                COALESCE(p.soyad, 'Kullanıcı') as gercek_soyad, 
-                p.rol_adi as gonderen_rol 
+                COALESCE(p.ad, 'Silinmiş') as gercek_ad, 
+                COALESCE(p.soyad, 'Personel') as gercek_soyad,
+                COALESCE(p.rol_adi, 'personel') as gonderen_rol
                 FROM talep_destek t
                 LEFT JOIN personeller p ON t.personel_id = p.personel_id
-                ORDER BY t.son_guncelleme DESC`;
+                ORDER BY 
+                    CASE WHEN t.durum = 'AÇIK' THEN 1 
+                         WHEN t.durum = 'YANITLANDI' THEN 2 
+                         ELSE 3 END, 
+                    t.son_guncelleme DESC`;
         } 
-        // 👤 PERSONEL KONTROLÜ (Sadece Kendi Talepleri)
+        // 👤 DURUM 2: STANDART PERSONEL
+        // Sadece KENDİ taleplerini görmeli.
         else {
+            console.log("👤 PERSONEL GİRİŞİ: Sadece kendi kayıtları.");
             query = `
                 SELECT t.*, 
                 p.ad as gercek_ad, p.soyad as gercek_soyad 
@@ -46,40 +48,42 @@ exports.talepleriGetir = async (req, res) => {
         }
 
         const result = await pool.query(query, params);
-        console.log(`✅ Veritabanından ${result.rows.length} adet talep çekildi.`);
+        console.log(`📊 Toplam ${result.rows.length} kayıt bulundu.`);
 
-        // 🔥 GÖRÜNÜM AYARLAMA (Anonimlik)
+        // 🔥 GİZLİLİK VE MASKELEME MANTIĞI 🔥
         const maskelenmisVeri = result.rows.map(item => {
-            if (!item.personel_id) {
-                return { ...item, gorunen_ad: 'Sistem Kaydı (No ID)' };
+            
+            // 1. Eğer talebi oluşturan BEN isem -> "Siz" olarak gör
+            if (item.personel_id === personel_id) {
+                return { ...item, gorunen_ad: `${item.gercek_ad} ${item.gercek_soyad} (Siz)` };
             }
 
-            // Talebi oluşturan kişi kendisiyse
-            if (item.personel_id === personel_id) {
+            // 2. Eğer ben ADMIN isem -> Her şeyi ŞEFFAF gör
+            if (rol === 'admin') {
                 return { 
                     ...item, 
-                    gorunen_ad: `${item.gercek_ad} ${item.gercek_soyad} (Siz)` 
+                    gorunen_ad: `${item.gercek_ad} ${item.gercek_soyad} (${item.gonderen_rol || 'Personel'})` 
                 };
             }
-            // Yetkili bakıyorsa
-            else {
+
+            // 3. Eğer ben İK veya FİLO isem -> ANONİM gör
+            if (['ik', 'filo'].includes(rol)) {
                 return { 
                     ...item, 
-                    gorunen_ad: 'Personel (Anonim)', 
-                    gercek_ad: null, 
-                    gercek_soyad: null 
+                    gorunen_ad: 'Personel (Anonim)',
+                    gercek_ad: '***', // Veriyi gizle
+                    gercek_soyad: '***' 
                 };
             }
+
+            // Varsayılan
+            return item;
         });
 
         res.json(maskelenmisVeri);
 
     } catch (error) {
-        console.error("❌ LİSTELEME HATASI DETAYI:", error);
-        // Hata column does not exist ise daha açıklayıcı ol
-        if (error.code === '42703') {
-             console.error("💡 İPUCU: Veritabanında 'rol' veya 'rol_adi' sütun isimlerini kontrol et.");
-        }
+        console.error("LİSTELEME HATASI:", error);
         res.status(500).json({ error: 'Listeleme hatası' });
     }
 };
@@ -89,55 +93,48 @@ exports.talepOlustur = async (req, res) => {
     const client = await pool.connect();
     try {
         const { tur, konu, mesaj, kvkk } = req.body;
-        
-        // ID Çözümü
-        const user = req.user || {};
-        const gonderen_id = user.personel_id || user.id;
+        // ID kontrolü
+        const gonderen_id = req.user.personel_id || req.user.id;
 
-        console.log("📝 YENİ TALEP GELDİ:", { tur, konu, gonderen_id });
-
-        if (!gonderen_id) {
-            return res.status(401).json({ mesaj: 'Kullanıcı kimliği doğrulanamadı.' });
-        }
+        if(!gonderen_id) return res.status(401).json({mesaj: 'Kimlik doğrulanamadı.'});
         if(!kvkk) return res.status(400).json({mesaj: 'KVKK onayı zorunludur.'});
-        if(!konu || !mesaj) return res.status(400).json({mesaj: 'Konu ve mesaj zorunludur.'});
 
         await client.query('BEGIN');
 
-        // Ana Talep Kaydı
+        // Talep Başlığı
         const talepRes = await client.query(
             `INSERT INTO talep_destek (personel_id, tur, konu, kvkk_onay) VALUES ($1, $2, $3, $4) RETURNING id`,
             [gonderen_id, tur, konu, true]
         );
         const talepId = talepRes.rows[0].id;
 
-        // İlk Mesaj Kaydı
+        // İlk Mesaj
         await client.query(
             `INSERT INTO talep_mesajlar (talep_id, gonderen_id, mesaj) VALUES ($1, $2, $3)`,
             [talepId, gonderen_id, mesaj]
         );
 
         await client.query('COMMIT');
-        console.log(`✅ Talep oluşturuldu. ID: ${talepId}`);
-        res.json({ mesaj: 'Talebiniz başarıyla iletildi.' });
+        res.json({ mesaj: 'Talep başarıyla oluşturuldu.' });
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error("❌ OLUŞTURMA HATASI:", error);
-        res.status(500).json({ error: 'Kayıt sırasında hata oluştu.' });
+        console.error("KAYIT HATASI:", error);
+        res.status(500).json({ error: 'Kayıt hatası' });
     } finally { client.release(); }
 };
 
-// 3. Detay ve Mesajları Getir
+// 3. Detay ve Mesajları Getir (Chat Geçmişi)
 exports.talepDetay = async (req, res) => {
     try {
         const { id } = req.params;
         const user = req.user || {};
-        const requestingUserId = user.personel_id || user.id;
+        const myId = user.personel_id || user.id;
+        const myRol = user.rol ? user.rol.toLowerCase().trim() : 'personel';
 
-        // DÜZELTME: p.rol yerine p.rol_adi
+        // Mesajları getiren sorgu
         const msjRes = await pool.query(
-            `SELECT tm.*, p.ad, p.soyad, p.rol_adi as rol 
+            `SELECT tm.*, p.ad, p.soyad, p.rol_adi 
              FROM talep_mesajlar tm
              LEFT JOIN personeller p ON tm.gonderen_id = p.personel_id
              WHERE tm.talep_id = $1
@@ -145,46 +142,51 @@ exports.talepDetay = async (req, res) => {
         );
 
         const mesajlar = msjRes.rows.map(m => {
-            if (m.gonderen_id === requestingUserId) {
-                return { ...m, ad_soyad: 'Siz' };
-            } else if (['admin','ik','filo'].includes(m.rol)) {
-                return { ...m, ad_soyad: 'Yetkili' }; 
-            } else {
-                return { ...m, ad_soyad: 'Personel' }; 
+            // Mesajı BEN yazdıysam -> "Siz"
+            if (m.gonderen_id === myId) {
+                return { ...m, taraf: 'me', gorunen_isim: 'Siz' };
+            }
+            
+            // Mesajı karşı taraf yazdıysa:
+            
+            // 1. Eğer mesajı yazan YETKİLİ (Admin/IK/Filo) ise -> "Yetkili" olarak görünür
+            // (Not: Admin admin'i görsün mü? Şimdilik genel "Yetkili" yapalım)
+            if (['admin', 'ik', 'filo'].includes(m.rol_adi)) {
+                return { ...m, taraf: 'other', gorunen_isim: 'Yetkili' };
+            }
+
+            // 2. Eğer mesajı yazan PERSONEL ise:
+            // Ben Adminsem -> Gerçek adını görürüm
+            if (myRol === 'admin') {
+                return { ...m, taraf: 'other', gorunen_isim: `${m.ad} ${m.soyad}` };
+            }
+            // Ben İK/Filo isem -> Anonim görürüm
+            else {
+                return { ...m, taraf: 'other', gorunen_isim: 'Personel (Anonim)' };
             }
         });
 
         res.json(mesajlar);
-    } catch (error) { 
-        console.error("❌ DETAY HATASI:", error);
-        res.status(500).json({ error: 'Detay hatası' }); 
-    }
+    } catch (error) { res.status(500).json({ error: 'Detay hatası' }); }
 };
 
 // 4. Cevap Yaz
 exports.cevapYaz = async (req, res) => {
     try {
         const { talep_id, mesaj, yeni_durum } = req.body;
-        const user = req.user || {};
-        const gonderen_id = user.personel_id || user.id;
-        
-        if (!gonderen_id) return res.status(401).json({mesaj: 'Kimlik hatası'});
+        const gonderen_id = req.user.personel_id || req.user.id;
 
         await pool.query(
             `INSERT INTO talep_mesajlar (talep_id, gonderen_id, mesaj) VALUES ($1, $2, $3)`,
             [talep_id, gonderen_id, mesaj]
         );
 
+        // Eğer yetkili cevap yazıyorsa veya durumu değiştiriyorsa güncelle
         if (yeni_durum) {
             await pool.query(`UPDATE talep_destek SET durum = $1, son_guncelleme = NOW() WHERE id = $2`, [yeni_durum, talep_id]);
         } else {
             await pool.query(`UPDATE talep_destek SET son_guncelleme = NOW() WHERE id = $1`, [talep_id]);
         }
-
-        console.log(`✉️ Cevap yazıldı. Talep ID: ${talep_id}`);
-        res.json({ mesaj: 'Cevap gönderildi.' });
-    } catch (error) { 
-        console.error("❌ CEVAP HATASI:", error);
-        res.status(500).json({ error: 'Cevap hatası' }); 
-    }
+        res.json({ mesaj: 'Gönderildi' });
+    } catch (error) { res.status(500).json({ error: 'Hata' }); }
 };

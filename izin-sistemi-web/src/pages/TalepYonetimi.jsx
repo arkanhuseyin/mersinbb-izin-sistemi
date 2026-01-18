@@ -1,81 +1,84 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { MessageSquare, Plus, Send, X, Lock, CheckCircle, Clock, Archive } from 'lucide-react';
+import { MessageSquare, Plus, Send, Archive, User, Search, Clock, CheckCircle, Info } from 'lucide-react';
 
 const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
 
 export default function TalepYonetimi() {
     const [talepler, setTalepler] = useState([]);
+    const [filteredTalepler, setFilteredTalepler] = useState([]);
     const [seciliTalep, setSeciliTalep] = useState(null);
     const [mesajlar, setMesajlar] = useState([]);
     const [yeniMesaj, setYeniMesaj] = useState('');
     const [showModal, setShowModal] = useState(false);
+    const [arama, setArama] = useState('');
     
-    // Yeni Talep Formu
+    // Form State
     const [yeniKonu, setYeniKonu] = useState('');
     const [yeniTur, setYeniTur] = useState('Öneri');
     const [ilkMesaj, setIlkMesaj] = useState('');
     const [kvkkOnay, setKvkkOnay] = useState(false);
 
-    // 🔴 GÜVENLİ KULLANICI VERİSİ ÇEKME (try-catch içinde)
+    // Kullanıcı Verisi
     let user = null;
-    try {
-        const storedUser = localStorage.getItem('user');
-        if (storedUser) {
-            user = JSON.parse(storedUser);
-        }
-    } catch (e) { console.error("Kullanıcı verisi okunamadı"); }
-
+    try { user = JSON.parse(localStorage.getItem('user')); } catch (e) {}
     const token = localStorage.getItem('token');
     const bottomRef = useRef(null);
 
     useEffect(() => { fetchTalepler(); }, []);
-    useEffect(() => { if(seciliTalep) fetchMesajlar(seciliTalep.id); }, [seciliTalep]);
+    
+    useEffect(() => { 
+        if(seciliTalep) {
+            fetchMesajlar(seciliTalep.id);
+            const interval = setInterval(() => fetchMesajlar(seciliTalep.id), 5000);
+            return () => clearInterval(interval);
+        }
+    }, [seciliTalep]);
+
     useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mesajlar]);
+
+    // Arama Filtresi
+    useEffect(() => {
+        const sonuc = talepler.filter(t => 
+            t.konu.toLowerCase().includes(arama.toLowerCase()) || 
+            t.gorunen_ad.toLowerCase().includes(arama.toLowerCase())
+        );
+        setFilteredTalepler(sonuc);
+    }, [arama, talepler]);
 
     const fetchTalepler = async () => {
         if(!token) return;
         try {
             const res = await axios.get(`${API_URL}/api/talep/listele`, { headers: { Authorization: `Bearer ${token}` } });
-            // Gelen verinin dizi olduğundan emin ol
-            if (Array.isArray(res.data)) {
-                setTalepler(res.data);
-            } else {
-                setTalepler([]);
-            }
-        } catch (e) { console.error(e); setTalepler([]); }
+            setTalepler(Array.isArray(res.data) ? res.data : []);
+        } catch (e) { console.error(e); }
     };
 
     const fetchMesajlar = async (id) => {
         try {
             const res = await axios.get(`${API_URL}/api/talep/detay/${id}`, { headers: { Authorization: `Bearer ${token}` } });
-            if (Array.isArray(res.data)) {
-                setMesajlar(res.data);
-            }
+            setMesajlar(Array.isArray(res.data) ? res.data : []);
         } catch (e) { console.error(e); }
     };
 
     const gonderYeniTalep = async () => {
-        if (!kvkkOnay) return alert("Lütfen KVKK metnini onaylayınız.");
-        if (!yeniKonu || !ilkMesaj) return alert("Tüm alanları doldurunuz.");
-        
+        if (!kvkkOnay || !yeniKonu || !ilkMesaj) return alert("Lütfen tüm alanları doldurup onaylayın.");
         try {
             await axios.post(`${API_URL}/api/talep/olustur`, 
                 { tur: yeniTur, konu: yeniKonu, mesaj: ilkMesaj, kvkk: true },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            alert("Talebiniz iletildi!");
+            alert("Talebiniz iletildi.");
             setShowModal(false);
-            setYeniKonu(''); setIlkMesaj(''); setKvkkOnay(false);
+            setYeniKonu(''); setIlkMesaj('');
             fetchTalepler();
-        } catch (e) { alert("Hata oluştu."); }
+        } catch (e) { alert("Hata."); }
     };
 
     const cevapla = async () => {
         if (!yeniMesaj.trim()) return;
         try {
             let durum = null;
-            // 🔴 GÜVENLİ ROL KONTROLÜ
             if (user && ['admin', 'ik', 'filo'].includes(user.rol)) durum = 'YANITLANDI';
             
             await axios.post(`${API_URL}/api/talep/cevapla`, 
@@ -84,78 +87,129 @@ export default function TalepYonetimi() {
             );
             setYeniMesaj('');
             fetchMesajlar(seciliTalep.id);
-        } catch (e) { alert("Mesaj gönderilemedi."); }
+        } catch (e) { alert("Gönderilemedi."); }
     };
 
     const talepKapat = async () => {
-        if(!confirm("Bu talebi kapatmak istediğinize emin misiniz?")) return;
+        if(!confirm("Kapatmak istediğinize emin misiniz?")) return;
         try {
             await axios.post(`${API_URL}/api/talep/cevapla`, 
                 { talep_id: seciliTalep.id, mesaj: 'Talep kapatıldı.', yeni_durum: 'KAPANDI' },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             fetchTalepler();
-            setSeciliTalep(null);
+            setSeciliTalep(prev => ({...prev, durum: 'KAPANDI'}));
         } catch(e) { alert("Hata"); }
     };
 
     return (
-        <div className="container-fluid p-4 h-100 d-flex flex-column" style={{height:'90vh'}}>
-            <div className="d-flex justify-content-between align-items-center mb-4">
-                <h2 className="fw-bold text-dark d-flex align-items-center gap-2"><MessageSquare size={28}/> Öneri / Şikayet / Talep</h2>
-                <button className="btn btn-primary shadow-sm" onClick={()=>setShowModal(true)}><Plus size={18} className="me-2"/> Yeni Oluştur</button>
+        <div className="container-fluid p-3 h-100 d-flex flex-column" style={{height:'95vh', backgroundColor:'#f0f2f5'}}>
+            
+            {/* ÜST BAŞLIK */}
+            <div className="d-flex justify-content-between align-items-center mb-3 px-2">
+                <div>
+                    <h4 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
+                        <MessageSquare className="text-primary"/> Destek Merkezi
+                    </h4>
+                    <small className="text-muted">Öneri, Şikayet ve Taleplerinizi buradan yönetebilirsiniz.</small>
+                </div>
+                <button className="btn btn-primary fw-bold shadow-sm d-flex align-items-center gap-2 px-4 rounded-pill" onClick={()=>setShowModal(true)}>
+                    <Plus size={20}/> Yeni Talep Oluştur
+                </button>
             </div>
 
-            <div className="row flex-grow-1 g-4" style={{minHeight:0}}>
-                {/* SOL: LİSTE */}
-                <div className="col-md-4 h-100">
-                    <div className="card border-0 shadow-sm h-100 rounded-4 overflow-hidden">
-                        <div className="list-group list-group-flush overflow-auto h-100">
-                            {talepler.map(t => (
+            <div className="row flex-grow-1 g-3 overflow-hidden m-0">
+                
+                {/* SOL: TALEP LİSTESİ */}
+                <div className="col-md-4 col-lg-3 h-100 d-flex flex-column">
+                    <div className="card border-0 shadow-sm h-100 rounded-4 overflow-hidden bg-white">
+                        {/* Arama Kutusu */}
+                        <div className="p-3 border-bottom bg-light">
+                            <div className="input-group">
+                                <span className="input-group-text bg-white border-end-0"><Search size={16} className="text-muted"/></span>
+                                <input type="text" className="form-control border-start-0" placeholder="Ara..." value={arama} onChange={e=>setArama(e.target.value)}/>
+                            </div>
+                        </div>
+
+                        {/* Liste */}
+                        <div className="list-group list-group-flush overflow-auto flex-grow-1">
+                            {filteredTalepler.map(t => (
                                 <button key={t.id} onClick={()=>setSeciliTalep(t)} 
-                                    className={`list-group-item list-group-item-action p-3 border-bottom ${seciliTalep?.id===t.id ? 'bg-primary bg-opacity-10' : ''}`}>
-                                    <div className="d-flex justify-content-between mb-1">
-                                        <span className={`badge ${t.tur==='Şikayet'?'bg-danger':t.tur==='Öneri'?'bg-success':'bg-primary'}`}>{t.tur}</span>
-                                        <small className="text-muted">{new Date(t.son_guncelleme).toLocaleDateString('tr-TR')}</small>
+                                    className={`list-group-item list-group-item-action p-3 border-bottom border-light 
+                                    ${seciliTalep?.id===t.id ? 'bg-primary bg-opacity-10 border-start border-4 border-primary' : ''}`}>
+                                    
+                                    <div className="d-flex justify-content-between align-items-start mb-1">
+                                        <span className={`badge rounded-pill 
+                                            ${t.tur==='Şikayet'?'bg-danger':t.tur==='Öneri'?'bg-success':'bg-info'}`}>
+                                            {t.tur}
+                                        </span>
+                                        <small className="text-muted" style={{fontSize:'10px'}}>
+                                            {new Date(t.son_guncelleme).toLocaleDateString('tr-TR')}
+                                        </small>
                                     </div>
-                                    <h6 className="mb-1 fw-bold text-truncate">{t.konu}</h6>
-                                    <div className="d-flex justify-content-between align-items-center">
-                                        <small className="text-muted fst-italic">{t.gorunen_ad}</small>
-                                        <span className={`badge rounded-pill ${t.durum==='AÇIK'?'bg-warning text-dark':t.durum==='KAPANDI'?'bg-secondary':'bg-info'}`}>{t.durum}</span>
+                                    
+                                    <h6 className="mb-1 fw-bold text-truncate text-dark" style={{fontSize:'15px'}}>{t.konu}</h6>
+                                    
+                                    <div className="d-flex justify-content-between align-items-center mt-2">
+                                        <div className="d-flex align-items-center gap-1 small text-muted text-truncate" style={{maxWidth:'120px'}}>
+                                            <User size={12}/> {t.gorunen_ad}
+                                        </div>
+                                        {t.durum === 'AÇIK' && <span className="badge bg-warning text-dark border"><Clock size={10} className="me-1"/>Açık</span>}
+                                        {t.durum === 'YANITLANDI' && <span className="badge bg-info text-white"><MessageSquare size={10} className="me-1"/>Yanıtlandı</span>}
+                                        {t.durum === 'KAPANDI' && <span className="badge bg-secondary"><CheckCircle size={10} className="me-1"/>Kapandı</span>}
                                     </div>
                                 </button>
                             ))}
-                            {talepler.length === 0 && <div className="p-4 text-center text-muted">Henüz bir kayıt yok.</div>}
+                            {filteredTalepler.length === 0 && <div className="p-5 text-center text-muted small">Kayıt bulunamadı.</div>}
                         </div>
                     </div>
                 </div>
 
-                {/* SAĞ: CHAT DETAY */}
-                <div className="col-md-8 h-100">
+                {/* SAĞ: CHAT ALANI (WHATSAPP TARZI) */}
+                <div className="col-md-8 col-lg-9 h-100">
                     {seciliTalep ? (
-                        <div className="card border-0 shadow-sm h-100 rounded-4 d-flex flex-column">
-                            <div className="card-header bg-white p-3 border-bottom d-flex justify-content-between align-items-center">
-                                <div>
-                                    <h5 className="mb-0 fw-bold">{seciliTalep.konu}</h5>
-                                    <small className="text-muted">Talep No: #{seciliTalep.id} | Durum: {seciliTalep.durum}</small>
+                        <div className="card border-0 shadow-sm h-100 rounded-4 d-flex flex-column overflow-hidden">
+                            {/* Chat Header */}
+                            <div className="card-header bg-white p-3 border-bottom d-flex justify-content-between align-items-center shadow-sm z-1">
+                                <div className="d-flex align-items-center gap-3">
+                                    <div className="bg-primary bg-opacity-10 text-primary rounded-circle p-2"><MessageSquare size={24}/></div>
+                                    <div>
+                                        <h5 className="mb-0 fw-bold">{seciliTalep.konu}</h5>
+                                        <div className="d-flex align-items-center gap-2 small text-muted">
+                                            <span>Talep No: #{seciliTalep.id}</span>
+                                            <span>•</span>
+                                            <span>Gönderen: <strong>{seciliTalep.gorunen_ad}</strong></span>
+                                        </div>
+                                    </div>
                                 </div>
-                                {/* 🔴 GÜVENLİ ROL KONTROLÜ */}
                                 {seciliTalep.durum !== 'KAPANDI' && user && ['admin','ik','filo'].includes(user.rol) && (
-                                    <button className="btn btn-sm btn-outline-danger" onClick={talepKapat}><Archive size={16} className="me-1"/> Konuyu Kapat</button>
+                                    <button className="btn btn-outline-danger btn-sm fw-bold px-3" onClick={talepKapat}>
+                                        <Archive size={16} className="me-2"/> Konuyu Kapat
+                                    </button>
                                 )}
                             </div>
                             
-                            <div className="card-body bg-light overflow-auto flex-grow-1 p-3">
+                            {/* Mesaj Alanı */}
+                            <div className="card-body overflow-auto flex-grow-1 p-4" 
+                                 style={{backgroundColor: '#e5ddd5', backgroundImage: 'linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5))'}}> 
+                                
                                 {mesajlar.map((m, i) => {
-                                    // 🔴 GÜVENLİ ID KONTROLÜ
-                                    const isMe = user && m.gonderen_id === user.personel_id;
+                                    const isMe = m.taraf === 'me';
                                     return (
                                         <div key={i} className={`d-flex mb-3 ${isMe ? 'justify-content-end' : 'justify-content-start'}`}>
-                                            <div className={`p-3 rounded-4 shadow-sm ${isMe ? 'bg-primary text-white' : 'bg-white text-dark'}`} style={{maxWidth:'75%'}}>
-                                                <div className="fw-bold small mb-1 opacity-75">{m.ad_soyad}</div>
-                                                <div>{m.mesaj}</div>
-                                                <div className={`text-end mt-1 small ${isMe?'text-light':'text-muted'}`} style={{fontSize:'10px'}}>
-                                                    {new Date(m.gonderim_tarihi).toLocaleString('tr-TR')}
+                                            <div className={`p-3 shadow-sm position-relative ${isMe ? 'bg-success text-white' : 'bg-white text-dark'}`} 
+                                                 style={{
+                                                     maxWidth:'70%', 
+                                                     minWidth:'120px', 
+                                                     borderRadius: isMe ? '15px 0 15px 15px' : '0 15px 15px 15px'
+                                                 }}>
+                                                
+                                                {!isMe && <div className="fw-bold small mb-1 text-primary">{m.gorunen_isim}</div>}
+                                                
+                                                <div style={{wordWrap: 'break-word', whiteSpace: 'pre-wrap'}}>{m.mesaj}</div>
+                                                
+                                                <div className={`text-end mt-1 small ${isMe?'text-light':'text-muted'}`} style={{fontSize:'10px', opacity: 0.8}}>
+                                                    {new Date(m.gonderim_tarihi).toLocaleTimeString('tr-TR', {hour:'2-digit', minute:'2-digit'})}
                                                 </div>
                                             </div>
                                         </div>
@@ -164,41 +218,47 @@ export default function TalepYonetimi() {
                                 <div ref={bottomRef} />
                             </div>
 
+                            {/* Mesaj Yazma */}
                             {seciliTalep.durum !== 'KAPANDI' ? (
-                                <div className="card-footer bg-white p-3 border-top">
-                                    <div className="input-group">
-                                        <input type="text" className="form-control border-0 bg-light" placeholder="Bir cevap yazın..." 
-                                            value={yeniMesaj} onChange={e=>setYeniMesaj(e.target.value)} onKeyDown={e=>e.key==='Enter' && cevapla()}/>
-                                        <button className="btn btn-primary px-4" onClick={cevapla}><Send size={18}/></button>
+                                <div className="card-footer bg-light p-3 border-top">
+                                    <div className="input-group shadow-sm">
+                                        <input type="text" className="form-control border-0 p-3" placeholder="Bir mesaj yazın..." 
+                                            value={yeniMesaj} onChange={e=>setYeniMesaj(e.target.value)} onKeyDown={e=>e.key==='Enter' && cevapla()} 
+                                            style={{backgroundColor:'#fff'}}/>
+                                        <button className="btn btn-success px-4" onClick={cevapla}><Send size={20}/></button>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="card-footer bg-secondary text-white text-center p-2 small">Bu talep kapatılmıştır. Cevap yazılamaz.</div>
+                                <div className="card-footer bg-secondary text-white text-center p-3 small fw-bold">
+                                    <Lock size={16} className="me-2"/>
+                                    Bu konu kapatılmıştır.
+                                </div>
                             )}
                         </div>
                     ) : (
-                        <div className="h-100 d-flex align-items-center justify-content-center text-muted bg-light rounded-4 border">
-                            <div className="text-center">
-                                <MessageSquare size={48} className="mb-3 opacity-25"/>
-                                <p>Detayları görmek için soldan bir talep seçin.</p>
+                        <div className="h-100 d-flex align-items-center justify-content-center text-muted bg-light rounded-4 border flex-column">
+                            <div className="bg-white p-4 rounded-circle shadow-sm mb-3">
+                                <MessageSquare size={64} className="text-primary opacity-50"/>
                             </div>
+                            <h4 className="fw-bold text-dark">Hoşgeldiniz</h4>
+                            <p className="text-muted">Görüntülemek için soldan bir talep seçin.</p>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* YENİ TALEP MODALI & KVKK */}
+            {/* YENİ TALEP MODALI */}
             {showModal && (
-                <div className="modal show d-block" style={{backgroundColor:'rgba(0,0,0,0.5)'}}>
+                <div className="modal show d-block" style={{backgroundColor:'rgba(0,0,0,0.5)', backdropFilter: 'blur(5px)'}}>
                     <div className="modal-dialog modal-dialog-centered">
                         <div className="modal-content rounded-4 border-0 shadow-lg">
                             <div className="modal-header bg-primary text-white">
-                                <h5 className="modal-title fw-bold">Yeni Bildirim Oluştur</h5>
+                                <h5 className="modal-title fw-bold d-flex align-items-center gap-2"><Plus size={20}/> Yeni Talep Oluştur</h5>
                                 <button className="btn-close btn-close-white" onClick={()=>setShowModal(false)}></button>
                             </div>
                             <div className="modal-body p-4">
                                 <div className="mb-3">
-                                    <label className="form-label fw-bold">Tür</label>
+                                    <label className="fw-bold mb-1">Tür Seçiniz</label>
                                     <select className="form-select" value={yeniTur} onChange={e=>setYeniTur(e.target.value)}>
                                         <option>Öneri</option>
                                         <option>Şikayet</option>
@@ -206,24 +266,22 @@ export default function TalepYonetimi() {
                                     </select>
                                 </div>
                                 <div className="mb-3">
-                                    <label className="form-label fw-bold">Konu Başlığı</label>
-                                    <input className="form-control" placeholder="Örn: Yemekhane hk." value={yeniKonu} onChange={e=>setYeniKonu(e.target.value)}/>
+                                    <label className="fw-bold mb-1">Konu Başlığı</label>
+                                    <input className="form-control" placeholder="Örn: Yemekhane hizmetleri hk." value={yeniKonu} onChange={e=>setYeniKonu(e.target.value)}/>
                                 </div>
                                 <div className="mb-3">
-                                    <label className="form-label fw-bold">Mesajınız</label>
-                                    <textarea className="form-control" rows="4" placeholder="Detayları buraya yazınız..." value={ilkMesaj} onChange={e=>setIlkMesaj(e.target.value)}></textarea>
+                                    <label className="fw-bold mb-1">Mesajınız</label>
+                                    <textarea className="form-control" rows="5" placeholder="Lütfen talebinizi detaylı bir şekilde açıklayınız..." value={ilkMesaj} onChange={e=>setIlkMesaj(e.target.value)}></textarea>
                                 </div>
                                 
-                                <div className="bg-light p-3 rounded border mb-3">
-                                    <div className="form-check">
-                                        <input className="form-check-input" type="checkbox" id="kvkkCheck" checked={kvkkOnay} onChange={e=>setKvkkOnay(e.target.checked)}/>
-                                        <label className="form-check-label small text-muted" htmlFor="kvkkCheck">
-                                            <strong>KVKK Aydınlatma Metni:</strong> Kişisel verilerimin, talebimin işleme alınması amacıyla işlenmesine, yetkili birimlerce görüntülenmesine ve yanıtlanmasına açık rıza gösteriyorum. Kimlik bilgilerim sadece sistem yöneticileri tarafından görüntülenebilir.
-                                        </label>
-                                    </div>
+                                <div className="bg-light p-3 rounded border mb-3 d-flex gap-3 align-items-start">
+                                    <input className="form-check-input mt-1" type="checkbox" id="kvkkCheck" checked={kvkkOnay} onChange={e=>setKvkkOnay(e.target.checked)} style={{transform:'scale(1.2)'}}/>
+                                    <label className="form-check-label small text-muted" htmlFor="kvkkCheck">
+                                        <strong className="text-dark">KVKK Aydınlatma Metni:</strong> Kişisel verilerimin, talebimin işleme alınması amacıyla işlenmesine, yetkili birimlerce görüntülenmesine ve yanıtlanmasına açık rıza gösteriyorum. Kimlik bilgilerim sadece sistem yöneticileri tarafından görüntülenebilir.
+                                    </label>
                                 </div>
 
-                                <button className="btn btn-primary w-100 fw-bold py-2" onClick={gonderYeniTalep} disabled={!kvkkOnay}>
+                                <button className="btn btn-primary w-100 fw-bold py-3 rounded-3 shadow-sm" onClick={gonderYeniTalep} disabled={!kvkkOnay}>
                                     GÖNDER
                                 </button>
                             </div>
