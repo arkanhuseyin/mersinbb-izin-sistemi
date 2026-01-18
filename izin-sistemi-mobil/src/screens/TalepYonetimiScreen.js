@@ -7,11 +7,8 @@ import { Plus, CheckCircle } from 'lucide-react-native';
 import moment from 'moment';
 import 'moment/locale/tr'; 
 
-// ✅ Config dosyasından API linkini alıyoruz
-// Eğer config dosyan src/config.js ise:
+// Config dosyasından API linkini alıyoruz
 import { API_URL } from '../config'; 
-// Eğer config dosyan ana dizinde ise (package.json ile aynı yerde) ve bu dosya src/screens içindeyse:
-// import { API_URL } from '../../config';  <-- duruma göre bunu aç
 
 export default function TalepYonetimiScreen({ navigation }) {
     const [requests, setRequests] = useState([]);
@@ -36,41 +33,79 @@ export default function TalepYonetimiScreen({ navigation }) {
             const token = await AsyncStorage.getItem('userToken');
             if (!token) return;
             
-            const res = await axios.get(`${API_URL}/api/talep/listele`, {
+            // Backend URL'in sonundaki / işaretine dikkat ediyoruz
+            const url = `${API_URL}/api/talep/listele`;
+            
+            const res = await axios.get(url, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setRequests(res.data);
         } catch (error) {
-            console.error(error);
+            console.error("Liste Çekme Hatası:", error);
         } finally {
             setLoading(false);
         }
     };
 
     const handleCreate = async () => {
-        if (!kvkk) return Alert.alert("Uyarı", "Lütfen KVKK metnini onaylayınız.");
-        if (!subject || !message) return Alert.alert("Uyarı", "Konu ve mesaj alanları boş bırakılamaz.");
+        // Validasyonlar
+        if (!kvkk) {
+            return Alert.alert("Eksik İşlem", "Lütfen KVKK metnini okuyup onaylayınız.");
+        }
+        if (!subject.trim()) {
+            return Alert.alert("Eksik Bilgi", "Lütfen bir konu başlığı giriniz.");
+        }
+        if (!message.trim()) {
+            return Alert.alert("Eksik Bilgi", "Lütfen mesajınızı yazınız.");
+        }
 
         try {
             const token = await AsyncStorage.getItem('userToken');
             
-            console.log("Gönderilen Veri:", { tur: type, konu: subject, mesaj: message }); // Loga bak
+            // Debug için veriyi konsola basalım
+            const postData = { 
+                tur: type, 
+                konu: subject, 
+                mesaj: message, 
+                kvkk: true 
+            };
+            console.log("Mobilden Gönderilen Veri:", postData);
 
-            await axios.post(`${API_URL}/api/talep/olustur`, 
-                { tur: type, konu: subject, mesaj: message, kvkk: true },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+            await axios.post(`${API_URL}/api/talep/olustur`, postData, { 
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json' // İçerik tipini netleştiriyoruz
+                } 
+            });
             
-            Alert.alert("Başarılı", "Talebiniz iletildi.");
+            Alert.alert("Başarılı", "Talebiniz başarıyla iletildi.");
             setModalVisible(false);
-            setSubject(''); setMessage(''); setKvkk(false);
-            fetchRequests();
-        } catch (error) {
-            console.error("HATA DETAYI:", error.response?.data || error.message);
             
-            // Sunucudan gelen gerçek hatayı ekrana bas
-            const sunucuMesaji = error.response?.data?.mesaj || error.response?.data?.error || "Sunucu hatası oluştu.";
-            Alert.alert("Hata", sunucuMesaji);
+            // Formu temizle
+            setSubject(''); 
+            setMessage(''); 
+            setKvkk(false);
+            
+            // Listeyi yenile
+            fetchRequests();
+
+        } catch (error) {
+            console.error("TALEP OLUŞTURMA HATASI:", error);
+            
+            // Hata mesajını ayrıştırıp kullanıcıya gösterelim
+            let errorMessage = "Talep oluşturulamadı.";
+            
+            if (error.response) {
+                // Sunucudan gelen hata mesajı (Backend'de res.status(x).json({mesaj: ...}) demiştik)
+                errorMessage = error.response.data.mesaj || error.response.data.error || "Sunucu hatası.";
+                console.log("Sunucu Cevabı:", error.response.data);
+            } else if (error.request) {
+                errorMessage = "Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edin.";
+            } else {
+                errorMessage = error.message;
+            }
+
+            Alert.alert("Hata", errorMessage);
         }
     };
 
@@ -145,7 +180,7 @@ export default function TalepYonetimiScreen({ navigation }) {
                             onChangeText={setSubject}
                         />
                         <TextInput 
-                            style={[styles.input, { height: 100 }]} 
+                            style={[styles.input, { height: 100, textAlignVertical: 'top' }]} // textAlignVertical Android için önemli
                             placeholder="Mesajınız..." 
                             multiline 
                             value={message} 
