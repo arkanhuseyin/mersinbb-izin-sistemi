@@ -9,11 +9,11 @@ import 'moment/locale/tr';
 import { API_URL } from '../config';
 
 const COLORS = {
-    bg: '#F0F2F5', // WhatsApp Web arkaplanına benzer
+    bg: '#F0F2F5', 
     white: '#FFFFFF',
     primary: '#2563EB',
-    myBubble: '#2563EB', // Benim mesajım (Koyu Mavi)
-    otherBubble: '#FFFFFF', // Karşı taraf (Beyaz)
+    myBubble: '#2563EB', 
+    otherBubble: '#FFFFFF', 
     textDark: '#111827',
     textLight: '#6B7280'
 };
@@ -123,57 +123,66 @@ export default function ChatScreen({ route, navigation }) {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#fff" />
             
-            {/* Header */}
-            <View style={styles.header}>
-                <View style={{flex:1}}>
-                    <Text style={styles.headerTitle} numberOfLines={1}>{request.konu}</Text>
-                    <Text style={styles.headerSub}>Talep No: #{request.id}</Text>
-                </View>
-                {!isClosed && (
-                    <TouchableOpacity onPress={closeRequest} style={styles.actionBtn}>
-                        <Archive size={20} color={COLORS.textLight} />
-                    </TouchableOpacity>
-                )}
-            </View>
-
-            {/* Chat Alanı */}
-            <FlatList
-                ref={flatListRef}
-                data={messages}
-                renderItem={renderMessage}
-                keyExtractor={item => item.id.toString()}
-                contentContainerStyle={styles.listContent}
-                onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-            />
-
-            {/* Input Alanı */}
-            {!isClosed ? (
-                <View style={styles.inputWrapper}>
-                    <View style={styles.inputContainer}>
-                        <TextInput
-                            style={styles.input}
-                            placeholder="Mesaj yazın..."
-                            value={newMessage}
-                            onChangeText={setNewMessage}
-                            multiline
-                            placeholderTextColor="#9CA3AF"
-                        />
-                        <TouchableOpacity 
-                            style={[styles.sendButton, (!newMessage.trim()) && styles.sendButtonDisabled]} 
-                            onPress={sendMessage}
-                            disabled={!newMessage.trim() || sending}
-                        >
-                            {sending ? <ActivityIndicator color="#fff" size="small"/> : <Send size={20} color="#fff" />}
-                        </TouchableOpacity>
+            {/* HATA BURADAYDI: SafeAreaView'in içine KeyboardAvoidingView ekledik. 
+               Böylece hem çentik (notch) sorunu olmaz hem de klavye düzgün çalışır.
+            */}
+            <KeyboardAvoidingView 
+                style={{ flex: 1 }} 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <View style={{flex:1}}>
+                        <Text style={styles.headerTitle} numberOfLines={1}>{request.konu}</Text>
+                        <Text style={styles.headerSub}>Talep No: #{request.id}</Text>
                     </View>
+                    {!isClosed && (
+                        <TouchableOpacity onPress={closeRequest} style={styles.actionBtn}>
+                            <Archive size={20} color={COLORS.textLight} />
+                        </TouchableOpacity>
+                    )}
                 </View>
-            ) : (
-                <View style={styles.closedFooter}>
-                    <Archive size={18} color={COLORS.textLight} />
-                    <Text style={styles.closedText}>Bu konu kapatılmıştır.</Text>
-                </View>
-            )}
-        </KeyboardAvoidingView>
+
+                {/* Chat Alanı */}
+                <FlatList
+                    ref={flatListRef}
+                    data={messages}
+                    renderItem={renderMessage}
+                    keyExtractor={item => item.id.toString()}
+                    contentContainerStyle={styles.listContent}
+                    onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+                />
+
+                {/* Input Alanı */}
+                {!isClosed ? (
+                    <View style={styles.inputWrapper}>
+                        <View style={styles.inputContainer}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Mesaj yazın..."
+                                value={newMessage}
+                                onChangeText={setNewMessage}
+                                multiline
+                                placeholderTextColor="#9CA3AF"
+                            />
+                            <TouchableOpacity 
+                                style={[styles.sendButton, (!newMessage.trim()) && styles.sendButtonDisabled]} 
+                                onPress={sendMessage}
+                                disabled={!newMessage.trim() || sending}
+                            >
+                                {sending ? <ActivityIndicator color="#fff" size="small"/> : <Send size={20} color="#fff" />}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                ) : (
+                    <View style={styles.closedFooter}>
+                        <Archive size={18} color={COLORS.textLight} />
+                        <Text style={styles.closedText}>Bu konu kapatılmıştır.</Text>
+                    </View>
+                )}
+            </KeyboardAvoidingView>
+        </SafeAreaView>
     );
 }
 
