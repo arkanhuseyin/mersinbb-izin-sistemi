@@ -1,26 +1,34 @@
 const pool = require('../config/db');
 
-// 1. Talepleri Listele (LEFT JOIN ile Güçlendirilmiş)
+// 1. Talepleri Listele
 exports.talepleriGetir = async (req, res) => {
     try {
-        const { personel_id, rol } = req.user;
+        // Kullanıcı bilgilerini güvenli al (ID sorunu çözümü)
+        const user = req.user || {};
+        const personel_id = user.personel_id || user.id; // ID veya personel_id hangisi varsa
+        const rol = user.rol || 'personel';
         
         // Rolü güvenli hale getir
         const userRol = rol ? rol.toLowerCase().trim() : 'personel';
 
         console.log(`📡 TALEP LİSTESİ İSTENİYOR -> İsteyen ID: ${personel_id}, Rol: ${userRol}`);
 
+        if (!personel_id) {
+            console.error("❌ HATA: Kullanıcı ID'si (personel_id) bulunamadı! Token hatalı olabilir.");
+            return res.status(401).json({ error: "Kimlik doğrulama hatası. ID bulunamadı." });
+        }
+
         let query = '';
         let params = [];
 
         // 🛑 YETKİLİ KONTROLÜ (Admin, İK, Filo)
         if (['admin', 'ik', 'filo'].includes(userRol)) {
-            // LEFT JOIN: Personel silinmiş olsa bile talebi getirir.
+            // DÜZELTME: p.rol yerine p.rol_adi kullanıldı
             query = `
                 SELECT t.*, 
                 COALESCE(p.ad, 'Bilinmeyen') as gercek_ad, 
                 COALESCE(p.soyad, 'Kullanıcı') as gercek_soyad, 
-                p.rol as gonderen_rol
+                p.rol_adi as gonderen_rol 
                 FROM talep_destek t
                 LEFT JOIN personeller p ON t.personel_id = p.personel_id
                 ORDER BY t.son_guncelleme DESC`;
@@ -42,7 +50,6 @@ exports.talepleriGetir = async (req, res) => {
 
         // 🔥 GÖRÜNÜM AYARLAMA (Anonimlik)
         const maskelenmisVeri = result.rows.map(item => {
-            // Eğer veritabanında personel_id NULL ise (Manuel kayıt hatası gibi)
             if (!item.personel_id) {
                 return { ...item, gorunen_ad: 'Sistem Kaydı (No ID)' };
             }
@@ -59,7 +66,7 @@ exports.talepleriGetir = async (req, res) => {
                 return { 
                     ...item, 
                     gorunen_ad: 'Personel (Anonim)', 
-                    gercek_ad: null, // İsimleri gizle
+                    gercek_ad: null, 
                     gercek_soyad: null 
                 };
             }
@@ -69,6 +76,10 @@ exports.talepleriGetir = async (req, res) => {
 
     } catch (error) {
         console.error("❌ LİSTELEME HATASI DETAYI:", error);
+        // Hata column does not exist ise daha açıklayıcı ol
+        if (error.code === '42703') {
+             console.error("💡 İPUCU: Veritabanında 'rol' veya 'rol_adi' sütun isimlerini kontrol et.");
+        }
         res.status(500).json({ error: 'Listeleme hatası' });
     }
 };
@@ -78,10 +89,16 @@ exports.talepOlustur = async (req, res) => {
     const client = await pool.connect();
     try {
         const { tur, konu, mesaj, kvkk } = req.body;
-        const gonderen_id = req.user.personel_id; // Token'dan gelen ID
+        
+        // ID Çözümü
+        const user = req.user || {};
+        const gonderen_id = user.personel_id || user.id;
 
         console.log("📝 YENİ TALEP GELDİ:", { tur, konu, gonderen_id });
 
+        if (!gonderen_id) {
+            return res.status(401).json({ mesaj: 'Kullanıcı kimliği doğrulanamadı.' });
+        }
         if(!kvkk) return res.status(400).json({mesaj: 'KVKK onayı zorunludur.'});
         if(!konu || !mesaj) return res.status(400).json({mesaj: 'Konu ve mesaj zorunludur.'});
 
@@ -115,11 +132,12 @@ exports.talepOlustur = async (req, res) => {
 exports.talepDetay = async (req, res) => {
     try {
         const { id } = req.params;
-        const requestingUserId = req.user.personel_id;
+        const user = req.user || {};
+        const requestingUserId = user.personel_id || user.id;
 
-        // Mesajları ve gönderen bilgilerini çek (LEFT JOIN ile)
+        // DÜZELTME: p.rol yerine p.rol_adi
         const msjRes = await pool.query(
-            `SELECT tm.*, p.ad, p.soyad, p.rol 
+            `SELECT tm.*, p.ad, p.soyad, p.rol_adi as rol 
              FROM talep_mesajlar tm
              LEFT JOIN personeller p ON tm.gonderen_id = p.personel_id
              WHERE tm.talep_id = $1
@@ -127,16 +145,11 @@ exports.talepDetay = async (req, res) => {
         );
 
         const mesajlar = msjRes.rows.map(m => {
-            // Mesajı atan "Ben" isem
             if (m.gonderen_id === requestingUserId) {
                 return { ...m, ad_soyad: 'Siz' };
-            } 
-            // Mesajı atan Yetkili ise
-            else if (['admin','ik','filo'].includes(m.rol)) {
+            } else if (['admin','ik','filo'].includes(m.rol)) {
                 return { ...m, ad_soyad: 'Yetkili' }; 
-            } 
-            // Kimlik yoksa veya personel ise
-            else {
+            } else {
                 return { ...m, ad_soyad: 'Personel' }; 
             }
         });
@@ -152,8 +165,11 @@ exports.talepDetay = async (req, res) => {
 exports.cevapYaz = async (req, res) => {
     try {
         const { talep_id, mesaj, yeni_durum } = req.body;
-        const gonderen_id = req.user.personel_id;
+        const user = req.user || {};
+        const gonderen_id = user.personel_id || user.id;
         
+        if (!gonderen_id) return res.status(401).json({mesaj: 'Kimlik hatası'});
+
         await pool.query(
             `INSERT INTO talep_mesajlar (talep_id, gonderen_id, mesaj) VALUES ($1, $2, $3)`,
             [talep_id, gonderen_id, mesaj]
