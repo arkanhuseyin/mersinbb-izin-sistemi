@@ -53,16 +53,24 @@ export default function TalepYonetimiScreen({ navigation }) {
 
         try {
             const token = await AsyncStorage.getItem('userToken');
+            
+            console.log("Gönderilen Veri:", { tur: type, konu: subject, mesaj: message }); // Loga bak
+
             await axios.post(`${API_URL}/api/talep/olustur`, 
                 { tur: type, konu: subject, mesaj: message, kvkk: true },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
+            
             Alert.alert("Başarılı", "Talebiniz iletildi.");
             setModalVisible(false);
             setSubject(''); setMessage(''); setKvkk(false);
             fetchRequests();
         } catch (error) {
-            Alert.alert("Hata", "Talep oluşturulamadı.");
+            console.error("HATA DETAYI:", error.response?.data || error.message);
+            
+            // Sunucudan gelen gerçek hatayı ekrana bas
+            const sunucuMesaji = error.response?.data?.mesaj || error.response?.data?.error || "Sunucu hatası oluştu.";
+            Alert.alert("Hata", sunucuMesaji);
         }
     };
 
