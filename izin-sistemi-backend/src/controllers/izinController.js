@@ -103,24 +103,48 @@ exports.gecmisBakiyeSil = async (req, res) => {
     } catch (e) { res.status(500).json({ mesaj: 'Hata.' }); }
 };
 
-// TALEP OLUŞTURMA
+// TALEP OLUŞTURMA (GÜNCELLENDİ: İK BYPASS ÖZELLİĞİ EKLENDİ)
 exports.talepOlustur = async (req, res) => {
-    let { baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, haftalik_izin, ise_baslama, izin_adresi, personel_imza } = req.body;
-    const belge_yolu = req.file ? req.file.path : null;
-    const personel_id = req.user.id; 
-    
-    try {
-        const pRes = await pool.query("SELECT ad, soyad, rol_id, gorev FROM personeller WHERE personel_id = $1", [personel_id]);
-        const { ad, soyad, rol_id, gorev } = pRes.rows[0];
-        const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [rol_id]);
-        const userRole = userRoleInfo.rows[0].rol_adi.toLowerCase();
+    let { 
+        baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, 
+        aciklama, haftalik_izin, ise_baslama, izin_adresi, 
+        personel_imza,
+        hedef_personel_id // ✅ Yeni: Eğer İK başkası adına giriyorsa bu dolu gelir
+    } = req.body;
 
-        // Bakiye Kontrolü (Yıllık İzin ise)
+    const belge_yolu = req.file ? req.file.path : null;
+    
+    // İşlemi yapan kişi (Login olan)
+    const islemYapanId = req.user.id;
+    const islemYapanRol = req.user.rol; // 'admin', 'ik', 'personel' vs.
+
+    try {
+        // 1. Hedef Personeli Belirle
+        let asilPersonelId = islemYapanId;
+        let isIkOverride = false; // İK bypass işlemi mi?
+
+        // Eğer işlem yapan Admin/İK ise ve başka bir ID göndermişse
+        if (['admin', 'ik', 'filo'].includes(islemYapanRol) && hedef_personel_id) {
+            asilPersonelId = hedef_personel_id;
+            isIkOverride = true;
+        }
+
+        // 2. Personel Bilgilerini Çek
+        const pRes = await pool.query("SELECT ad, soyad, rol_id, gorev, birim_id FROM personeller WHERE personel_id = $1", [asilPersonelId]);
+        if (pRes.rows.length === 0) return res.status(404).json({ mesaj: 'Personel bulunamadı.' });
+        
+        const { ad, soyad, rol_id, gorev, birim_id } = pRes.rows[0];
+        const userRoleInfo = await pool.query("SELECT rol_adi FROM roller WHERE rol_id = $1", [rol_id]);
+        const personelRolAdi = userRoleInfo.rows[0].rol_adi.toLowerCase();
+
+        // 3. Bakiye Kontrolü (Yıllık İzin ise)
+        // İK girse bile bakiye kontrolü yapılmalı, yoksa eksiye düşer.
         if (izin_turu === 'YILLIK İZİN') {
-            const kalanHak = await hesaplaBakiye(personel_id);
+            const kalanHak = await hesaplaBakiye(asilPersonelId);
             const istenen = parseInt(kac_gun);
             if (istenen > kalanHak) {
-                return res.status(400).json({ mesaj: `Sayın ${ad} ${soyad}, Kullanmak istediğiniz izin (${istenen} Gün), Mevcut hakkınızdan (${kalanHak} Gün) fazladır.` });
+                // İK giriyorsa belki eksiye düşürmeye izin vermek istersin? Şimdilik uyarı verelim.
+                return res.status(400).json({ mesaj: `DİKKAT: ${ad} ${soyad} adlı personelin yeterli bakiyesi yok. (Kalan: ${kalanHak}, İstenen: ${istenen})` });
             }
         }
 
@@ -128,24 +152,36 @@ exports.talepOlustur = async (req, res) => {
         const dbBitis = tarihFormatla(bitis_tarihi);
         const dbIseBaslama = tarihFormatla(ise_baslama);
 
-        // Otomatik Onay Mekanizması
+        // 4. Durum Belirleme (OTOMATİK ONAY MANTIĞI)
         let baslangicDurumu = 'ONAY_BEKLIYOR'; 
-        if (userRole === 'amir') baslangicDurumu = 'AMIR_ONAYLADI';
-        else if (userRole === 'yazici' || userRole === 'ik') baslangicDurumu = 'YAZICI_ONAYLADI';
 
-        const ofisGorevleri = ['Memur', 'Büro Personeli', 'Genel Evrak', 'Muhasebe', 'Bilgisayar Mühendisi', 'Makine Mühendisi', 'Ulaştırma Mühendisi', 'Bilgisayar Teknikeri', 'Harita Teknikeri', 'Elektrik Teknikeri', 'Makine Teknikeri', 'Ulaştırma Teknikeri', 'Mersin 33 Kart', 'Lojistik', 'Saha Tespit ve İnceleme', 'Araç Takip Sistemleri', 'Yazı İşleri', 'İnspektör', 'Hareket Görevlisi', 'Hareket Memuru', 'Dış Görev', 'İdari İzinli', 'Santral Operatörü', 'Eğitim ve Disiplin İşleri', 'Saha Görevlisi', 'Düz İşçi (KHK)', 'Yol Kontrol Ekibi', 'Kaza Ekibi', 'Yardımcı Hizmetler', 'Çıkış Görevlisi', 'Geçici İşçi', 'Usta', 'Kadrolu İşçi', 'Sürekli İşçi'];
-        if (ofisGorevleri.some(g => (gorev || '').includes(g)) || (gorev || '').includes('Şef') || (gorev || '').includes('Şube Müdürü')) {
-            baslangicDurumu = 'YAZICI_ONAYLADI'; 
+        if (isIkOverride) {
+            // ✅ Eğer İK/Admin giriyorsa direkt onaylı başlar (Amir/Yazıcı atlanır)
+            baslangicDurumu = 'IK_ONAYLADI'; 
+        } else {
+            // Normal personel girişi
+            if (personelRolAdi === 'amir') baslangicDurumu = 'AMIR_ONAYLADI';
+            else if (personelRolAdi === 'yazici' || personelRolAdi === 'ik') baslangicDurumu = 'YAZICI_ONAYLADI';
+            
+            // Ofis/Beyaz Yaka Kontrolü
+            const ofisGorevleri = ['Memur', 'Büro Personeli', 'Genel Evrak', 'Muhasebe', 'Bilgisayar Mühendisi', 'Makine Mühendisi', 'Ulaştırma Mühendisi', 'Bilgisayar Teknikeri', 'Harita Teknikeri', 'Elektrik Teknikeri', 'Makine Teknikeri', 'Ulaştırma Teknikeri', 'Mersin 33 Kart', 'Lojistik', 'Saha Tespit ve İnceleme', 'Araç Takip Sistemleri', 'Yazı İşleri', 'İnspektör', 'Hareket Görevlisi', 'Hareket Memuru', 'Dış Görev', 'İdari İzinli', 'Santral Operatörü', 'Eğitim ve Disiplin İşleri', 'Saha Görevlisi', 'Düz İşçi (KHK)', 'Yol Kontrol Ekibi', 'Kaza Ekibi', 'Yardımcı Hizmetler', 'Çıkış Görevlisi', 'Geçici İşçi', 'Usta', 'Kadrolu İşçi', 'Sürekli İşçi'];
+            if (ofisGorevleri.some(g => (gorev || '').includes(g)) || (gorev || '').includes('Şef') || (gorev || '').includes('Şube Müdürü')) {
+                baslangicDurumu = 'YAZICI_ONAYLADI'; 
+            }
         }
 
+        // 5. Kayıt
         const yeniTalep = await pool.query(
             `INSERT INTO izin_talepleri (personel_id, baslangic_tarihi, bitis_tarihi, kac_gun, izin_turu, aciklama, haftalik_izin_gunu, ise_baslama_tarihi, izin_adresi, personel_imza, durum, belge_yolu) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
-            [personel_id, dbBaslangic, dbBitis, kac_gun, izin_turu, aciklama, haftalik_izin, dbIseBaslama, izin_adresi, personel_imza, baslangicDurumu, belge_yolu]
+            [asilPersonelId, dbBaslangic, dbBitis, kac_gun, izin_turu, aciklama, haftalik_izin, dbIseBaslama, izin_adresi, personel_imza, baslangicDurumu, belge_yolu]
         );
         
-        await hareketKaydet(yeniTalep.rows[0].talep_id, personel_id, 'BAŞVURU', 'İzin talebi oluşturuldu.');
-        await logKaydet(personel_id, 'İZİN_TALEBİ', `Yeni talep ID: ${yeniTalep.rows[0].talep_id}`, req);
-        res.json({ mesaj: 'İzin talebi oluşturuldu', talep: yeniTalep.rows[0] });
+        // 6. Loglama
+        const islemNotu = isIkOverride ? 'İK/Admin tarafından personel adına giriş yapıldı (Otomatik Onay).' : 'İzin talebi oluşturuldu.';
+        await hareketKaydet(yeniTalep.rows[0].talep_id, islemYapanId, 'BAŞVURU', islemNotu);
+        await logKaydet(islemYapanId, 'İZİN_TALEBİ', `Talep ID: ${yeniTalep.rows[0].talep_id} - Personel: ${ad} ${soyad}`, req);
+        
+        res.json({ mesaj: isIkOverride ? 'İzin başarıyla tanımlandı ve onaylandı.' : 'İzin talebi oluşturuldu', talep: yeniTalep.rows[0] });
 
     } catch (err) { console.error("HATA:", err); res.status(500).json({ mesaj: 'Hata oluştu: ' + err.message }); }
 };

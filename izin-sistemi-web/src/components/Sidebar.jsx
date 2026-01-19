@@ -71,6 +71,13 @@ export default function Sidebar() {
             icon: <FileBarChart size={20}/>, 
             show: checkPermission('rapor') 
         },
+        {
+            title: 'İzin Talep Et v2',
+            path: '/dashboard/hr-entry',
+            icon: <Zap size={20}/>,
+            // Sadece Admin, İK veya Filo görebilir
+            show: ['admin', 'ik', 'filo'].includes(user?.rol)
+        },
         // ✅ YENİ EKLENEN TALEP MODÜLÜ
         {
             title: 'Öneri / Talep',
