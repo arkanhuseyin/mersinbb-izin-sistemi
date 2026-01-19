@@ -54,5 +54,6 @@ router.get('/rapor/tum-personel-detay', auth, izinController.tumPersonelDetayliV
 // ✅ YENİ EKLENEN ROTALAR (Backend PDF İndirme)
 router.get('/rapor/pdf-toplu', auth, izinController.topluPdfRaporu);
 router.get('/rapor/pdf-detay/:id', auth, izinController.kisiOzelPdfRaporu);
+router.delete('/talep-sil/:id', auth, izinController.talepSil);
 
 module.exports = router;

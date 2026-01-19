@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Search, FileBarChart, CheckCircle, History, Calculator, FileSpreadsheet, FileText } from 'lucide-react';
+import { Search, FileBarChart, CheckCircle, History, Calculator, FileSpreadsheet, FileText, Trash2, AlertTriangle, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx'; 
 
 const DEFAULT_PHOTO = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
@@ -11,13 +11,15 @@ export default function LeaveReports() {
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
     
+    // ✅ YENİ: 30 Gün Filtresi State'i
+    const [showHighBalance, setShowHighBalance] = useState(false);
+
     // Modal States
     const [secilenPersonel, setSecilenPersonel] = useState(null);
     const [detayYukleniyor, setDetayYukleniyor] = useState(false);
     const [personelDetay, setPersonelDetay] = useState(null);
     
-    // ✅ YENİ: Tab Kontrolü
-    const [activeTab, setActiveTab] = useState('ozet'); // 'ozet', 'hakedis', 'gecmis'
+    const [activeTab, setActiveTab] = useState('ozet'); 
 
     useEffect(() => {
         verileriGetir();
@@ -51,7 +53,7 @@ export default function LeaveReports() {
 
     const handlePersonelClick = async (personel) => {
         setSecilenPersonel(personel); 
-        setActiveTab('ozet'); // Modal açılınca varsayılan tab
+        setActiveTab('ozet'); 
         setDetayYukleniyor(true);
         try {
             const token = localStorage.getItem('token');
@@ -63,23 +65,33 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- 📄 EXCEL ÇIKTILARI ---
+    // ✅ YENİ: İZİN SİLME FONKSİYONU
+    const handleLeaveDelete = async (talepId) => {
+        if(!confirm("DİKKAT! Bu onaylanmış bir izindir.\n\nSilerseniz, personelin bakiyesine bu günler otomatik olarak geri eklenecektir.\n\nEmin misiniz?")) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_URL}/api/izin/talep-sil/${talepId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            alert("İzin silindi ve bakiye güncellendi.");
+            
+            // Modal içindeki veriyi yenile
+            if (secilenPersonel) handlePersonelClick(secilenPersonel);
+            // Arka plandaki ana raporu yenile
+            verileriGetir();
+
+        } catch (error) {
+            alert("Silme işlemi başarısız: " + (error.response?.data?.mesaj || error.message));
+        }
+    };
+
     const generateDetailExcel = () => {
         if (!personelDetay || !secilenPersonel) return;
         const p = personelDetay.personel;
-        
-        const kumulatifHak = parseInt(secilenPersonel.kumulatif_hak) || 0;
-        const devredenHak = parseInt(secilenPersonel.devreden_izin) || 0;
-        const buYilHak = parseInt(secilenPersonel.bu_yil_hakedis) || 0;
-
         const wsData = [
-            ["MERSİN BÜYÜKŞEHİR BELEDİYESİ - PERSONEL İZİN DETAY RAPORU"], [" "],
-            ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
+            ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`],
             [" "], ["BAKİYE ÖZETİ"],
-            ["Kümülatif Hak", kumulatifHak],
-            ["Geçmişten Devreden", devredenHak],
-            ["Bu Yıl Hakediş", buYilHak],
-            ["Toplam Kullanılan", personelDetay.personel.kullanilan], 
             ["Kalan", personelDetay.personel.kalan],
             [" "], ["İZİN HAREKETLERİ"], ["Tür", "Başlangıç", "Bitiş", "Gün", "Durum"],
             ...personelDetay.izinler.map(iz => [
@@ -91,8 +103,6 @@ export default function LeaveReports() {
             ])
         ];
         const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(wsData);
-        ws['!cols'] = [{wch:15}, {wch:15}, {wch:20}, {wch:10}, {wch:15}];
-        ws['!merges'] = [{ s: {r:0, c:0}, e: {r:0, c:4} }];
         XLSX.utils.book_append_sheet(wb, ws, "Rapor"); XLSX.writeFile(wb, `${p.ad}_${p.soyad}.xlsx`);
     };
 
@@ -157,7 +167,16 @@ export default function LeaveReports() {
         } catch (e) { alert("Rapor oluşturulamadı."); } finally { setYukleniyor(false); }
     };
 
-    const filtered = rapor.filter(p => p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama));
+    // ✅ FİLTRELEME MANTIĞI GÜNCELLENDİ
+    const filtered = rapor.filter(p => {
+        const matchesSearch = p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama);
+        const kalan = parseInt(p.kalan) || 0;
+        
+        // Eğer 30+ butonu aktifse, sadece 30 günden fazla izni olanları göster
+        const matchesBalance = showHighBalance ? kalan >= 30 : true;
+
+        return matchesSearch && matchesBalance;
+    });
 
     return (
         <div className="container-fluid p-4 p-lg-5">
@@ -173,9 +192,30 @@ export default function LeaveReports() {
                 </div>
             </div>
             
-            <div className="card border-0 shadow-sm mb-4 rounded-4"><div className="card-body p-3">
-                <div className="input-group" style={{maxWidth: '400px'}}><span className="input-group-text bg-white border-end-0"><Search size={18} className="text-muted"/></span><input type="text" className="form-control border-start-0" placeholder="Ara..." value={arama} onChange={e=>setArama(e.target.value)}/></div>
-            </div></div>
+            <div className="card border-0 shadow-sm mb-4 rounded-4">
+                <div className="card-body p-3 d-flex flex-wrap gap-3 align-items-center justify-content-between">
+                    <div className="input-group" style={{maxWidth: '400px'}}>
+                        <span className="input-group-text bg-white border-end-0"><Search size={18} className="text-muted"/></span>
+                        <input type="text" className="form-control border-start-0" placeholder="Ara..." value={arama} onChange={e=>setArama(e.target.value)}/>
+                    </div>
+
+                    {/* ✅ YENİ: 30 GÜN FİLTRE BUTONU */}
+                    <div className="d-flex align-items-center">
+                        <button 
+                            className={`btn fw-bold d-flex align-items-center gap-2 ${showHighBalance ? 'btn-danger text-white' : 'btn-outline-secondary'}`}
+                            onClick={() => setShowHighBalance(!showHighBalance)}
+                        >
+                            {showHighBalance ? <CheckCircle size={18}/> : <Filter size={18}/>}
+                            30+ Gün İzni Olanlar
+                        </button>
+                        {showHighBalance && (
+                            <span className="ms-3 text-danger fw-bold small">
+                                {filtered.length} Personel Bulundu
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
 
             {/* ANA LİSTE TABLOSU */}
             <div className="card shadow-sm border-0 rounded-4 overflow-hidden"><div className="card-body p-0"><div className="table-responsive">
@@ -184,10 +224,10 @@ export default function LeaveReports() {
                         <tr>
                             <th className="ps-4 py-3">Personel</th>
                             <th>İşe Giriş</th>
-                            <th className="text-center bg-secondary-subtle text-secondary-emphasis border-start border-end">Kümülatif<br/>(Ömür Boyu)</th>
-                            <th className="text-center bg-warning-subtle text-warning-emphasis">Devreden</th>
-                            <th className="text-center bg-info-subtle text-info-emphasis">Bu Yıl</th>
-                            <th className="text-center fw-bold">Toplam<br/>Havuz</th>
+                            <th className="text-center bg-secondary-subtle">Kümülatif</th>
+                            <th className="text-center bg-warning-subtle">Devreden</th>
+                            <th className="text-center bg-info-subtle">Bu Yıl</th>
+                            <th className="text-center fw-bold">Toplam</th>
                             <th className="text-center">Kullanılan</th>
                             <th className="text-center">Kalan</th>
                             <th className="text-end pe-4">Durum</th>
@@ -202,17 +242,34 @@ export default function LeaveReports() {
                             const kalan = parseInt(p.kalan) || 0;
                             const toplamKullanilan = toplamHavuz - kalan;
                             
+                            // 30 gün üzeri uyarısı için stil
+                            const isHighBalance = kalan >= 30;
+
                             return (
-                                <tr key={i} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer'}}>
-                                    <td className="ps-4 fw-bold">{p.ad} {p.soyad}<br/><small className="fw-normal text-muted">{p.tc_no}</small></td>
+                                <tr key={i} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer'}} className={isHighBalance ? 'table-warning' : ''}>
+                                    <td className="ps-4 fw-bold">
+                                        {p.ad} {p.soyad}<br/><small className="fw-normal text-muted">{p.tc_no}</small>
+                                    </td>
                                     <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
-                                    <td className="text-center bg-secondary-subtle text-dark fw-bold border-start border-end fs-6">{kumulatif}</td>
-                                    <td className="text-center bg-warning-subtle text-dark fw-bold">{devreden > 0 ? `+${devreden}` : '-'}</td>
-                                    <td className="text-center bg-info-subtle text-dark">{buYilHak}</td>
-                                    <td className="text-center fw-bold fs-6">{toplamHavuz}</td>
+                                    <td className="text-center bg-secondary-subtle fw-bold">{kumulatif}</td>
+                                    <td className="text-center bg-warning-subtle fw-bold">{devreden > 0 ? `+${devreden}` : '-'}</td>
+                                    <td className="text-center bg-info-subtle">{buYilHak}</td>
+                                    <td className="text-center fw-bold">{toplamHavuz}</td>
                                     <td className="text-center text-muted">{toplamKullanilan}</td>
-                                    <td className="text-center"><span className={`badge ${kalan < 5 ? 'bg-danger' : 'bg-primary'} rounded-pill`}>{kalan}</span></td>
-                                    <td className="text-end pe-4">{kalan < 0 ? <span className="badge bg-danger">LİMİT AŞIMI</span> : <CheckCircle size={16} className="text-success"/>}</td>
+                                    <td className="text-center">
+                                        <span className={`badge ${kalan < 5 ? 'bg-danger' : isHighBalance ? 'bg-warning text-dark border border-dark' : 'bg-primary'} rounded-pill fs-6`}>
+                                            {kalan}
+                                        </span>
+                                    </td>
+                                    <td className="text-end pe-4">
+                                        {isHighBalance ? (
+                                            <div className="d-flex align-items-center justify-content-end text-danger fw-bold gap-1">
+                                                <AlertTriangle size={16}/> İZNE ÇIKAR!
+                                            </div>
+                                        ) : (
+                                            kalan < 0 ? <span className="badge bg-danger">LİMİT AŞIMI</span> : <CheckCircle size={16} className="text-success"/>
+                                        )}
+                                    </td>
                                 </tr>
                             );
                         })}
@@ -220,13 +277,11 @@ export default function LeaveReports() {
                 </table>
             </div></div></div>
 
-            {/* ✅ GÜNCELLENEN MODAL DETAY KISMI */}
+            {/* MODAL DETAY KISMI */}
             {secilenPersonel && (
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                         <div className="modal-content shadow-lg border-0 rounded-4" style={{maxHeight:'90vh'}}>
-                            
-                            {/* Modal Header */}
                             <div className="modal-header bg-primary text-white p-4 align-items-center">
                                 <div className="d-flex align-items-center gap-3">
                                     <img 
@@ -238,18 +293,15 @@ export default function LeaveReports() {
                                     />
                                     <div>
                                         <h5 className="modal-title fw-bold mb-1">{secilenPersonel.ad} {secilenPersonel.soyad}</h5>
-                                        <p className="m-0 opacity-75 small">{secilenPersonel.birim_adi} | {secilenPersonel.kadro_tipi}</p>
+                                        <p className="m-0 opacity-75 small">{secilenPersonel.birim_adi}</p>
                                     </div>
                                 </div>
                                 <button className="btn-close btn-close-white align-self-start" onClick={() => setSecilenPersonel(null)}></button>
                             </div>
                             
-                            {/* Modal Body */}
                             <div className="modal-body bg-light p-0">
                                 {detayYukleniyor ? <div className="text-center py-5">Yükleniyor...</div> : personelDetay && (
                                     <div className="d-flex flex-column h-100">
-                                        
-                                        {/* TAB MENÜSÜ */}
                                         <div className="bg-white border-bottom px-4 pt-3 sticky-top">
                                             <ul className="nav nav-tabs border-0 gap-3">
                                                 <li className="nav-item">
@@ -267,39 +319,16 @@ export default function LeaveReports() {
                                             </ul>
                                         </div>
 
-                                        {/* TAB İÇERİKLERİ */}
                                         <div className="p-4">
-                                            
-                                            {/* TAB 1: ÖZET */}
                                             {activeTab === 'ozet' && (
                                                 <div className="row justify-content-center">
                                                     <div className="col-md-8">
                                                         <div className="card border-0 shadow-sm">
                                                             <div className="card-body p-4 text-center">
-                                                                <h6 className="text-muted fw-bold mb-4">GÜNCEL DURUM</h6>
-                                                                
-                                                                <div className="row g-3 mb-4">
-                                                                    <div className="col-6">
-                                                                        <div className="p-3 bg-light rounded-3 border">
-                                                                            <div className="small text-muted mb-1">Toplam Havuz</div>
-                                                                            <div className="fs-4 fw-bold text-dark">
-                                                                                {(parseInt(secilenPersonel.kumulatif_hak) || 0) + (parseInt(secilenPersonel.devreden_izin) || 0)}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="col-6">
-                                                                        <div className="p-3 bg-light rounded-3 border">
-                                                                            <div className="small text-muted mb-1">Kullanılan</div>
-                                                                            <div className="fs-4 fw-bold text-danger">
-                                                                                {personelDetay.personel.kullanilan}
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-
-                                                                <div className={`p-4 rounded-4 ${personelDetay.personel.kalan < 0 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-success bg-opacity-10 text-success'}`}>
+                                                                <div className={`p-4 rounded-4 mb-4 ${personelDetay.personel.kalan >= 30 ? 'bg-warning bg-opacity-25 text-dark border border-warning' : 'bg-success bg-opacity-10 text-success'}`}>
                                                                     <div className="small fw-bold opacity-75 mb-1">KALAN BAKİYE</div>
                                                                     <div className="display-4 fw-bold">{personelDetay.personel.kalan} Gün</div>
+                                                                    {personelDetay.personel.kalan >= 30 && <div className="fw-bold mt-2 text-danger"><AlertTriangle size={20} className="me-1"/> Personele izin kullandırılmalı!</div>}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -307,7 +336,6 @@ export default function LeaveReports() {
                                                 </div>
                                             )}
 
-                                            {/* TAB 2: HAKEDİŞ LİSTESİ (YENİ TABLO) */}
                                             {activeTab === 'hakedis' && (
                                                 <div className="card border-0 shadow-sm">
                                                     <div className="table-responsive">
@@ -334,32 +362,40 @@ export default function LeaveReports() {
                                                                     <tr><td colSpan="4" className="text-center py-4 text-muted">Hakediş verisi bulunamadı.</td></tr>
                                                                 )}
                                                             </tbody>
-                                                            <tfoot className="bg-light fw-bold">
-                                                                <tr>
-                                                                    <td colSpan="3" className="ps-4 text-end">TOPLAM OTOMATİK HAKEDİŞ:</td>
-                                                                    <td className="text-end pe-4 text-primary fs-6">
-                                                                        {parseInt(secilenPersonel.kumulatif_hak) || 0} Gün
-                                                                    </td>
-                                                                </tr>
-                                                            </tfoot>
                                                         </table>
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {/* TAB 3: İZİN GEÇMİŞİ */}
+                                            {/* ✅ GÜNCELLENEN İZİN GEÇMİŞİ TABLOSU (SİL BUTONLU) */}
                                             {activeTab === 'gecmis' && (
                                                 <div className="card border-0 shadow-sm">
                                                     <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                                                         <h6 className="m-0 fw-bold text-dark">Onaylanan İzinler</h6>
-                                                        <div className="d-flex gap-2">
-                                                            <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1" onClick={generateDetailExcel}><FileSpreadsheet size={14}/> Excel</button>
-                                                        </div>
+                                                        <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1" onClick={generateDetailExcel}><FileSpreadsheet size={14}/> Excel</button>
                                                     </div>
                                                     <div className="table-responsive">
                                                         <table className="table table-hover mb-0 small">
-                                                            <thead className="table-light"><tr><th className="ps-3">Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Durum</th></tr></thead>
-                                                            <tbody>{personelDetay.izinler.map((iz, idx) => (<tr key={idx}><td className="ps-3">{iz.izin_turu}</td><td>{new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR')}</td><td>{new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR')}</td><td className="fw-bold">{iz.kac_gun}</td><td><span className="badge bg-success">Onaylı</span></td></tr>))}</tbody>
+                                                            <thead className="table-light"><tr><th className="ps-3">Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Durum</th><th className="text-end pe-3">İşlem</th></tr></thead>
+                                                            <tbody>{personelDetay.izinler.map((iz, idx) => (
+                                                                <tr key={idx}>
+                                                                    <td className="ps-3">{iz.izin_turu}</td>
+                                                                    <td>{new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR')}</td>
+                                                                    <td>{new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR')}</td>
+                                                                    <td className="fw-bold">{iz.kac_gun}</td>
+                                                                    <td><span className="badge bg-success">Onaylı</span></td>
+                                                                    <td className="text-end pe-3">
+                                                                        {/* SİLME BUTONU */}
+                                                                        <button 
+                                                                            className="btn btn-sm btn-outline-danger py-0 px-2" 
+                                                                            title="İzni Sil ve İade Et"
+                                                                            onClick={() => handleLeaveDelete(iz.talep_id)}
+                                                                        >
+                                                                            <Trash2 size={14} />
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}</tbody>
                                                         </table>
                                                     </div>
                                                 </div>

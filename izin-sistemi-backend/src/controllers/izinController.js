@@ -1,7 +1,6 @@
 const pool = require('../config/db');
 const { logKaydet, hareketKaydet } = require('../utils/logger');
 // 🧠 MERKEZİ HESAPLAMA MOTORU
-// ✅ YENİ: hesaplaKumulatifDetayli eklendi
 const { hesaplaBuYil, hesaplaKumulatif, hesaplaKumulatifDetayli } = require('../utils/hakedisHesapla'); 
 const PDFDocument = require('pdfkit'); 
 const fs = require('fs'); 
@@ -215,13 +214,11 @@ exports.izinDurumRaporu = async (req, res) => {
                 p.ayrilma_tarihi, 
                 p.aktif, 
                 b.birim_adi, 
-                
                 (
                     SELECT COALESCE(SUM(gun_sayisi), 0) 
                     FROM izin_gecmis_bakiyeler 
                     WHERE personel_id = p.personel_id
                 ) as devreden_izin, 
-
                 COALESCE(SUM(it.kac_gun), 0) as bu_yil_kullanilan 
             FROM personeller p 
             LEFT JOIN birimler b ON p.birim_id = b.birim_id 
@@ -257,7 +254,7 @@ exports.izinDurumRaporu = async (req, res) => {
 };
 
 // ============================================================
-// 🟢 MODAL İÇİN GÜNCELLENEN DETAY FONKSİYONU (YENİ LİSTE EKLENDİ)
+// 🟢 MODAL İÇİN DETAY FONKSİYONU
 // ============================================================
 exports.getPersonelIzinDetay = async (req, res) => {
     const { id } = req.params; 
@@ -275,8 +272,7 @@ exports.getPersonelIzinDetay = async (req, res) => {
         let toplamKullanilan = 0;
         izinRes.rows.forEach(izin => { if (izin.izin_turu === 'YILLIK İZİN') toplamKullanilan += parseInt(izin.kac_gun); });
         
-        // ✅ YENİ: Detaylı hesaplama fonksiyonunu çağırıyoruz
-        // Bu bize hem toplamı hem de yıl yıl listeyi verecek
+        // Detaylı hesaplama
         const hakedisDetay = await hesaplaKumulatifDetayli(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
         
         let manuelToplam = 0;
@@ -290,14 +286,14 @@ exports.getPersonelIzinDetay = async (req, res) => {
             kullanilan: toplamKullanilan, 
             kalan: netKalan, 
             bu_yil_hak: buYilHak,
-            kumulatif_hak: hakedisDetay.toplam // Toplam değeri buradan alıyoruz
+            kumulatif_hak: hakedisDetay.toplam 
         };
 
         res.json({ 
             personel: personelVerisi, 
             gecmisBakiyeler: gecmisRes.rows, 
             izinler: izinRes.rows,
-            hakedisListesi: hakedisDetay.liste // ✅ YENİ LİSTE FRONTEND'E GİDİYOR
+            hakedisListesi: hakedisDetay.liste 
         });
 
     } catch (e) { 
@@ -351,7 +347,39 @@ exports.personelListesi = async (req, res) => {
 };
 
 // ============================================================
-// 📄 PDF ÇIKTILARI (GÜNCEL HESAPLAMA SİSTEMİ)
+// ✅ YENİ: ONAYLI/ONAYSIZ İZİN SİLME (ADMİN/İK/FİLO)
+// ============================================================
+exports.talepSil = async (req, res) => {
+    // 1. Yetki Kontrolü
+    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Bu işlem için yetkiniz yok.' });
+    }
+
+    const { id } = req.params; // Silinecek talep ID
+
+    try {
+        // 2. Silme İşlemi (RETURNING * ile silinen veriyi alıyoruz)
+        const result = await pool.query("DELETE FROM izin_talepleri WHERE talep_id = $1 RETURNING *", [id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ mesaj: 'Talep bulunamadı.' });
+        }
+
+        // 3. Loglama
+        const silinen = result.rows[0];
+        await hareketKaydet(id, req.user.id, 'SİLME', `İzin silindi. (${silinen.kac_gun} Gün iade edildi)`);
+        await logKaydet(req.user.id, 'İZİN_SİLME', `Talep ID: ${id} silindi. Personel ID: ${silinen.personel_id}`, req);
+
+        res.json({ mesaj: 'İzin başarıyla silindi ve bakiye güncellendi.' });
+
+    } catch (err) {
+        console.error("Silme Hatası:", err);
+        res.status(500).json({ mesaj: 'Silme işlemi sırasında hata oluştu.' });
+    }
+};
+
+// ============================================================
+// 📄 PDF ÇIKTILARI
 // ============================================================
 
 // 1. TOPLU PDF
@@ -390,7 +418,6 @@ exports.topluPdfRaporu = async (req, res) => {
             const p = personeller[i];
             const kalan = await hesaplaBakiye(p.personel_id);
             const buYilHak = await hesaplaBuYil(p.personel_id);
-            // MERKEZİ HESAPLAMA
             const omurBoyu = await hesaplaKumulatif(p.ise_giris_tarihi, p.dogum_tarihi, p.ayrilma_tarihi, p.aktif);
 
             const giris = new Date(p.ise_giris_tarihi);
