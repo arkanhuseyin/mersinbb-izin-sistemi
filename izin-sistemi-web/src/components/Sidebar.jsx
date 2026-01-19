@@ -1,5 +1,6 @@
-import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck, MessageSquare } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+// ✅ DÜZELTME: 'Zap' ikonunu buraya ekledik
+import { LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, FileBarChart, ShieldCheck, MessageSquare, Zap } from 'lucide-react';
 import logoMbb from '../assets/logombb.png'; 
 
 export default function Sidebar() {
@@ -31,19 +32,16 @@ export default function Sidebar() {
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
 
-        // 3. Veritabanı kaydı varsa oradan bak
-        if (permission) {
-            return permission.goruntule === true; 
+        // 3. Eğer modül yetkisi varsa ve görüntüleme izni true ise göster
+        return permission && permission.goruntule === true;
+    };
+
+    const handleLogout = () => {
+        if(confirm('Çıkış yapmak istediğinize emin misiniz?')) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            navigate('/login');
         }
-
-        // 4. Varsayılanlar (Veritabanında kayıt yoksa)
-        if (modulKey === 'dashboard') return true;
-        if (modulKey === 'izin_talep' && user?.rol === 'personel') return true;
-        
-        // ✅ Öneri/Talep herkese açık olmalı (Varsayılan)
-        if (modulKey === 'talep_yonetim') return true;
-
-        return false; 
     };
 
     const menuItems = [
@@ -57,33 +55,26 @@ export default function Sidebar() {
             title: 'Yeni İzin Talebi', 
             path: '/dashboard/create-leave', 
             icon: <PlusCircle size={20}/>, 
-            show: checkPermission('izin_talep') 
+            show: checkPermission('izin_talebi') 
         },
         { 
-            title: 'İzin Talepleri', 
+            title: 'İzin Onayları', 
             path: '/dashboard/leaves', 
             icon: <FileText size={20}/>, 
-            show: checkPermission('izin_onay') || checkPermission('izin_talep') 
+            show: checkPermission('izin_onay') 
         },
         { 
-            title: 'İzin Takip Raporu', 
-            path: '/dashboard/reports', 
-            icon: <FileBarChart size={20}/>, 
-            show: checkPermission('rapor') 
+            title: 'Talep Yönetimi', 
+            path: '/dashboard/requests', 
+            icon: <MessageSquare size={20}/>, 
+            show: checkPermission('talep_yonetim') 
         },
+        // ✅ YENİ MENÜ: İK HIZLI GİRİŞ (Sadece Admin/İK/Filo)
         {
-            title: 'İzin Talep Et v2',
+            title: 'İK Hızlı Giriş',
             path: '/dashboard/hr-entry',
             icon: <Zap size={20}/>,
-            // Sadece Admin, İK veya Filo görebilir
             show: ['admin', 'ik', 'filo'].includes(user?.rol)
-        },
-        // ✅ YENİ EKLENEN TALEP MODÜLÜ
-        {
-            title: 'Öneri / Talep',
-            path: '/dashboard/requests',
-            icon: <MessageSquare size={20}/>,
-            show: checkPermission('talep_yonetim') // Herkese açık yaptık
         },
         { 
             title: 'Personel Yönetimi', 
@@ -92,68 +83,49 @@ export default function Sidebar() {
             show: checkPermission('personel_yonetim') 
         },
         { 
-            title: 'Ayarlar', 
-            path: '/dashboard/settings', 
-            icon: <Settings size={20}/>, 
-            show: checkPermission('ayarlar') 
+            title: 'Raporlar', 
+            path: '/dashboard/reports', 
+            icon: <FileBarChart size={20}/>, 
+            show: checkPermission('raporlar') 
         },
         { 
             title: 'Yetkilendirme', 
             path: '/dashboard/yetkilendirme', 
             icon: <ShieldCheck size={20}/>, 
-            show: checkPermission('yetkilendirme') 
+            show: user?.rol === 'admin' 
+        },
+        { 
+            title: 'Ayarlar', 
+            path: '/dashboard/settings', 
+            icon: <Settings size={20}/>, 
+            show: true 
         }
     ];
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/');
-    };
-
     return (
-        <div className="d-flex flex-column h-100 bg-white border-end shadow-sm" 
-             style={{width: '280px', minWidth:'280px', transition: 'all 0.3s ease', fontFamily: "'Inter', sans-serif"}}>
-            
-            <style>{`
-                .sidebar-btn:hover { background-color: #f1f5f9 !important; color: #1e293b !important; transform: translateX(5px); }
-                .sidebar-active:hover { transform: none !important; }
-                .custom-scroll::-webkit-scrollbar { width: 5px; }
-                .custom-scroll::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-            `}</style>
-
-            {/* HEADER */}
-            <div className="p-4 pb-2 text-center border-bottom border-light bg-light bg-opacity-25">
-                <div className="mb-3 d-inline-block p-2 rounded-circle bg-white shadow-sm border">
-                    <img src={logoMbb} alt="MBB Logo" style={{width: '70px', height: '70px', objectFit:'contain'}} />
-                </div>
-                <div>
-                    <h6 className="fw-bold text-dark m-0" style={{letterSpacing:'-0.5px'}}>Mersin Büyükşehir Belediyesi</h6>
-                    <div className="my-1" style={{height:'2px', width:'40px', background:'#3b82f6', margin:'0 auto'}}></div>
-                    <p className="fw-semibold text-secondary m-0" style={{fontSize:'12px'}}>Ulaşım Dairesi Başkanlığı</p>
-                    <p className="text-muted m-0 small opacity-75" style={{fontSize:'11px'}}>Toplu Taşıma Şube Müdürlüğü</p>
-                </div>
+        <div className="bg-white h-100 d-flex flex-column shadow border-end" style={{width: '260px', zIndex: 1000}}>
+            {/* LOGO ALANI */}
+            <div className="p-4 d-flex flex-column align-items-center border-bottom bg-light bg-opacity-25">
+                <img src={logoMbb} alt="Mersin BB" className="img-fluid mb-3 drop-shadow" style={{maxWidth: '80px'}} />
+                <h5 className="fw-bold text-primary m-0 text-center" style={{fontSize:'16px', letterSpacing:'-0.5px'}}>ULAŞIM DAİRESİ</h5>
+                <small className="text-muted text-uppercase" style={{fontSize:'10px', letterSpacing:'1px'}}>Personel Yönetim</small>
             </div>
 
             {/* MENÜ LİSTESİ */}
-            <div className="flex-grow-1 overflow-auto p-3 custom-scroll">
-                <div className="d-flex flex-column gap-2">
-                    <small className="text-uppercase fw-bold text-muted ps-3 mb-1" style={{fontSize:'10px', letterSpacing:'1px'}}>Menü</small>
-                    {menuItems.map((item, index) => item.show && (
-                        <button 
-                            key={index}
-                            onClick={() => navigate(item.path)}
-                            className={`btn text-start d-flex align-items-center gap-3 py-3 px-3 border-0 fw-medium ${location.pathname === item.path ? 'sidebar-active' : 'sidebar-btn'}`} 
-                            style={{
-                                borderRadius: '12px', 
-                                transition: 'all 0.2s ease',
-                                fontSize: '14px',
-                                ...(location.pathname === item.path ? activeStyle : inactiveStyle)
-                            }}
-                        >
-                            {item.icon}
-                            <span>{item.title}</span>
-                        </button>
+            <div className="flex-grow-1 overflow-auto py-3 px-3 custom-scrollbar">
+                <div className="nav flex-column gap-2">
+                    {menuItems.map((item, index) => (
+                        item.show && (
+                            <Link 
+                                key={index} 
+                                to={item.path} 
+                                className="nav-link d-flex align-items-center gap-3 px-3 py-3 rounded-3 fw-medium transition-all"
+                                style={location.pathname === item.path ? activeStyle : inactiveStyle}
+                            >
+                                {item.icon}
+                                <span style={{fontSize:'14px'}}>{item.title}</span>
+                            </Link>
+                        )
                     ))}
                 </div>
             </div>
@@ -174,7 +146,8 @@ export default function Sidebar() {
                 <button onClick={handleLogout} 
                         className="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-3 border-0 bg-opacity-10 text-danger fw-bold hover-shadow"
                         style={{fontSize:'13px', backgroundColor: '#fee2e2'}}>
-                    <LogOut size={16}/> Çıkış Yap
+                    <LogOut size={16} />
+                    Güvenli Çıkış
                 </button>
             </div>
         </div>
