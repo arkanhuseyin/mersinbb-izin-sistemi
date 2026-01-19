@@ -180,7 +180,7 @@ export default function Sidebar() {
 
             {/* FOOTER */}
             <div className="p-3 mt-auto bg-light bg-opacity-50 border-top">
-                <button onClick={handleLogout} className="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-3 border-0 bg-opacity-10 text-danger fw-bold hover-shadow">
+                <button onClick={handleLogout} className="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-3 border-0 fw-bold shadow-sm text-white">
                     <LogOut size={16}/> Çıkış Yap
                 </button>
             </div>

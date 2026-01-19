@@ -28,6 +28,10 @@ export default function DashboardHome() {
     const [talepStats, setTalepStats] = useState({ toplam: 0, acik: 0, cozuldu: 0, iptal: 0 });
     const [sonTalepler, setSonTalepler] = useState([]);
 
+    // --- KIYAFET/LOJİSTİK STATE ---
+    const [kiyafetStats, setKiyafetStats] = useState([]);
+    const [kiyafetOzet, setKiyafetOzet] = useState({ tshirt: 0, pantolon: 0, ayakkabi: 0, mont: 0 });
+
     // --- GENEL AYARLAR ---
     const [kullanici, setKullanici] = useState({ ad: 'Misafir', soyad: '' });
     const [darkMode, setDarkMode] = useState(false);
@@ -44,7 +48,6 @@ export default function DashboardHome() {
     };
     const current = darkMode ? THEME.dark : THEME.light;
     const COLORS = { primary: '#3b82f6', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
-    const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
     // --- VERİ ÇEKME İŞLEMLERİ ---
     useEffect(() => {
@@ -55,9 +58,34 @@ export default function DashboardHome() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // 1. PERSONEL SAYISI
+                // 1. PERSONEL SAYISI VE KIYAFET VERİLERİ (HER ZAMAN ÇEKİLİR)
                 const pRes = await axios.get(`${API_URL}/api/personel/liste`, { headers: { Authorization: `Bearer ${token}` } });
-                setPersonelSayisi(pRes.data.length);
+                const personeller = pRes.data;
+                setPersonelSayisi(personeller.length);
+
+                // KIYAFET VERİSİNİ HESAPLA (Gerçek Personel Verisinden)
+                if (activeModule === 'KIYAFET') {
+                    let counts = { tshirt: 0, pantolon: 0, ayakkabi: 0, mont: 0, gomlek: 0, suveter: 0 };
+                    
+                    personeller.forEach(p => {
+                        if (p.tisort_beden) counts.tshirt++;
+                        if (p.pantolon_beden || p.beden) counts.pantolon++; // Veritabanı sütun adına göre değişebilir
+                        if (p.ayakkabi_no) counts.ayakkabi++;
+                        if (p.mont_beden) counts.mont++;
+                        if (p.gomlek_beden) counts.gomlek++;
+                        if (p.suveter_beden) counts.suveter++;
+                    });
+
+                    setKiyafetOzet(counts);
+                    setKiyafetStats([
+                        { name: 'T-Shirt', v: counts.tshirt },
+                        { name: 'Pantolon', v: counts.pantolon }, // Pantolon verisi yoksa 0 gelir
+                        { name: 'Ayakkabı', v: counts.ayakkabi },
+                        { name: 'Mont', v: counts.mont },
+                        { name: 'Gömlek', v: counts.gomlek },
+                        { name: 'Süveter', v: counts.suveter }
+                    ]);
+                }
 
                 // 2. İZİN MODÜLÜ
                 if (activeModule === 'IZIN') {
@@ -193,7 +221,7 @@ export default function DashboardHome() {
                     </div>
                 </div>
 
-                {/* BANNER (Her Modülde Aynı - Renk Değişir) */}
+                {/* BANNER */}
                 <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden fade-in-up position-relative" 
                      style={{ background: activeModule === 'TALEP' ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : activeModule === 'KIYAFET' ? 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' : current.accentGradient, color: '#fff', animationDelay: '100ms' }}>
                     <div className="position-absolute top-0 end-0 p-5 opacity-10"><Sparkles size={200} strokeWidth={0.5} /></div>
@@ -217,18 +245,18 @@ export default function DashboardHome() {
                     </div>
                 </div>
 
-                {/* --- 1. İZİN MODÜLÜ İÇERİĞİ (GERÇEK VERİ) --- */}
+                {/* --- 1. İZİN MODÜLÜ İÇERİĞİ --- */}
                 {activeModule === 'IZIN' && (
                     <>
                         <div className="row g-3 mb-4">
                             <StatCard title="PERSONEL MEVCUDU" value={personelSayisi} icon={Users} color={COLORS.primary} delay="150ms" />
-                            {/* DÜZELTME: stats yerine izinStats kullanıldı */}
                             <StatCard title="TOPLAM BAŞVURU" value={izinStats.toplam} icon={FileCheck} color={COLORS.primary} delay="200ms" />
                             <StatCard title="ONAYLANAN İZİN" value={izinStats.onayli} icon={FileCheck} color={COLORS.success} delay="300ms" />
                             <StatCard title="BEKLEYEN TALEP" value={izinStats.bekleyen} icon={Clock} color={COLORS.warning} delay="400ms" />
                         </div>
 
                         <div className="row g-3">
+                            {/* Trend Grafiği */}
                             <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
                                 <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                                     <div className="card-header border-0 pt-3 ps-3 pe-3 bg-transparent d-flex justify-content-between align-items-center">
@@ -259,6 +287,7 @@ export default function DashboardHome() {
                                 </div>
                             </div>
 
+                            {/* Pasta Grafik */}
                             <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                                 <div className="card border-0 shadow-sm rounded-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                                     <div className="card-header border-0 pt-3 ps-3 bg-transparent">
@@ -267,7 +296,6 @@ export default function DashboardHome() {
                                     <div className="card-body position-relative p-2" style={{height: 250}}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
-                                                {/* DÜZELTME: stats yerine izinStats */}
                                                 <Pie data={[{name: 'Onaylı', value: izinStats.onayli}, {name: 'Bekleyen', value: izinStats.bekleyen}, {name: 'Red', value: izinStats.reddedilen}]} 
                                                      innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
                                                     <Cell fill={COLORS.success} /> <Cell fill={COLORS.warning} /> <Cell fill={COLORS.danger} />
@@ -277,7 +305,6 @@ export default function DashboardHome() {
                                             </PieChart>
                                         </ResponsiveContainer>
                                         <div className="position-absolute top-50 start-50 translate-middle text-center" style={{marginTop:'-15px'}}>
-                                            {/* DÜZELTME: stats yerine izinStats */}
                                             <h3 className="fw-bolder m-0" style={{color: current.text}}>{izinStats.toplam}</h3>
                                             <p className="small fw-bold text-uppercase m-0 opacity-50" style={{color: current.text, fontSize:'10px'}}>TOPLAM</p>
                                         </div>
@@ -315,7 +342,8 @@ export default function DashboardHome() {
                                                             {t.durum}
                                                         </span>
                                                     </td>
-                                                    <td>{new Date(t.tarih).toLocaleDateString('tr-TR')}</td>
+                                                    {/* ✅ TARİH DÜZELTME: Sadece geçerli tarih varsa göster */}
+                                                    <td>{t.tarih ? new Date(t.tarih).toLocaleDateString('tr-TR') : '-'}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -328,23 +356,45 @@ export default function DashboardHome() {
                     </>
                 )}
 
-                {/* --- 3. KIYAFET MODÜLÜ İÇERİĞİ --- */}
+                {/* --- 3. KIYAFET MODÜLÜ İÇERİĞİ (GERÇEK VERİ) --- */}
                 {activeModule === 'KIYAFET' && (
                     <>
                         <div className="row g-3 mb-4">
                             <StatCard title="TOPLAM PERSONEL" value={personelSayisi} icon={Users} color={COLORS.primary} delay="200ms" />
-                            <StatCard title="BEDEN DEĞİŞİM" value="0" icon={Shirt} color={COLORS.warning} delay="300ms" />
-                            <StatCard title="DAĞITILAN ÜRÜN" value="0" icon={Box} color={COLORS.success} delay="400ms" />
-                            <StatCard title="STOK UYARISI" value="0" icon={AlertTriangle} color={COLORS.danger} delay="500ms" />
+                            <StatCard title="DAĞITILAN KIYAFET" value={kiyafetOzet.tshirt + kiyafetOzet.pantolon + kiyafetOzet.ayakkabi + kiyafetOzet.mont} icon={Box} color={COLORS.success} delay="300ms" />
+                            <StatCard title="AYAKKABI İHTİYACI" value={kiyafetOzet.ayakkabi} icon={Shirt} color={COLORS.warning} delay="400ms" />
+                            <StatCard title="BEDEN GİRMEYEN" value={personelSayisi - (kiyafetOzet.tshirt > 0 ? kiyafetOzet.tshirt : 0)} icon={AlertTriangle} color={COLORS.danger} delay="500ms" />
                         </div>
                         <div className="row g-3">
-                            <div className="col-12">
-                                <div className="card border-0 shadow-sm rounded-4 p-5 h-100 glass-panel d-flex align-items-center justify-content-center" style={{ backgroundColor: current.cardBg }}>
-                                    <div className="text-center text-muted">
-                                        <Box size={64} className="mb-3 opacity-25"/>
-                                        <h5>Lojistik verileri hazırlanıyor...</h5>
-                                        <p className="small">Personel sayısına ({personelSayisi}) göre stok planlaması yapılabilir.</p>
+                            <div className="col-lg-8">
+                                <div className="card border-0 shadow-sm rounded-4 p-4 h-100 glass-panel" style={{ backgroundColor: current.cardBg }}>
+                                    <h6 className="fw-bold mb-3" style={{color: current.text}}>Beden/Stok Dağılımı (Gerçek Veri)</h6>
+                                    <div style={{height: '350px'}}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <BarChart data={kiyafetStats}>
+                                                <XAxis dataKey="name" tick={{fill: current.subText}}/>
+                                                <YAxis tick={{fill: current.subText}}/>
+                                                <Tooltip contentStyle={{backgroundColor: current.cardBg, border:'none', borderRadius:'8px'}}/>
+                                                <Bar dataKey="v" fill="#3b82f6" radius={[10, 10, 0, 0]} barSize={40} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </div>
+                                </div>
+                            </div>
+                            <div className="col-lg-4">
+                                <div className="card border-0 shadow-sm rounded-4 p-4 h-100 bg-gradient-primary text-white" style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)'}}>
+                                    <h5 className="fw-bold">Lojistik Özeti</h5>
+                                    <p className="opacity-75">Sistemdeki personellerin beden bilgileri baz alınmıştır.</p>
+                                    <hr className="bg-white opacity-25"/>
+                                    
+                                    <div className="d-flex justify-content-between mb-2"><span>Ayakkabı Alan</span><strong>{kiyafetOzet.ayakkabi}</strong></div>
+                                    <div className="progress bg-white bg-opacity-25" style={{height: '6px'}}><div className="progress-bar bg-white" style={{width: `${(kiyafetOzet.ayakkabi / personelSayisi) * 100}%`}}></div></div>
+                                    
+                                    <div className="d-flex justify-content-between mt-4 mb-2"><span>Mont Alan</span><strong>{kiyafetOzet.mont}</strong></div>
+                                    <div className="progress bg-white bg-opacity-25" style={{height: '6px'}}><div className="progress-bar bg-white" style={{width: `${(kiyafetOzet.mont / personelSayisi) * 100}%`}}></div></div>
+
+                                    <div className="d-flex justify-content-between mt-4 mb-2"><span>T-Shirt Alan</span><strong>{kiyafetOzet.tshirt}</strong></div>
+                                    <div className="progress bg-white bg-opacity-25" style={{height: '6px'}}><div className="progress-bar bg-white" style={{width: `${(kiyafetOzet.tshirt / personelSayisi) * 100}%`}}></div></div>
                                 </div>
                             </div>
                         </div>
