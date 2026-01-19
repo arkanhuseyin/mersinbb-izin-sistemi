@@ -1,29 +1,41 @@
 import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Sidebar from './components/Sidebar';
+import Header from './components/Header'; // ✅ Yeni Header Eklendi
+import { ModuleProvider } from './context/ModuleContext'; // ✅ Context Eklendi
 
-// --- SAYFALARIMIZ ---
-import DashboardHome from './pages/DashboardHome'; // Grafikli Ana Ekran (Kokpit)
-import LeaveRequests from './pages/LeaveRequests'; // İzin Listesi ve Onaylar
-import ProfilOnay from './pages/ProfilOnay';       // Profil Değişiklik Onayları
-import CreateLeave from './pages/CreateLeave';     // Yeni İzin Talebi Formu
-import Settings from './pages/Settings';           // Ayarlar ve Personel Yönetimi
-import LeaveReports from './pages/LeaveReports';   // İzin Takip Raporu (Excel İndirme)
-import Yetkilendirme from './pages/Yetkilendirme'; // Yetkilendirme
-import TalepYonetimi from './pages/TalepYonetimi'; // ✅ Talep Yönetimi
-import HrLeaveEntry from './pages/HrLeaveEntry';   // ik izin onayı
-// --- LAYOUT BİLEŞENİ ---
+// --- SAYFALAR ---
+import DashboardHome from './pages/DashboardHome'; 
+import LeaveRequests from './pages/LeaveRequests'; 
+import ProfilOnay from './pages/ProfilOnay';       
+import CreateLeave from './pages/CreateLeave';     
+import Settings from './pages/Settings';           
+import LeaveReports from './pages/LeaveReports';   
+import Yetkilendirme from './pages/Yetkilendirme'; 
+import TalepYonetimi from './pages/TalepYonetimi'; 
+import HrLeaveEntry from './pages/HrLeaveEntry';
+
 const DashboardLayout = () => (
-  <div className="d-flex vh-100 vw-100 overflow-hidden">
-    {/* Sol Menü (Sabit) */}
-    <div className="flex-shrink-0" style={{ width: '260px' }}>
-      <Sidebar />
-    </div>
+  // Dikey yerleşim: Üstte Header, Altta (Sidebar + İçerik)
+  <div className="d-flex flex-column vh-100 vw-100 overflow-hidden bg-light">
     
-    {/* Sağ İçerik (Kaydırılabilir) */}
-    <div className="flex-grow-1 overflow-auto bg-light h-100 w-100">
-      <div className="container-fluid p-0"> {/* Padding'i sayfa içlerinde veriyoruz */}
-        <Outlet /> 
+    {/* Üst Bar (Header) */}
+    <div className="flex-shrink-0 w-100">
+      <Header />
+    </div>
+
+    {/* Alt Kısım */}
+    <div className="d-flex flex-grow-1 overflow-hidden">
+      {/* Sol Sidebar */}
+      <div className="flex-shrink-0 h-100" style={{ width: '260px' }}>
+        <Sidebar />
+      </div>
+      
+      {/* Sağ İçerik Alanı */}
+      <div className="flex-grow-1 overflow-auto h-100 w-100 position-relative">
+        <div className="container-fluid p-0"> 
+          <Outlet /> 
+        </div>
       </div>
     </div>
   </div>
@@ -31,34 +43,27 @@ const DashboardLayout = () => (
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        {/* Giriş Yönlendirmesi */}
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="/login" element={<Login />} />
-        {/* Yönetim Paneli (İç İçe Rotalar) */}
-        <Route path="/dashboard" element={<DashboardLayout />}>   
-            {/* 1. Ana Sayfa */}
-            <Route path="home" element={<DashboardHome />} /> 
-            {/* 2. İzin Listesi (Onay/Red) */}
-            <Route path="leaves" element={<LeaveRequests />} />
-            {/* 3. Yeni İzin Talebi */}
-            <Route path="create-leave" element={<CreateLeave />} />
-            {/* 4. Profil Onayları (Admin/İK/Filo) */}
-            <Route path="profile-requests" element={<ProfilOnay />} />
-            {/* 5. İzin Takip Raporu (Admin/İK) */}
-            <Route path="reports" element={<LeaveReports />} />
-            {/* 6. Ayarlar ve Personel Yönetimi */}
-            <Route path="settings" element={<Settings />} />
-            {/* 7. Yetkilendirme Paneli */}
-            <Route path="yetkilendirme" element={<Yetkilendirme />} /> {/* <--- 2. YENİ EKLENEN ROTA */}
-			      {/* 8. Öneri Talep Paneli */}
-            <Route path="requests" element={<TalepYonetimi />} /> {/* <--- 2. YENİ EKLENEN ROTA */}
-            {/* 9. YENİ ROTA: İK Hızlı Giriş */}
-            <Route path="hr-entry" element={<HrLeaveEntry />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    // ✅ Tüm uygulamayı Provider ile sarmaladık
+    <ModuleProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Navigate to="/login" />} />
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/dashboard" element={<DashboardLayout />}>   
+              <Route path="home" element={<DashboardHome />} /> 
+              <Route path="leaves" element={<LeaveRequests />} />
+              <Route path="create-leave" element={<CreateLeave />} />
+              <Route path="profile-requests" element={<ProfilOnay />} />
+              <Route path="reports" element={<LeaveReports />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="yetkilendirme" element={<Yetkilendirme />} /> 
+              <Route path="requests" element={<TalepYonetimi />} /> 
+              <Route path="hr-entry" element={<HrLeaveEntry />} /> 
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ModuleProvider>
   );
 }
 
