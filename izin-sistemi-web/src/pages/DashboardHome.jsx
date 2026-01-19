@@ -15,7 +15,7 @@ export default function DashboardHome() {
     const { activeModule } = useModule();
     
     // --- GENEL STATE ---
-    const [personelSayisi, setPersonelSayisi] = useState(0); // Gerçek personel sayısı
+    const [personelSayisi, setPersonelSayisi] = useState(0); 
     const [loading, setLoading] = useState(true);
 
     // --- İZİN MODÜLÜ STATE ---
@@ -55,12 +55,11 @@ export default function DashboardHome() {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // 1. HER MODÜL İÇİN ORTAK: PERSONEL SAYISI (GERÇEK)
-                // Personel sayısı hem Lojistik hem İzin ekranında önemli
+                // 1. PERSONEL SAYISI
                 const pRes = await axios.get(`${API_URL}/api/personel/liste`, { headers: { Authorization: `Bearer ${token}` } });
                 setPersonelSayisi(pRes.data.length);
 
-                // 2. İZİN MODÜLÜ SEÇİLİYSE
+                // 2. İZİN MODÜLÜ
                 if (activeModule === 'IZIN') {
                     const res = await axios.get(`${API_URL}/api/izin/listele`, { headers: { Authorization: `Bearer ${token}` } });
                     const data = res.data;
@@ -72,13 +71,11 @@ export default function DashboardHome() {
                         reddedilen: data.filter(x => x.durum === 'REDDEDILDI' || x.durum === 'IPTAL_EDILDI').length
                     });
 
-                    // Grafikler için veri hazırlığı
                     const turMap = {};
                     data.forEach(d => { turMap[d.izin_turu] = (turMap[d.izin_turu] || 0) + 1; });
                     setIzinTurleri(Object.keys(turMap).map(key => ({ name: key, value: turMap[key] })));
                     setSonHareketler([...data].reverse().slice(0, 5));
 
-                    // Aylık Trend
                     const currentYear = new Date().getFullYear();
                     const monthCounts = new Array(12).fill(0);
                     data.forEach(item => {
@@ -92,9 +89,8 @@ export default function DashboardHome() {
                     setAylikData(aylarTR.map((ayAdi, index) => ({ name: ayAdi, talep: monthCounts[index] })));
                 }
 
-                // 3. TALEP MODÜLÜ SEÇİLİYSE (Gerçek veriye bağlanıyor)
+                // 3. TALEP MODÜLÜ
                 if (activeModule === 'TALEP') {
-                    // Eğer talep listeleme endpointin henüz yoksa burası boş array döner ve 0 gösterir (YALAN SÖYLEMEZ)
                     try {
                         const talepRes = await axios.get(`${API_URL}/api/talep/listele`, { headers: { Authorization: `Bearer ${token}` } });
                         const tData = talepRes.data || [];
@@ -106,15 +102,9 @@ export default function DashboardHome() {
                         });
                         setSonTalepler([...tData].reverse().slice(0, 5));
                     } catch (e) {
-                        console.warn("Talep API henüz hazır değil veya veri yok, 0 gösteriliyor.");
                         setTalepStats({ toplam: 0, acik: 0, cozuldu: 0, iptal: 0 });
                         setSonTalepler([]);
                     }
-                }
-
-                // 4. KIYAFET MODÜLÜ (Veritabanında henüz tablo yoksa 0 göster)
-                if (activeModule === 'KIYAFET') {
-                    // Şimdilik stok olmadığı için 0. İleride /api/kiyafet/stok endpointi buraya bağlanacak.
                 }
 
             } catch (err) {
@@ -125,7 +115,7 @@ export default function DashboardHome() {
         };
 
         fetchData();
-    }, [activeModule, lang]); // Modül değişince yeniden çalışır
+    }, [activeModule, lang]);
 
     const getGreeting = () => {
         const h = new Date().getHours();
@@ -134,7 +124,6 @@ export default function DashboardHome() {
         return 'İyi Geceler';
     };
 
-    // --- BİLEŞENLER ---
     // eslint-disable-next-line react/prop-types
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
@@ -233,13 +222,13 @@ export default function DashboardHome() {
                     <>
                         <div className="row g-3 mb-4">
                             <StatCard title="PERSONEL MEVCUDU" value={personelSayisi} icon={Users} color={COLORS.primary} delay="150ms" />
-                            <StatCard title="TOPLAM BAŞVURU" value={stats.toplam} icon={FileCheck} color={COLORS.primary} delay="200ms" />
-                            <StatCard title="ONAYLANAN İZİN" value={stats.onayli} icon={FileCheck} color={COLORS.success} delay="300ms" />
-                            <StatCard title="BEKLEYEN TALEP" value={stats.bekleyen} icon={Clock} color={COLORS.warning} delay="400ms" />
+                            {/* DÜZELTME: stats yerine izinStats kullanıldı */}
+                            <StatCard title="TOPLAM BAŞVURU" value={izinStats.toplam} icon={FileCheck} color={COLORS.primary} delay="200ms" />
+                            <StatCard title="ONAYLANAN İZİN" value={izinStats.onayli} icon={FileCheck} color={COLORS.success} delay="300ms" />
+                            <StatCard title="BEKLEYEN TALEP" value={izinStats.bekleyen} icon={Clock} color={COLORS.warning} delay="400ms" />
                         </div>
 
                         <div className="row g-3">
-                            {/* Trend Grafiği */}
                             <div className="col-xl-8 col-lg-7 fade-in-up" style={{animationDelay: '600ms'}}>
                                 <div className="card border-0 shadow-sm rounded-4 mb-3 glass-panel" style={{ backgroundColor: current.cardBg }}>
                                     <div className="card-header border-0 pt-3 ps-3 pe-3 bg-transparent d-flex justify-content-between align-items-center">
@@ -270,7 +259,6 @@ export default function DashboardHome() {
                                 </div>
                             </div>
 
-                            {/* Pasta Grafik */}
                             <div className="col-xl-4 col-lg-5 fade-in-up" style={{animationDelay: '700ms'}}>
                                 <div className="card border-0 shadow-sm rounded-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                                     <div className="card-header border-0 pt-3 ps-3 bg-transparent">
@@ -279,7 +267,8 @@ export default function DashboardHome() {
                                     <div className="card-body position-relative p-2" style={{height: 250}}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
-                                                <Pie data={[{name: 'Onaylı', value: stats.onayli}, {name: 'Bekleyen', value: stats.bekleyen}, {name: 'Red', value: stats.reddedilen}]} 
+                                                {/* DÜZELTME: stats yerine izinStats */}
+                                                <Pie data={[{name: 'Onaylı', value: izinStats.onayli}, {name: 'Bekleyen', value: izinStats.bekleyen}, {name: 'Red', value: izinStats.reddedilen}]} 
                                                      innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value" stroke="none">
                                                     <Cell fill={COLORS.success} /> <Cell fill={COLORS.warning} /> <Cell fill={COLORS.danger} />
                                                 </Pie>
@@ -288,7 +277,8 @@ export default function DashboardHome() {
                                             </PieChart>
                                         </ResponsiveContainer>
                                         <div className="position-absolute top-50 start-50 translate-middle text-center" style={{marginTop:'-15px'}}>
-                                            <h3 className="fw-bolder m-0" style={{color: current.text}}>{stats.toplam}</h3>
+                                            {/* DÜZELTME: stats yerine izinStats */}
+                                            <h3 className="fw-bolder m-0" style={{color: current.text}}>{izinStats.toplam}</h3>
                                             <p className="small fw-bold text-uppercase m-0 opacity-50" style={{color: current.text, fontSize:'10px'}}>TOPLAM</p>
                                         </div>
                                     </div>
@@ -298,7 +288,7 @@ export default function DashboardHome() {
                     </>
                 )}
 
-                {/* --- 2. TALEP MODÜLÜ İÇERİĞİ (GERÇEK VERİ VEYA 0) --- */}
+                {/* --- 2. TALEP MODÜLÜ İÇERİĞİ --- */}
                 {activeModule === 'TALEP' && (
                     <>
                         <div className="row g-3 mb-4">
@@ -338,7 +328,7 @@ export default function DashboardHome() {
                     </>
                 )}
 
-                {/* --- 3. KIYAFET MODÜLÜ İÇERİĞİ (GERÇEK VERİ: PERSONEL SAYISI) --- */}
+                {/* --- 3. KIYAFET MODÜLÜ İÇERİĞİ --- */}
                 {activeModule === 'KIYAFET' && (
                     <>
                         <div className="row g-3 mb-4">
@@ -366,8 +356,7 @@ export default function DashboardHome() {
             {/* FOOTER */}
             <footer className="text-center py-4 opacity-50 fade-in-up mt-auto" style={{ animationDelay: '900ms', color: current.subText, fontSize: '11px', borderTop: `1px solid ${current.border}` }}>
                 <p className="m-0 fw-bold">MERSİN BÜYÜKŞEHİR BELEDİYESİ</p>
-                <p className="m-0">Toplu Taşıma Şube Müdürlüğü - </p>
-                <p className="m-0">Hüseyin Arkan Tarafından Hazırlanmıştır. © 2026</p>
+                <p className="m-0">Toplu Taşıma Şube Müdürlüğü - Developed by Hüseyin Arkan © 2026</p>
             </footer>
         </div>
     );
