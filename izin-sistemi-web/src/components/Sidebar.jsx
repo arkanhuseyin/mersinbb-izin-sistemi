@@ -1,25 +1,87 @@
-import { useLocation, Link } from 'react-router-dom';
-import { useModule } from '../context/ModuleContext'; // ✅ Context Eklendi
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useModule } from '../context/ModuleContext';
 import { 
-    LayoutDashboard, FileText, UserCog, Settings, PlusCircle, 
-    FileBarChart, ShieldCheck, MessageSquare, Zap, Shirt, Home
+    LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, 
+    FileBarChart, ShieldCheck, MessageSquare, Zap, Shirt, Home, ChevronDown, ChevronRight, Menu
 } from 'lucide-react';
 import logoMbb from '../assets/logombb.png'; 
 
 export default function Sidebar() {
+    const navigate = useNavigate();
     const location = useLocation();
-    const { activeModule } = useModule(); // ✅ Aktif Modülü Alıyoruz
-    
+    const { activeModule } = useModule();
+    const [openMenus, setOpenMenus] = useState({}); // Açık menüleri tutar
+
     let user = null;
     try { user = JSON.parse(localStorage.getItem('user')); } catch (e) {}
 
-    const activeStyle = {
-        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
-        color: '#fff',
-        boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)'
-    };
+    // --- MENÜ YAPILANDIRMASI ---
+    const getMenuItems = () => {
+        const items = [];
 
-    const inactiveStyle = { color: '#64748b', background: 'transparent' };
+        // 1. GENEL MENÜLER (HER YERDE)
+        items.push({
+            title: 'Ana Sayfa',
+            path: '/dashboard/home',
+            icon: <Home size={20}/>,
+            modules: ['ALL']
+        });
+
+        // 2. İZİN MODÜLÜ
+        if (activeModule === 'IZIN') {
+            items.push({
+                title: 'İzin İşlemleri',
+                icon: <FileText size={20}/>,
+                modules: ['IZIN'],
+                subItems: [
+                    { title: 'Yeni İzin Talebi', path: '/dashboard/create-leave', icon: <PlusCircle size={16}/>, show: checkPermission('izin_talep') },
+                    { title: 'İzin Onayları', path: '/dashboard/leaves', icon: <FileText size={16}/>, show: checkPermission('izin_onay') },
+                    { title: 'İK Hızlı Giriş', path: '/dashboard/hr-entry', icon: <Zap size={16}/>, show: ['admin', 'ik', 'filo'].includes(user?.rol) },
+                    { title: 'Raporlar', path: '/dashboard/reports', icon: <FileBarChart size={16}/>, show: checkPermission('raporlar') }
+                ]
+            });
+        }
+
+        // 3. TALEP MODÜLÜ
+        if (activeModule === 'TALEP') {
+            items.push({
+                title: 'Talep Yönetimi',
+                path: '/dashboard/requests',
+                icon: <MessageSquare size={20}/>,
+                modules: ['TALEP'],
+                show: checkPermission('talep_yonetim')
+            });
+        }
+
+        // 4. KIYAFET (LOJİSTİK) MODÜLÜ
+        if (activeModule === 'KIYAFET') {
+            items.push({
+                title: 'Lojistik İşlemleri',
+                icon: <Shirt size={20}/>,
+                modules: ['KIYAFET'],
+                subItems: [
+                    { title: 'Stok Durumu', path: '/dashboard/home', icon: <FileBarChart size={16}/>, show: true }, // Geçici path
+                    { title: 'Kıyafet Talepleri', path: '/dashboard/settings', icon: <Shirt size={16}/>, show: true } // Geçici path
+                ]
+            });
+        }
+
+        // 5. YÖNETİM (ORTAK)
+        const yonetimSubItems = [];
+        if (checkPermission('personel_yonetim')) yonetimSubItems.push({ title: 'Personel Listesi', path: '/dashboard/profile-requests', icon: <UserCog size={16}/> });
+        if (user?.rol === 'admin') yonetimSubItems.push({ title: 'Yetkilendirme', path: '/dashboard/yetkilendirme', icon: <ShieldCheck size={16}/> });
+        yonetimSubItems.push({ title: 'Sistem Ayarları', path: '/dashboard/settings', icon: <Settings size={16}/> });
+
+        items.push({
+            title: 'Yönetim Paneli',
+            icon: <Settings size={20}/>,
+            modules: ['ALL'],
+            subItems: yonetimSubItems
+        });
+
+        return items;
+    };
 
     const checkPermission = (modulKey) => {
         if (user?.rol === 'admin') return true;
@@ -27,132 +89,100 @@ export default function Sidebar() {
         return permission && permission.goruntule === true;
     };
 
-    // --- MENÜ YAPILANDIRMASI (Ağaç Yapısı) ---
-    // modules: Hangi modüllerde görüneceğini belirler ['IZIN', 'TALEP', 'KIYAFET']
-    // Eğer modules: ['ALL'] ise hepsinde görünür.
-    
-    const allMenuItems = [
-        // --- 1. ORTAK MENÜLER ---
-        { 
-            title: 'Genel Bakış', 
-            path: '/dashboard/home', 
-            icon: <Home size={20}/>, 
-            show: true,
-            modules: ['ALL'] 
-        },
+    const toggleMenu = (title) => {
+        setOpenMenus(prev => ({ ...prev, [title]: !prev[title] }));
+    };
 
-        // --- 2. İZİN MODÜLÜ MENÜLERİ ---
-        { 
-            title: 'Yeni İzin Talebi', 
-            path: '/dashboard/create-leave', 
-            icon: <PlusCircle size={20}/>, 
-            show: checkPermission('izin_talebi'),
-            modules: ['IZIN'] 
-        },
-        { 
-            title: 'İzin Onayları', 
-            path: '/dashboard/leaves', 
-            icon: <FileText size={20}/>, 
-            show: checkPermission('izin_onay'),
-            modules: ['IZIN']
-        },
-        {
-            title: 'İK İZİN TALEBİ',
-            path: '/dashboard/hr-entry',
-            icon: <Zap size={20}/>,
-            show: ['admin', 'ik', 'filo'].includes(user?.rol),
-            modules: ['IZIN']
-        },
-        { 
-            title: 'İzin Takip Raporu', 
-            path: '/dashboard/reports', 
-            icon: <FileBarChart size={20}/>, 
-            show: checkPermission('raporlar'),
-            modules: ['IZIN']
-        },
-
-        // --- 3. TALEP MODÜLÜ MENÜLERİ ---
-        { 
-            title: 'Öneri / Şikayet / Talep Ekranı', 
-            path: '/dashboard/requests', 
-            icon: <MessageSquare size={20}/>, 
-            show: checkPermission('talep_yonetim'),
-            modules: ['TALEP']
-        },
-
-        // --- 4. KIYAFET MODÜLÜ MENÜLERİ ---
-        { 
-            title: 'Kıyafet Ayarları', 
-            path: '/dashboard/settings', // Şimdilik settings içinde
-            icon: <Shirt size={20}/>, 
-            show: true,
-            modules: ['KIYAFET']
-        },
-
-        // --- 5. YÖNETİM (Her Modülde Altta Görünsün) ---
-        { 
-            title: 'Personel Yönetimi', 
-            path: '/dashboard/profile-requests', 
-            icon: <UserCog size={20}/>, 
-            show: checkPermission('personel_yonetim'),
-            modules: ['ALL']
-        },
-        { 
-            title: 'Yetkilendirme', 
-            path: '/dashboard/yetkilendirme', 
-            icon: <ShieldCheck size={20}/>, 
-            show: user?.rol === 'admin',
-            modules: ['ALL']
-        },
-        { 
-            title: 'Sistem Ayarları', 
-            path: '/dashboard/settings', 
-            icon: <Settings size={20}/>, 
-            show: true,
-            modules: ['ALL']
-        }
-    ];
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/');
+    };
 
     return (
-        <div className="bg-white h-100 d-flex flex-column shadow border-end" style={{width: '260px', zIndex: 1000}}>
-            <div className="p-4 d-flex flex-column align-items-center border-bottom bg-light bg-opacity-25">
-                <img src={logoMbb} alt="Mersin BB" className="img-fluid mb-3 drop-shadow" style={{maxWidth: '80px'}} />
-                <h5 className="fw-bold text-primary m-0 text-center" style={{fontSize:'16px'}}>ULAŞIM DAİRESİ</h5>
-                
-                {/* AKTİF MODÜL BADGE */}
-                <span className="badge bg-primary bg-opacity-10 text-primary mt-2 border border-primary border-opacity-25">
-                    {activeModule === 'IZIN' ? 'İZİN SİSTEMİ' : activeModule === 'TALEP' ? 'TALEP SİSTEMİ' : 'KIYAFET SİSTEMİ'}
-                </span>
+        <div className="d-flex flex-column h-100 bg-white border-end shadow-sm" style={{width: '280px', minWidth:'280px', fontFamily: "'Inter', sans-serif"}}>
+            {/* HEADER */}
+            <div className="p-4 pb-2 text-center border-bottom border-light bg-light bg-opacity-25">
+                <div className="mb-2 d-inline-block p-2 rounded-circle bg-white shadow-sm border">
+                    <img src={logoMbb} alt="MBB Logo" style={{width: '60px', height: '60px', objectFit:'contain'}} />
+                </div>
+                <h6 className="fw-bold text-dark m-0">ULAŞIM DAİRESİ</h6>
+                <p className="text-muted small m-0">Personel Yönetim Sistemi</p>
+                <div className="mt-2 badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-1">
+                    {activeModule === 'IZIN' ? 'İZİN MODÜLÜ' : activeModule === 'TALEP' ? 'TALEP & ÖNERİ' : 'LOJİSTİK & DEPO'}
+                </div>
             </div>
 
-            <div className="flex-grow-1 overflow-auto py-3 px-3 custom-scrollbar">
-                <div className="nav flex-column gap-2">
-                    {allMenuItems.map((item, index) => {
-                        // Filtreleme Mantığı:
-                        // 1. Kullanıcı yetkisi var mı? (show)
-                        // 2. Modül uyuyor mu? (modules='ALL' veya activeModule listede var mı?)
-                        const isModuleMatch = item.modules.includes('ALL') || item.modules.includes(activeModule);
-                        
-                        if (item.show && isModuleMatch) {
+            {/* MENÜ LİSTESİ (TREE YAPI) */}
+            <div className="flex-grow-1 overflow-auto p-3 custom-scrollbar">
+                <div className="d-flex flex-column gap-1">
+                    {getMenuItems().map((item, index) => {
+                        // Yetki Kontrolü (Ana Öğe İçin)
+                        if (item.show === false) return null;
+
+                        // Alt Menüsü Varsa (Tree)
+                        if (item.subItems && item.subItems.length > 0) {
+                            const isActiveParent = item.subItems.some(sub => sub.path === location.pathname);
+                            const isOpen = openMenus[item.title] || isActiveParent; // Otomatik aç veya manuel
+
                             return (
-                                <Link 
-                                    key={index} 
-                                    to={item.path} 
-                                    className="nav-link d-flex align-items-center gap-3 px-3 py-3 rounded-3 fw-medium transition-all"
-                                    style={location.pathname === item.path ? activeStyle : inactiveStyle}
-                                >
-                                    {item.icon}
-                                    <span style={{fontSize:'14px'}}>{item.title}</span>
-                                </Link>
+                                <div key={index} className="mb-1">
+                                    <button 
+                                        onClick={() => toggleMenu(item.title)}
+                                        className={`btn w-100 d-flex align-items-center justify-content-between p-3 border-0 fw-medium ${isActiveParent ? 'text-primary bg-primary bg-opacity-10' : 'text-dark hover-bg-light'}`}
+                                        style={{borderRadius: '12px', transition: 'all 0.2s'}}
+                                    >
+                                        <div className="d-flex align-items-center gap-3">
+                                            {item.icon}
+                                            <span>{item.title}</span>
+                                        </div>
+                                        {isOpen ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
+                                    </button>
+                                    
+                                    {/* ALT MENÜLER */}
+                                    {isOpen && (
+                                        <div className="ms-3 ps-3 border-start border-2 mt-1 d-flex flex-column gap-1 animate-slide-down">
+                                            {item.subItems.map((sub, subIndex) => sub.show !== false && (
+                                                <Link 
+                                                    key={subIndex} 
+                                                    to={sub.path}
+                                                    className={`btn w-100 text-start d-flex align-items-center gap-2 py-2 px-3 border-0 small ${location.pathname === sub.path ? 'text-primary fw-bold bg-white shadow-sm' : 'text-secondary hover-text-dark'}`}
+                                                    style={{borderRadius: '8px'}}
+                                                >
+                                                    {sub.icon}
+                                                    {sub.title}
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             );
                         }
-                        return null;
+
+                        // Tekil Menü İse
+                        return (
+                            <Link 
+                                key={index}
+                                to={item.path}
+                                className={`btn w-100 text-start d-flex align-items-center gap-3 p-3 border-0 fw-medium mb-1 ${location.pathname === item.path ? 'bg-primary text-white shadow-primary' : 'text-dark hover-bg-light'}`}
+                                style={{
+                                    borderRadius: '12px', 
+                                    background: location.pathname === item.path ? 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)' : 'transparent'
+                                }}
+                            >
+                                {item.icon}
+                                <span>{item.title}</span>
+                            </Link>
+                        );
                     })}
                 </div>
             </div>
-            
-            <div className="p-3 text-center text-muted small border-top bg-light bg-opacity-25">
-                v2.0 - Modüler
+
+            {/* FOOTER */}
+            <div className="p-3 mt-auto bg-light bg-opacity-50 border-top">
+                <button onClick={handleLogout} className="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-3 border-0 bg-opacity-10 text-danger fw-bold hover-shadow">
+                    <LogOut size={16}/> Çıkış Yap
+                </button>
             </div>
         </div>
     );
