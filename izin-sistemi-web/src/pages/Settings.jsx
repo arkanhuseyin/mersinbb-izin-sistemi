@@ -76,8 +76,8 @@ export default function Settings() {
         tc_no: '', ad: '', soyad: '', sifre: '123456', telefon: '', telefon2: '', adres: '',
         dogum_tarihi: '', cinsiyet: 'Erkek', medeni_hal: 'Bekar', kan_grubu: '', egitim_durumu: 'Lise',
         birim_id: '1', 
-        gorev: '',           
-        kadro_tipi: '',     
+        gorev: '',            
+        kadro_tipi: '',      
         gorev_yeri: '', calisma_durumu: 'Çalışıyor', 
         rol: 'personel',    
         ehliyet_no: '', ehliyet_sinifi: '', ehliyet_tarih: '', src_belge_no: '', psiko_tarih: '', surucu_no: '',
@@ -88,31 +88,19 @@ export default function Settings() {
 
     // --- 🔥 GELİŞMİŞ YETKİ KONTROLÜ 🔥 ---
     const checkPermission = (modulKey, action) => {
-        // 1. Admin her şeyi yapar
         if (user?.rol === 'admin') return true; 
-
-        // 2. Profilim sekmesi herkese açıktır
         if (modulKey === 'ayar_profil') return true;
-
         const userPermissions = user?.yetkiler || [];
         const permission = userPermissions.find(p => p.modul_adi === modulKey);
-
-        if (!permission) return false; // Yetki kaydı yoksa kapalıdır
-
-        // 3. İstenen aksiyona göre kontrol et
+        if (!permission) return false; 
         if (action === 'goruntule') return permission.goruntule === true;
         if (action === 'ekle_duzenle') return permission.ekle_duzenle === true;
         if (action === 'sil') return permission.sil === true;
-
         return false;
     };
 
-    // --- VERİ YÜKLEME ---
     useEffect(() => {
-        // Hakediş kuralları her zaman lazım olabilir
         fetchHakedisKurallari();
-
-        // Sekmelere göre veri çekme (Yetki varsa)
         if (activeTab === 'users' && checkPermission('ayar_personel', 'goruntule')) { 
             fetchUsers(); 
             fetchBirimler(); 
@@ -138,7 +126,6 @@ export default function Settings() {
         setFormData({ ...formData, gorev: secilenGorev, rol: onerilenRol });
     };
 
-    // --- DİNAMİK HAKEDİŞ HESAPLAMA ---
     const hesaplaDinamikHakedis = useCallback((iseGirisTarihi) => {
         if (!iseGirisTarihi) return 0;
         
@@ -158,22 +145,31 @@ export default function Settings() {
 
         if (uygunKural) return uygunKural.gun_sayisi;
 
-        // Yedek Mantık
         let hak = 0;
         if (kidemYili < 1) return 0;
-        if (girisYili < 2018) {
-            if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25;
-        } else if (girisYili < 2024) {
-            if (girisYili < 2019) { if (kidemYili <= 5) hak = 14; else if (kidemYili <= 15) hak = 19; else hak = 25; } 
-            else { if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30; }
-        } else {
-            if (girisYili < 2025) { if (kidemYili <= 3) hak = 16; else if (kidemYili <= 5) hak = 18; else if (kidemYili <= 15) hak = 25; else hak = 30; } 
-            else { if (kidemYili <= 3) hak = 18; else if (kidemYili <= 5) hak = 20; else if (kidemYili <= 15) hak = 27; else hak = 32; }
+        // Dönem 1: 2018 ve öncesi
+        if (girisYili <= 2018) {
+            if (kidemYili <= 5) hak = 14;      
+            else if (kidemYili < 16) hak = 20; 
+            else hak = 25; 
+        } 
+        // Dönem 2: 2019 - 2024 arası
+        else if (girisYili <= 2024) {
+            if (kidemYili <= 3) hak = 16;
+            else if (kidemYili <= 5) hak = 18; 
+            else if (kidemYili < 16) hak = 25; 
+            else hak = 30; 
+        } 
+        // Dönem 3: 2025 ve sonrası
+        else {
+            if (kidemYili <= 3) hak = 18;      
+            else if (kidemYili <= 5) hak = 20; 
+            else if (kidemYili < 16) hak = 27; 
+            else hak = 32; 
         }
         return hak;
     }, [hakedisKurallari]);
 
-    // --- FORM DEĞİŞİKLİK TAKİBİ ---
     useEffect(() => {
         if (formData.ise_giris_tarihi) {
             const giris = new Date(formData.ise_giris_tarihi);
@@ -217,7 +213,6 @@ export default function Settings() {
         } catch (error) { console.error('Geçmiş bakiye hatası', error); }
     };
 
-    // --- EKLEME / SİLME İŞLEMLERİ ---
     const addGecmisBakiye = async () => {
         if (!yeniGecmisGun || yeniGecmisGun <= 0) return alert("Lütfen geçerli bir gün sayısı giriniz.");
         try {
@@ -253,7 +248,6 @@ export default function Settings() {
         }
     };
 
-    // --- KIYAFET YÖNETİMİ ---
     const checkKiyafetDurumu = async () => {
         setKiyafetLoading(true);
         try {
@@ -273,7 +267,6 @@ export default function Settings() {
         } catch (e) { alert('Hata: Yetkiniz yok veya sunucu hatası.'); } finally { setKiyafetLoading(false); }
     };
 
-    // --- PERSONEL LİSTELEME ---
     const fetchUsers = async () => {
         setYukleniyor(true);
         try {
@@ -292,10 +285,7 @@ export default function Settings() {
         } catch (error) { console.error(error); }
     };
 
-    // --- MODAL AÇMA (YETKİ KONTROLLÜ) ---
     const openModal = (mode, data = null) => {
-        // Eğer 'edit' modunda açılmak isteniyorsa ama kullanıcının 'ekle_duzenle' yetkisi yoksa,
-        // otomatik olarak 'view' moduna düşür.
         if (mode === 'edit' && !checkPermission('ayar_personel', 'ekle_duzenle')) {
             mode = 'view';
         }
@@ -307,7 +297,15 @@ export default function Settings() {
         setFotograf(null);
 
         if ((mode === 'edit' || mode === 'view') && data) {
-            const fixDate = (d) => d ? new Date(d).toISOString().split('T')[0] : '';
+            // ✅ TARİH DÜZELTME (UTC - YEREL SAAT FARKI)
+            // Backend'den gelen "2024-01-01T00:00:00.000Z" gibi tarihi
+            // Tarayıcının geri almasını engellemek için sadece YYYY-MM-DD kısmını alıyoruz.
+            const fixDate = (d) => {
+                if (!d) return '';
+                // ISO string'in ilk 10 karakteri (YYYY-MM-DD) yeterlidir
+                return new Date(d).toISOString().split('T')[0];
+            };
+
             setFormData({
                 ...data,
                 dogum_tarihi: fixDate(data.dogum_tarihi),
@@ -325,13 +323,14 @@ export default function Settings() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Görüntüleme modunda kayıt yapılamaz
         if (modalMode === 'view') return;
 
         try {
             const data = new FormData();
             Object.keys(formData).forEach(key => { 
-                data.append(key, formData[key] === null || formData[key] === undefined ? '' : formData[key]); 
+                // ✅ VERİ TEMİZLİĞİ: Null veya Undefined değerleri boş string yap
+                const value = formData[key];
+                data.append(key, (value === null || value === undefined) ? '' : value); 
             });
             if (fotograf) data.append('fotograf', fotograf);
 
@@ -398,7 +397,6 @@ export default function Settings() {
         return matchesSearch;
     });
 
-    // Form Elemanlarının Kilit Durumu
     const isReadOnly = modalMode === 'view';
 
     return (
@@ -631,8 +629,8 @@ export default function Settings() {
                                                         <div className="mb-3">
                                                             <div className="bg-light border rounded d-flex align-items-center justify-content-center mx-auto shadow-sm" style={{width:'150px', height:'180px', overflow:'hidden'}}>
                                                                 {fotograf ? 
-                                                                    <img src={URL.createObjectURL(fotograf)} alt="Preview" style={{width:'100%', height:'100%', objectFit:'cover'}}/> : 
-                                                                    (modalMode!=='add' && formData.fotograf_yolu ? <div className="text-success small fw-bold">Kayıtlı Foto Var</div> : <span className="text-muted small">FOTOĞRAF</span>)
+                                                                <img src={URL.createObjectURL(fotograf)} alt="Preview" style={{width:'100%', height:'100%', objectFit:'cover'}}/> : 
+                                                                (modalMode!=='add' && formData.fotograf_yolu ? <div className="text-success small fw-bold">Kayıtlı Foto Var</div> : <span className="text-muted small">FOTOĞRAF</span>)
                                                                 }
                                                             </div>
                                                             <input type="file" className="form-control form-control-sm mt-2" onChange={e=>setFotograf(e.target.files[0])} disabled={isReadOnly} />
@@ -687,7 +685,7 @@ export default function Settings() {
                                                             <div className="col-md-3"><label className="small fw-bold d-flex align-items-center gap-1"><Truck size={12}/> Psikoteknik</label><input type="date" className="form-control form-control-sm" value={formData.psiko_tarih} onChange={e=>setFormData({...formData, psiko_tarih:e.target.value})} disabled={isReadOnly} /></div>
 
                                                             <div className="col-md-2"><label className="small">Ayakkabı</label><input className="form-control form-control-sm" value={formData.ayakkabi_no} onChange={e=>setFormData({...formData, ayakkabi_no:e.target.value})} disabled={isReadOnly} /></div>
-                                                            <div className="col-md-2"><label className="small">Tişört</label><input className="form-control form-control-sm" value={formData.tisort_beden} onChange={e=>setFormData({...formData, tisort_beden:e.target.value})} disabled={isReadOnly} /></div>
+                                                            <div className="col-md-2"><label className="small">T-shirt</label><input className="form-control form-control-sm" value={formData.tisort_beden} onChange={e=>setFormData({...formData, tisort_beden:e.target.value})} disabled={isReadOnly} /></div>
                                                             <div className="col-md-2"><label className="small">Gömlek</label><input className="form-control form-control-sm" value={formData.gomlek_beden} onChange={e=>setFormData({...formData, gomlek_beden:e.target.value})} disabled={isReadOnly} /></div>
                                                             <div className="col-md-2"><label className="small">Mont</label><input className="form-control form-control-sm" value={formData.mont_beden} onChange={e=>setFormData({...formData, mont_beden:e.target.value})} disabled={isReadOnly} /></div>
                                                             <div className="col-md-2"><label className="small">Süveter</label><input className="form-control form-control-sm" value={formData.suveter_beden} onChange={e=>setFormData({...formData, suveter_beden:e.target.value})} disabled={isReadOnly} /></div>
