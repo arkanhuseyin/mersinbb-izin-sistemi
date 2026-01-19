@@ -64,32 +64,32 @@ export default function Sidebar() {
             show: checkPermission('izin_onay') 
         },
         { 
-            title: 'Talep Yönetimi', 
+            title: 'Öneri / Şikayet / Talep Ekranı', 
             path: '/dashboard/requests', 
             icon: <MessageSquare size={20}/>, 
             show: checkPermission('talep_yonetim') 
         },
         // ✅ YENİ MENÜ: İK HIZLI GİRİŞ (Sadece Admin/İK/Filo)
         {
-            title: 'İK Hızlı Giriş',
+            title: 'İK İzin Ekranı v2',
             path: '/dashboard/hr-entry',
             icon: <Zap size={20}/>,
             show: ['admin', 'ik', 'filo'].includes(user?.rol)
         },
         { 
-            title: 'Personel Yönetimi', 
+            title: 'Profil Güncelleme Onay Ekramı', 
             path: '/dashboard/profile-requests', 
             icon: <UserCog size={20}/>, 
             show: checkPermission('personel_yonetim') 
         },
         { 
-            title: 'Raporlar', 
+            title: 'İzin Takip Ekranı', 
             path: '/dashboard/reports', 
             icon: <FileBarChart size={20}/>, 
             show: checkPermission('raporlar') 
         },
         { 
-            title: 'Yetkilendirme', 
+            title: 'Yetkilendirme Ekranı', 
             path: '/dashboard/yetkilendirme', 
             icon: <ShieldCheck size={20}/>, 
             show: user?.rol === 'admin' 
