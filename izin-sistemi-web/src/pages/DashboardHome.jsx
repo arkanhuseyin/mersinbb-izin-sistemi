@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { useModule } from '../context/ModuleContext'; // ✅ Modül Context Eklendi
+import { useModule } from '../context/ModuleContext';
 import { 
     PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, 
     BarChart, Bar, XAxis, YAxis, CartesianGrid, AreaChart, Area, LineChart, Line 
@@ -12,78 +12,73 @@ import {
 import logoMbb from '../assets/logombb.png'; 
 
 export default function DashboardHome() {
-    const { activeModule } = useModule(); // ✅ Aktif Modülü Alıyoruz
+    const { activeModule } = useModule();
     
-    // --- STATE ---
-    const [stats, setStats] = useState({ toplam: 0, onayli: 0, bekleyen: 0, reddedilen: 0 });
+    // --- GENEL STATE ---
+    const [personelSayisi, setPersonelSayisi] = useState(0); // Gerçek personel sayısı
+    const [loading, setLoading] = useState(true);
+
+    // --- İZİN MODÜLÜ STATE ---
+    const [izinStats, setIzinStats] = useState({ toplam: 0, onayli: 0, bekleyen: 0, reddedilen: 0 });
     const [izinTurleri, setIzinTurleri] = useState([]);
     const [aylikData, setAylikData] = useState([]);
     const [sonHareketler, setSonHareketler] = useState([]);
+
+    // --- TALEP MODÜLÜ STATE ---
+    const [talepStats, setTalepStats] = useState({ toplam: 0, acik: 0, cozuldu: 0, iptal: 0 });
+    const [sonTalepler, setSonTalepler] = useState([]);
+
+    // --- GENEL AYARLAR ---
     const [kullanici, setKullanici] = useState({ ad: 'Misafir', soyad: '' });
     const [darkMode, setDarkMode] = useState(false);
     const [lang, setLang] = useState('tr');
     const [trendChartType, setTrendChartType] = useState('area'); 
     const [typeChartType, setTypeChartType] = useState('bar');   
 
-    // --- TEMA MOTORU ---
+    const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
+
+    // --- TEMA VE RENKLER ---
     const THEME = {
-        light: { 
-            bg: '#f3f4f6', 
-            cardBg: 'rgba(255, 255, 255, 0.95)', 
-            glass: 'rgba(255, 255, 255, 0.8)',
-            text: '#111827', 
-            subText: '#6b7280', 
-            border: '#e5e7eb',
-            shadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)',
-            chartGrid: '#e5e7eb',
-            accentGradient: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)', 
-        },
-        dark: { 
-            bg: '#0f172a', 
-            cardBg: 'rgba(30, 41, 59, 0.8)', 
-            glass: 'rgba(30, 41, 59, 0.5)',
-            text: '#f3f4f6', 
-            subText: '#9ca3af', 
-            border: 'rgba(255,255,255,0.08)',
-            shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)',
-            chartGrid: '#374151',
-            accentGradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 100%)',
-        }
+        light: { bg: '#f3f4f6', cardBg: 'rgba(255, 255, 255, 0.95)', glass: 'rgba(255, 255, 255, 0.8)', text: '#111827', subText: '#6b7280', border: '#e5e7eb', shadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)', chartGrid: '#e5e7eb', accentGradient: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)' },
+        dark: { bg: '#0f172a', cardBg: 'rgba(30, 41, 59, 0.8)', glass: 'rgba(30, 41, 59, 0.5)', text: '#f3f4f6', subText: '#9ca3af', border: 'rgba(255,255,255,0.08)', shadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)', chartGrid: '#374151', accentGradient: 'linear-gradient(135deg, #312e81 0%, #4f46e5 100%)' }
     };
-    
     const current = darkMode ? THEME.dark : THEME.light;
     const COLORS = { primary: '#3b82f6', success: '#10b981', warning: '#f59e0b', danger: '#ef4444' };
     const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
+    // --- VERİ ÇEKME İŞLEMLERİ ---
     useEffect(() => {
+        const token = localStorage.getItem('token');
         const storedUser = localStorage.getItem('user');
-        if (storedUser) { 
-            try { 
-                const u = JSON.parse(storedUser);
-                if(!u.ad) u.ad = 'Misafir';
-                setKullanici(u); 
-            } catch (e) {} 
-        }
+        if (storedUser) { try { setKullanici(JSON.parse(storedUser)); } catch (e) {} }
 
-        // Sadece İZİN modülünde veri çek
-        if (activeModule === 'IZIN') {
-            const token = localStorage.getItem('token');
-            axios.get('https://mersinbb-izin-sistemi.onrender.com/api/izin/listele', { headers: { Authorization: `Bearer ${token}` } })
-                .then(res => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                // 1. HER MODÜL İÇİN ORTAK: PERSONEL SAYISI (GERÇEK)
+                // Personel sayısı hem Lojistik hem İzin ekranında önemli
+                const pRes = await axios.get(`${API_URL}/api/personel/liste`, { headers: { Authorization: `Bearer ${token}` } });
+                setPersonelSayisi(pRes.data.length);
+
+                // 2. İZİN MODÜLÜ SEÇİLİYSE
+                if (activeModule === 'IZIN') {
+                    const res = await axios.get(`${API_URL}/api/izin/listele`, { headers: { Authorization: `Bearer ${token}` } });
                     const data = res.data;
-                    setStats({
+                    
+                    setIzinStats({
                         toplam: data.length,
                         onayli: data.filter(x => x.durum === 'IK_ONAYLADI' || x.durum === 'TAMAMLANDI').length,
                         bekleyen: data.filter(x => x.durum.includes('BEK') || x.durum.includes('AMIR') || x.durum.includes('YAZICI')).length,
                         reddedilen: data.filter(x => x.durum === 'REDDEDILDI' || x.durum === 'IPTAL_EDILDI').length
                     });
 
+                    // Grafikler için veri hazırlığı
                     const turMap = {};
                     data.forEach(d => { turMap[d.izin_turu] = (turMap[d.izin_turu] || 0) + 1; });
                     setIzinTurleri(Object.keys(turMap).map(key => ({ name: key, value: turMap[key] })));
-
                     setSonHareketler([...data].reverse().slice(0, 5));
 
+                    // Aylık Trend
                     const currentYear = new Date().getFullYear();
                     const monthCounts = new Array(12).fill(0);
                     data.forEach(item => {
@@ -93,14 +88,44 @@ export default function DashboardHome() {
                             if (d.getFullYear() === currentYear) monthCounts[d.getMonth()]++;
                         }
                     });
-
                     const aylarTR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
-                    const dynamicAylikData = aylarTR.map((ayAdi, index) => ({ name: ayAdi, talep: monthCounts[index] }));
-                    setAylikData(dynamicAylikData);
-                })
-                .catch(err => console.error("Veri hatası:", err));
-        }
-    }, [activeModule, lang]);
+                    setAylikData(aylarTR.map((ayAdi, index) => ({ name: ayAdi, talep: monthCounts[index] })));
+                }
+
+                // 3. TALEP MODÜLÜ SEÇİLİYSE (Gerçek veriye bağlanıyor)
+                if (activeModule === 'TALEP') {
+                    // Eğer talep listeleme endpointin henüz yoksa burası boş array döner ve 0 gösterir (YALAN SÖYLEMEZ)
+                    try {
+                        const talepRes = await axios.get(`${API_URL}/api/talep/listele`, { headers: { Authorization: `Bearer ${token}` } });
+                        const tData = talepRes.data || [];
+                        setTalepStats({
+                            toplam: tData.length,
+                            acik: tData.filter(t => t.durum === 'ACIK' || t.durum === 'ISLEMDE').length,
+                            cozuldu: tData.filter(t => t.durum === 'COZULDU').length,
+                            iptal: tData.filter(t => t.durum === 'IPTAL').length
+                        });
+                        setSonTalepler([...tData].reverse().slice(0, 5));
+                    } catch (e) {
+                        console.warn("Talep API henüz hazır değil veya veri yok, 0 gösteriliyor.");
+                        setTalepStats({ toplam: 0, acik: 0, cozuldu: 0, iptal: 0 });
+                        setSonTalepler([]);
+                    }
+                }
+
+                // 4. KIYAFET MODÜLÜ (Veritabanında henüz tablo yoksa 0 göster)
+                if (activeModule === 'KIYAFET') {
+                    // Şimdilik stok olmadığı için 0. İleride /api/kiyafet/stok endpointi buraya bağlanacak.
+                }
+
+            } catch (err) {
+                console.error("Veri çekme hatası:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchData();
+    }, [activeModule, lang]); // Modül değişince yeniden çalışır
 
     const getGreeting = () => {
         const h = new Date().getHours();
@@ -109,6 +134,7 @@ export default function DashboardHome() {
         return 'İyi Geceler';
     };
 
+    // --- BİLEŞENLER ---
     // eslint-disable-next-line react/prop-types
     const StatCard = ({ title, value, icon: Icon, color, delay }) => (
         <div className={`col-md-6 col-xl-3 fade-in-up`} style={{animationDelay: delay}}>
@@ -140,7 +166,6 @@ export default function DashboardHome() {
         </button>
     );
 
-    // --- RENDER ---
     return (
         <div style={{ display: 'flex', flexDirection: 'column', backgroundColor: current.bg, transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)', fontFamily: "'Inter', sans-serif" }}>
             <style>{`
@@ -179,7 +204,7 @@ export default function DashboardHome() {
                     </div>
                 </div>
 
-                {/* BANNER (Her Modülde Aynı) */}
+                {/* BANNER (Her Modülde Aynı - Renk Değişir) */}
                 <div className="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden fade-in-up position-relative" 
                      style={{ background: activeModule === 'TALEP' ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : activeModule === 'KIYAFET' ? 'linear-gradient(135deg, #d97706 0%, #f59e0b 100%)' : current.accentGradient, color: '#fff', animationDelay: '100ms' }}>
                     <div className="position-absolute top-0 end-0 p-5 opacity-10"><Sparkles size={200} strokeWidth={0.5} /></div>
@@ -203,14 +228,14 @@ export default function DashboardHome() {
                     </div>
                 </div>
 
-                {/* --- 1. İZİN MODÜLÜ İÇERİĞİ --- */}
+                {/* --- 1. İZİN MODÜLÜ İÇERİĞİ (GERÇEK VERİ) --- */}
                 {activeModule === 'IZIN' && (
                     <>
                         <div className="row g-3 mb-4">
-                            <StatCard title="TOPLAM BAŞVURU" value={stats.toplam} icon={Users} color={COLORS.primary} delay="200ms" />
+                            <StatCard title="PERSONEL MEVCUDU" value={personelSayisi} icon={Users} color={COLORS.primary} delay="150ms" />
+                            <StatCard title="TOPLAM BAŞVURU" value={stats.toplam} icon={FileCheck} color={COLORS.primary} delay="200ms" />
                             <StatCard title="ONAYLANAN İZİN" value={stats.onayli} icon={FileCheck} color={COLORS.success} delay="300ms" />
                             <StatCard title="BEKLEYEN TALEP" value={stats.bekleyen} icon={Clock} color={COLORS.warning} delay="400ms" />
-                            <StatCard title="REDDEDİLEN" value={stats.reddedilen} icon={FileX} color={COLORS.danger} delay="500ms" />
                         </div>
 
                         <div className="row g-3">
@@ -273,66 +298,63 @@ export default function DashboardHome() {
                     </>
                 )}
 
-                {/* --- 2. TALEP MODÜLÜ İÇERİĞİ --- */}
+                {/* --- 2. TALEP MODÜLÜ İÇERİĞİ (GERÇEK VERİ VEYA 0) --- */}
                 {activeModule === 'TALEP' && (
                     <>
                         <div className="row g-3 mb-4">
-                            <StatCard title="TOPLAM BİLDİRİM" value="156" icon={MessageSquare} color={COLORS.primary} delay="200ms" />
-                            <StatCard title="AÇIK TALEPLER" value="23" icon={Clock} color={COLORS.warning} delay="300ms" />
-                            <StatCard title="ÇÖZÜLENLER" value="128" icon={CheckCircle} color={COLORS.success} delay="400ms" />
-                            <StatCard title="İPTAL / RED" value="5" icon={FileX} color={COLORS.danger} delay="500ms" />
+                            <StatCard title="TOPLAM BİLDİRİM" value={talepStats.toplam} icon={MessageSquare} color={COLORS.primary} delay="200ms" />
+                            <StatCard title="AÇIK TALEPLER" value={talepStats.acik} icon={Clock} color={COLORS.warning} delay="300ms" />
+                            <StatCard title="ÇÖZÜLENLER" value={talepStats.cozuldu} icon={CheckCircle} color={COLORS.success} delay="400ms" />
+                            <StatCard title="İPTAL / RED" value={talepStats.iptal} icon={FileX} color={COLORS.danger} delay="500ms" />
                         </div>
                         <div className="card border-0 shadow-sm rounded-4 p-4 glass-panel" style={{ backgroundColor: current.cardBg }}>
                             <h6 className="fw-bold mb-3" style={{color: current.text}}>Son Gelen Talepler</h6>
-                            <div className="table-responsive">
-                                <table className="table align-middle" style={{color: current.text}}>
-                                    <thead className="bg-light bg-opacity-50">
-                                        <tr><th>Personel</th><th>Konu</th><th>Durum</th><th>Tarih</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        <tr><td>Ahmet Yılmaz</td><td>Klima Arızası</td><td><span className="badge bg-warning text-dark">İnceleniyor</span></td><td>19.01.2026</td></tr>
-                                        <tr><td>Ayşe Demir</td><td>Servis Güzergahı</td><td><span className="badge bg-success">Çözüldü</span></td><td>18.01.2026</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                            {sonTalepler.length > 0 ? (
+                                <div className="table-responsive">
+                                    <table className="table align-middle" style={{color: current.text}}>
+                                        <thead className="bg-light bg-opacity-50">
+                                            <tr><th>Personel</th><th>Konu</th><th>Durum</th><th>Tarih</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {sonTalepler.map((t, i) => (
+                                                <tr key={i}>
+                                                    <td>{t.ad} {t.soyad}</td>
+                                                    <td>{t.konu}</td>
+                                                    <td>
+                                                        <span className={`badge ${t.durum==='COZULDU'?'bg-success':t.durum==='IPTAL'?'bg-danger':'bg-warning'} text-white`}>
+                                                            {t.durum}
+                                                        </span>
+                                                    </td>
+                                                    <td>{new Date(t.tarih).toLocaleDateString('tr-TR')}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ) : (
+                                <div className="text-center py-5 text-muted">Henüz kayıtlı talep bulunmuyor.</div>
+                            )}
                         </div>
                     </>
                 )}
 
-                {/* --- 3. KIYAFET MODÜLÜ İÇERİĞİ --- */}
+                {/* --- 3. KIYAFET MODÜLÜ İÇERİĞİ (GERÇEK VERİ: PERSONEL SAYISI) --- */}
                 {activeModule === 'KIYAFET' && (
                     <>
                         <div className="row g-3 mb-4">
-                            <StatCard title="TOPLAM PERSONEL" value="1,250" icon={Users} color={COLORS.primary} delay="200ms" />
-                            <StatCard title="BEDEN DEĞİŞİM" value="8" icon={Shirt} color={COLORS.warning} delay="300ms" />
-                            <StatCard title="DAĞITILAN ÜRÜN" value="3,450" icon={Box} color={COLORS.success} delay="400ms" />
-                            <StatCard title="STOK UYARISI" value="2" icon={AlertTriangle} color={COLORS.danger} delay="500ms" />
+                            <StatCard title="TOPLAM PERSONEL" value={personelSayisi} icon={Users} color={COLORS.primary} delay="200ms" />
+                            <StatCard title="BEDEN DEĞİŞİM" value="0" icon={Shirt} color={COLORS.warning} delay="300ms" />
+                            <StatCard title="DAĞITILAN ÜRÜN" value="0" icon={Box} color={COLORS.success} delay="400ms" />
+                            <StatCard title="STOK UYARISI" value="0" icon={AlertTriangle} color={COLORS.danger} delay="500ms" />
                         </div>
                         <div className="row g-3">
-                            <div className="col-lg-8">
-                                <div className="card border-0 shadow-sm rounded-4 p-4 h-100 glass-panel" style={{ backgroundColor: current.cardBg }}>
-                                    <h6 className="fw-bold mb-3" style={{color: current.text}}>Dağıtım İstatistikleri (Ürün Bazlı)</h6>
-                                    <div style={{height: '350px'}}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={[{name:'T-Shirt', v:120}, {name:'Pantolon', v:80}, {name:'Mont', v:45}, {name:'Bot', v:60}, {name:'Gömlek', v:100}]}>
-                                                <XAxis dataKey="name" tick={{fill: current.subText}}/>
-                                                <YAxis tick={{fill: current.subText}}/>
-                                                <Tooltip contentStyle={{backgroundColor: current.cardBg, border:'none', borderRadius:'8px'}}/>
-                                                <Bar dataKey="v" fill="#3b82f6" radius={[10, 10, 0, 0]} barSize={40} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
+                            <div className="col-12">
+                                <div className="card border-0 shadow-sm rounded-4 p-5 h-100 glass-panel d-flex align-items-center justify-content-center" style={{ backgroundColor: current.cardBg }}>
+                                    <div className="text-center text-muted">
+                                        <Box size={64} className="mb-3 opacity-25"/>
+                                        <h5>Lojistik verileri hazırlanıyor...</h5>
+                                        <p className="small">Personel sayısına ({personelSayisi}) göre stok planlaması yapılabilir.</p>
                                     </div>
-                                </div>
-                            </div>
-                            <div className="col-lg-4">
-                                <div className="card border-0 shadow-sm rounded-4 p-4 h-100 bg-gradient-primary text-white" style={{background: 'linear-gradient(135deg, #f59e0b, #d97706)'}}>
-                                    <h5 className="fw-bold">Depo Durumu</h5>
-                                    <p className="opacity-75">Kışlık ürünlerin dağıtımı tamamlanmak üzere.</p>
-                                    <hr className="bg-white opacity-25"/>
-                                    <div className="d-flex justify-content-between mb-2"><span>Mont Stoğu</span><strong>%12</strong></div>
-                                    <div className="progress bg-white bg-opacity-25" style={{height: '6px'}}><div className="progress-bar bg-white" style={{width: '12%'}}></div></div>
-                                    <div className="d-flex justify-content-between mt-4 mb-2"><span>Bot/Ayakkabı</span><strong>%45</strong></div>
-                                    <div className="progress bg-white bg-opacity-25" style={{height: '6px'}}><div className="progress-bar bg-white" style={{width: '45%'}}></div></div>
                                 </div>
                             </div>
                         </div>
@@ -344,7 +366,8 @@ export default function DashboardHome() {
             {/* FOOTER */}
             <footer className="text-center py-4 opacity-50 fade-in-up mt-auto" style={{ animationDelay: '900ms', color: current.subText, fontSize: '11px', borderTop: `1px solid ${current.border}` }}>
                 <p className="m-0 fw-bold">MERSİN BÜYÜKŞEHİR BELEDİYESİ</p>
-                <p className="m-0">Toplu Taşıma Şube Müdürlüğü - Developed by Hüseyin Arkan © 2026</p>
+                <p className="m-0">Toplu Taşıma Şube Müdürlüğü - </p>
+                <p className="m-0">Hüseyin Arkan Tarafından Hazırlanmıştır. © 2026</p>
             </footer>
         </div>
     );
