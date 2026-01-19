@@ -89,7 +89,7 @@ export default function TalepYonetimiScreen({ route, navigation }) {
             <TouchableOpacity 
                 style={styles.card} 
                 activeOpacity={0.7}
-                onPress={() => navigation.navigate('ChatScreen', { request: item })}
+                onPress={() => navigation.navigate('ChatScreen', { request: item, token, user })}
             >
                 <View style={styles.cardHeader}>
                     <View style={[styles.badge, { backgroundColor: typeStyle.bg }]}>

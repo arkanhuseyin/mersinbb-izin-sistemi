@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator, SafeAreaView, StatusBar } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { Send, Archive, CheckCheck, User } from 'lucide-react-native';
 import moment from 'moment';
@@ -19,7 +18,10 @@ const COLORS = {
 };
 
 export default function ChatScreen({ route, navigation }) {
-    const { request } = route.params;
+    // 🛠️ KRİTİK GÜNCELLEME: Token ve User'ı parametreden alıyoruz!
+    // AsyncStorage kullanmıyoruz. Zinciri devam ettiriyoruz.
+    const { request, token, user } = route.params; 
+
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
     const [isClosed, setIsClosed] = useState(request.durum === 'KAPANDI');
@@ -29,29 +31,27 @@ export default function ChatScreen({ route, navigation }) {
 
     useEffect(() => {
         fetchMessages();
+        // 3 saniyede bir yeni mesaj var mı kontrol et
         const interval = setInterval(fetchMessages, 3000);
         return () => clearInterval(interval);
     }, []);
 
     const fetchMessages = async () => {
         try {
-            let token = await AsyncStorage.getItem('userToken');
-            if (token) token = token.replace(/^"|"$/g, '');
-
+            // AsyncStorage YOK! Parametreden gelen token var.
             const res = await axios.get(`${API_URL}/api/talep/detay/${request.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setMessages(res.data);
-        } catch (error) { console.error(error); }
+        } catch (error) { 
+            console.error("Mesaj Çekme Hatası:", error); 
+        }
     };
 
     const sendMessage = async () => {
         if (!newMessage.trim()) return;
         setSending(true);
         try {
-            let token = await AsyncStorage.getItem('userToken');
-            if (token) token = token.replace(/^"|"$/g, '');
-            
             await axios.post(`${API_URL}/api/talep/cevapla`, 
                 { talep_id: request.id, mesaj: newMessage, yeni_durum: null },
                 { headers: { Authorization: `Bearer ${token}` } }
@@ -59,9 +59,14 @@ export default function ChatScreen({ route, navigation }) {
             
             setNewMessage('');
             fetchMessages(); 
+            // Listeyi aşağı kaydır
             setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-        } catch (error) { Alert.alert("Hata", "Mesaj gönderilemedi."); } 
-        finally { setSending(false); }
+
+        } catch (error) { 
+            Alert.alert("Hata", "Mesaj gönderilemedi."); 
+        } finally { 
+            setSending(false); 
+        }
     };
 
     const closeRequest = async () => {
@@ -69,15 +74,13 @@ export default function ChatScreen({ route, navigation }) {
             { text: "Vazgeç", style: "cancel" },
             { text: "Kapat", style: 'destructive', onPress: async () => {
                 try {
-                    let token = await AsyncStorage.getItem('userToken');
-                    if (token) token = token.replace(/^"|"$/g, '');
                     await axios.post(`${API_URL}/api/talep/cevapla`, 
                         { talep_id: request.id, mesaj: '🔴 Konu kapatıldı.', yeni_durum: 'KAPANDI' },
                         { headers: { Authorization: `Bearer ${token}` } }
                     );
                     setIsClosed(true);
                     fetchMessages();
-                } catch (e) { Alert.alert("Hata"); }
+                } catch (e) { Alert.alert("Hata", "İşlem yapılamadı."); }
             }}
         ]);
     };
@@ -123,9 +126,6 @@ export default function ChatScreen({ route, navigation }) {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#fff" />
             
-            {/* HATA BURADAYDI: SafeAreaView'in içine KeyboardAvoidingView ekledik. 
-               Böylece hem çentik (notch) sorunu olmaz hem de klavye düzgün çalışır.
-            */}
             <KeyboardAvoidingView 
                 style={{ flex: 1 }} 
                 behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -188,42 +188,29 @@ export default function ChatScreen({ route, navigation }) {
 
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: COLORS.bg },
-    
-    // Header
     header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', elevation: 2 },
     headerTitle: { fontSize: 16, fontWeight: '700', color: COLORS.textDark },
     headerSub: { fontSize: 12, color: COLORS.textLight },
     actionBtn: { padding: 8, backgroundColor: '#F3F4F6', borderRadius: 8 },
-
-    // Liste
     listContent: { padding: 16, paddingBottom: 24 },
     systemMsg: { alignSelf: 'center', backgroundColor: '#E5E7EB', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 12, marginBottom: 12 },
     systemMsgText: { fontSize: 12, color: COLORS.textLight, fontWeight: '500' },
-
-    // Baloncuklar
     bubbleContainer: { marginBottom: 12, width: '100%' },
     rightContainer: { alignItems: 'flex-end' },
     leftContainer: { alignItems: 'flex-start' },
-    
     bubble: { maxWidth: '80%', padding: 12, borderRadius: 16, elevation: 1, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
     rightBubble: { backgroundColor: COLORS.myBubble, borderBottomRightRadius: 2 },
     leftBubble: { backgroundColor: COLORS.otherBubble, borderBottomLeftRadius: 2 },
-    
     senderHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
     senderName: { fontSize: 11, fontWeight: '700', color: COLORS.primary },
-    
     messageText: { fontSize: 15, lineHeight: 22 },
-    
     metaContainer: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-end', marginTop: 4 },
     time: { fontSize: 10 },
-
-    // Input
     inputWrapper: { backgroundColor: '#fff', padding: 12, borderTopWidth: 1, borderTopColor: '#E5E7EB' },
     inputContainer: { flexDirection: 'row', alignItems: 'flex-end', backgroundColor: '#F3F4F6', borderRadius: 24, padding: 4 },
     input: { flex: 1, paddingHorizontal: 16, paddingVertical: 10, fontSize: 16, maxHeight: 100, color: COLORS.textDark },
     sendButton: { width: 40, height: 40, backgroundColor: COLORS.primary, borderRadius: 20, alignItems: 'center', justifyContent: 'center', margin: 4 },
     sendButtonDisabled: { backgroundColor: '#9CA3AF' },
-
     closedFooter: { padding: 20, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, backgroundColor: '#F9FAFB' },
     closedText: { color: COLORS.textLight, fontWeight: '600' }
 });
