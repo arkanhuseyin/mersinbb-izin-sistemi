@@ -15,6 +15,9 @@ export default function LeaveReports() {
     const [secilenPersonel, setSecilenPersonel] = useState(null);
     const [detayYukleniyor, setDetayYukleniyor] = useState(false);
     const [personelDetay, setPersonelDetay] = useState(null);
+    
+    // ✅ YENİ: Tab Kontrolü
+    const [activeTab, setActiveTab] = useState('ozet'); // 'ozet', 'hakedis', 'gecmis'
 
     useEffect(() => {
         verileriGetir();
@@ -48,6 +51,7 @@ export default function LeaveReports() {
 
     const handlePersonelClick = async (personel) => {
         setSecilenPersonel(personel); 
+        setActiveTab('ozet'); // Modal açılınca varsayılan tab
         setDetayYukleniyor(true);
         try {
             const token = localStorage.getItem('token');
@@ -64,7 +68,6 @@ export default function LeaveReports() {
         if (!personelDetay || !secilenPersonel) return;
         const p = personelDetay.personel;
         
-        // Sayıya çevirme garantisi
         const kumulatifHak = parseInt(secilenPersonel.kumulatif_hak) || 0;
         const devredenHak = parseInt(secilenPersonel.devreden_izin) || 0;
         const buYilHak = parseInt(secilenPersonel.bu_yil_hakedis) || 0;
@@ -74,7 +77,7 @@ export default function LeaveReports() {
             ["TC No", p.tc_no, "Ad Soyad", `${p.ad} ${p.soyad}`, "Giriş", new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')],
             [" "], ["BAKİYE ÖZETİ"],
             ["Kümülatif Hak", kumulatifHak],
-            ["Geçmişten Devreden", devredenHak], // Excel'e de ekledik
+            ["Geçmişten Devreden", devredenHak],
             ["Bu Yıl Hakediş", buYilHak],
             ["Toplam Kullanılan", personelDetay.personel.kullanilan], 
             ["Kalan", personelDetay.personel.kalan],
@@ -95,7 +98,6 @@ export default function LeaveReports() {
 
     const downloadBulkExcel = async () => {
         if(!confirm("Toplu Excel indirilsin mi?")) return; 
-        
         try {
             const excelRows = [
                 ["MERSİN BÜYÜKŞEHİR BELEDİYESİ"], ["GENEL İZİN RAPORU"], [" "],
@@ -107,25 +109,13 @@ export default function LeaveReports() {
                 const devreden = parseInt(p.devreden_izin) || 0;
                 const buYilHak = parseInt(p.bu_yil_hakedis) || 0;
                 const kalan = parseInt(p.kalan) || 0;
-                
-                // Formül: Toplam Havuz = Kumulatif + Devreden
                 const toplamHavuz = kumulatifHak + devreden;
                 const kullanilan = toplamHavuz - kalan;
-                
                 const kidem = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
                 
                 excelRows.push([
-                    p.tc_no, 
-                    `${p.ad} ${p.soyad}`, 
-                    p.birim_adi, 
-                    new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), 
-                    kidem, 
-                    kumulatifHak, 
-                    devreden, 
-                    buYilHak, 
-                    toplamHavuz, 
-                    kullanilan, 
-                    kalan, 
+                    p.tc_no, `${p.ad} ${p.soyad}`, p.birim_adi, new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), kidem, 
+                    kumulatifHak, devreden, buYilHak, toplamHavuz, kullanilan, kalan, 
                     kalan < 0 ? "LİMİT AŞIMI" : (kalan < 5 ? "AZALDI" : "NORMAL")
                 ]);
             });
@@ -138,7 +128,6 @@ export default function LeaveReports() {
         } catch (e) { alert("Excel oluşturulurken hata oluştu."); }
     };
 
-    // --- 🎨 PDF ÇIKTILARI ---
     const downloadDetailPDF = async () => {
         if (!personelDetay) return;
         const p = personelDetay.personel;
@@ -188,6 +177,7 @@ export default function LeaveReports() {
                 <div className="input-group" style={{maxWidth: '400px'}}><span className="input-group-text bg-white border-end-0"><Search size={18} className="text-muted"/></span><input type="text" className="form-control border-start-0" placeholder="Ara..." value={arama} onChange={e=>setArama(e.target.value)}/></div>
             </div></div>
 
+            {/* ANA LİSTE TABLOSU */}
             <div className="card shadow-sm border-0 rounded-4 overflow-hidden"><div className="card-body p-0"><div className="table-responsive">
                 <table className="table table-hover align-middle mb-0">
                     <thead className="bg-light text-muted small text-uppercase">
@@ -205,14 +195,10 @@ export default function LeaveReports() {
                     </thead>
                     <tbody>
                         {yukleniyor ? <tr><td colSpan="9" className="text-center py-5">Yükleniyor...</td></tr> : filtered.map((p, i) => {
-                            // ✅ GÜVENLİ MATEMATİK İÇİN PARSEINT KULLANIYORUZ
                             const kumulatif = parseInt(p.kumulatif_hak) || 0;
                             const devreden = parseInt(p.devreden_izin) || 0;
                             const buYilHak = parseInt(p.bu_yil_hakedis) || 0;
-                            
-                            // Toplam Havuz = Otomatik Hesaplanan + Manuel Eklenen
                             const toplamHavuz = kumulatif + devreden;
-                            
                             const kalan = parseInt(p.kalan) || 0;
                             const toplamKullanilan = toplamHavuz - kalan;
                             
@@ -221,12 +207,7 @@ export default function LeaveReports() {
                                     <td className="ps-4 fw-bold">{p.ad} {p.soyad}<br/><small className="fw-normal text-muted">{p.tc_no}</small></td>
                                     <td className="text-muted small">{new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR')}</td>
                                     <td className="text-center bg-secondary-subtle text-dark fw-bold border-start border-end fs-6">{kumulatif}</td>
-                                    
-                                    {/* DEVREDEN SÜTUNU */}
-                                    <td className="text-center bg-warning-subtle text-dark fw-bold">
-                                        {devreden > 0 ? `+${devreden}` : '-'}
-                                    </td>
-                                    
+                                    <td className="text-center bg-warning-subtle text-dark fw-bold">{devreden > 0 ? `+${devreden}` : '-'}</td>
                                     <td className="text-center bg-info-subtle text-dark">{buYilHak}</td>
                                     <td className="text-center fw-bold fs-6">{toplamHavuz}</td>
                                     <td className="text-center text-muted">{toplamKullanilan}</td>
@@ -239,11 +220,13 @@ export default function LeaveReports() {
                 </table>
             </div></div></div>
 
-            {/* MODAL DETAY */}
+            {/* ✅ GÜNCELLENEN MODAL DETAY KISMI */}
             {secilenPersonel && (
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
-                    <div className="modal-dialog modal-xl modal-dialog-centered">
-                        <div className="modal-content shadow-lg border-0 rounded-4">
+                    <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                        <div className="modal-content shadow-lg border-0 rounded-4" style={{maxHeight:'90vh'}}>
+                            
+                            {/* Modal Header */}
                             <div className="modal-header bg-primary text-white p-4 align-items-center">
                                 <div className="d-flex align-items-center gap-3">
                                     <img 
@@ -261,80 +244,127 @@ export default function LeaveReports() {
                                 <button className="btn-close btn-close-white align-self-start" onClick={() => setSecilenPersonel(null)}></button>
                             </div>
                             
-                            <div className="modal-body bg-light p-4">
+                            {/* Modal Body */}
+                            <div className="modal-body bg-light p-0">
                                 {detayYukleniyor ? <div className="text-center py-5">Yükleniyor...</div> : personelDetay && (
-                                    <div className="row g-4">
-                                        <div className="col-md-4">
-                                            <div className="card border-0 shadow-sm h-100"><div className="card-body">
-                                                <h6 className="text-muted small fw-bold mb-4 d-flex align-items-center gap-2"><Calculator size={18} className="text-primary"/> BAKİYE ÖZETİ</h6>
-                                                
-                                                <div className="p-3 bg-primary bg-opacity-10 rounded-3 mb-3 border border-primary border-opacity-25 text-center">
-                                                    <small className="text-primary fw-bold">Ömür Boyu Toplam Hak</small>
-                                                    <div className="fs-2 fw-bold text-primary">{parseInt(secilenPersonel.kumulatif_hak) || 0} Gün</div>
-                                                </div>
-
-                                                <ul className="list-group list-group-flush small mb-4">
-                                                    {/* MODAL İÇİNDEKİ HESAPLAMALARI GÜNCELLEDİK */}
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent">
-                                                        <span>Sisteme Devreden:</span>
-                                                        <strong className="text-warning">
-                                                            +{parseInt(secilenPersonel.devreden_izin) || 0}
-                                                        </strong>
-                                                    </li>
-                                                    <li className="list-group-item d-flex justify-content-between px-0 bg-transparent">
-                                                        <span>Bu Yıl Hakediş:</span>
-                                                        <strong className="text-info">
-                                                            +{parseInt(secilenPersonel.bu_yil_hakedis) || 0}
-                                                        </strong>
-                                                    </li>
-                                                    
-                                                    {(() => {
-                                                        const kumulatif = parseInt(secilenPersonel.kumulatif_hak) || 0;
-                                                        const devreden = parseInt(secilenPersonel.devreden_izin) || 0;
-                                                        const toplamHavuz = kumulatif + devreden;
-                                                        const kalan = parseInt(personelDetay.personel.kalan) || 0;
-                                                        const kullanilan = toplamHavuz - kalan;
-
-                                                        return (
-                                                            <>
-                                                                <li className="list-group-item d-flex justify-content-between px-0 bg-transparent fw-bold">
-                                                                    <span>Toplam Havuz:</span>
-                                                                    <strong className="text-dark fs-6">{toplamHavuz}</strong>
-                                                                </li>
-                                                                <li className="list-group-item d-flex justify-content-between px-0 bg-transparent text-danger">
-                                                                    <span>Toplam Kullanılan:</span>
-                                                                    <strong>-{kullanilan}</strong>
-                                                                </li>
-                                                            </>
-                                                        );
-                                                    })()}
-                                                </ul>
-                                                
-                                                <div className={`alert ${personelDetay.personel.kalan < 0 ? 'alert-danger' : 'alert-success'} mb-0 text-center`}>
-                                                    <small className="d-block fw-bold mb-1">GÜNCEL KALAN BAKİYE</small>
-                                                    <span className="fs-3 fw-bold">{personelDetay.personel.kalan} Gün</span>
-                                                </div>
-                                            </div></div>
+                                    <div className="d-flex flex-column h-100">
+                                        
+                                        {/* TAB MENÜSÜ */}
+                                        <div className="bg-white border-bottom px-4 pt-3 sticky-top">
+                                            <ul className="nav nav-tabs border-0 gap-3">
+                                                <li className="nav-item">
+                                                    <button className={`nav-link border-0 fw-bold ${activeTab==='ozet'?'active border-bottom border-3 border-primary text-primary':'text-muted'}`} 
+                                                        onClick={()=>setActiveTab('ozet')}>📊 Bakiye Özeti</button>
+                                                </li>
+                                                <li className="nav-item">
+                                                    <button className={`nav-link border-0 fw-bold ${activeTab==='hakedis'?'active border-bottom border-3 border-primary text-primary':'text-muted'}`} 
+                                                        onClick={()=>setActiveTab('hakedis')}>📅 Yıllık Hakedişler</button>
+                                                </li>
+                                                <li className="nav-item">
+                                                    <button className={`nav-link border-0 fw-bold ${activeTab==='gecmis'?'active border-bottom border-3 border-primary text-primary':'text-muted'}`} 
+                                                        onClick={()=>setActiveTab('gecmis')}>history İzin Geçmişi</button>
+                                                </li>
+                                            </ul>
                                         </div>
-                                        <div className="col-md-8">
-                                            <div className="card border-0 shadow-sm h-100">
-                                                <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                                    <h6 className="m-0 fw-bold text-primary d-flex align-items-center gap-2"><History size={18}/> İzin Geçmişi</h6>
-                                                    
-                                                    <div className="d-flex gap-2">
-                                                        <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1 fw-bold" onClick={generateDetailExcel}>
-                                                            <FileSpreadsheet size={16}/> Excel
-                                                        </button>
-                                                        <button className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 fw-bold" onClick={downloadDetailPDF}>
-                                                            <FileText size={16}/> PDF Rapor
-                                                        </button>
+
+                                        {/* TAB İÇERİKLERİ */}
+                                        <div className="p-4">
+                                            
+                                            {/* TAB 1: ÖZET */}
+                                            {activeTab === 'ozet' && (
+                                                <div className="row justify-content-center">
+                                                    <div className="col-md-8">
+                                                        <div className="card border-0 shadow-sm">
+                                                            <div className="card-body p-4 text-center">
+                                                                <h6 className="text-muted fw-bold mb-4">GÜNCEL DURUM</h6>
+                                                                
+                                                                <div className="row g-3 mb-4">
+                                                                    <div className="col-6">
+                                                                        <div className="p-3 bg-light rounded-3 border">
+                                                                            <div className="small text-muted mb-1">Toplam Havuz</div>
+                                                                            <div className="fs-4 fw-bold text-dark">
+                                                                                {(parseInt(secilenPersonel.kumulatif_hak) || 0) + (parseInt(secilenPersonel.devreden_izin) || 0)}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="col-6">
+                                                                        <div className="p-3 bg-light rounded-3 border">
+                                                                            <div className="small text-muted mb-1">Kullanılan</div>
+                                                                            <div className="fs-4 fw-bold text-danger">
+                                                                                {personelDetay.personel.kullanilan}
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className={`p-4 rounded-4 ${personelDetay.personel.kalan < 0 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-success bg-opacity-10 text-success'}`}>
+                                                                    <div className="small fw-bold opacity-75 mb-1">KALAN BAKİYE</div>
+                                                                    <div className="display-4 fw-bold">{personelDetay.personel.kalan} Gün</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div className="table-responsive h-100"><table className="table table-hover mb-0 small">
-                                                    <thead className="table-light"><tr><th>Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Durum</th></tr></thead>
-                                                    <tbody>{personelDetay.izinler.map((iz, idx) => (<tr key={idx}><td>{iz.izin_turu}</td><td>{new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR')}</td><td>{new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR')}</td><td className="fw-bold">{iz.kac_gun}</td><td><span className="badge bg-success">Onaylı</span></td></tr>))}</tbody>
-                                                </table></div>
-                                            </div>
+                                            )}
+
+                                            {/* TAB 2: HAKEDİŞ LİSTESİ (YENİ TABLO) */}
+                                            {activeTab === 'hakedis' && (
+                                                <div className="card border-0 shadow-sm">
+                                                    <div className="table-responsive">
+                                                        <table className="table table-hover mb-0 align-middle">
+                                                            <thead className="bg-light">
+                                                                <tr>
+                                                                    <th className="ps-4">Hakediş Yılı</th>
+                                                                    <th className="text-center">Kıdem (Yıl)</th>
+                                                                    <th className="text-center">Yaş</th>
+                                                                    <th className="text-end pe-4">Hak Edilen (Gün)</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {personelDetay.hakedisListesi && personelDetay.hakedisListesi.length > 0 ? (
+                                                                    personelDetay.hakedisListesi.map((h, idx) => (
+                                                                        <tr key={idx}>
+                                                                            <td className="ps-4 fw-bold text-primary">{h.yil}</td>
+                                                                            <td className="text-center">{h.kidem}</td>
+                                                                            <td className="text-center text-muted">{h.yas > 0 ? h.yas : '-'}</td>
+                                                                            <td className="text-end pe-4 fw-bold text-success">+{h.hak}</td>
+                                                                        </tr>
+                                                                    ))
+                                                                ) : (
+                                                                    <tr><td colSpan="4" className="text-center py-4 text-muted">Hakediş verisi bulunamadı.</td></tr>
+                                                                )}
+                                                            </tbody>
+                                                            <tfoot className="bg-light fw-bold">
+                                                                <tr>
+                                                                    <td colSpan="3" className="ps-4 text-end">TOPLAM OTOMATİK HAKEDİŞ:</td>
+                                                                    <td className="text-end pe-4 text-primary fs-6">
+                                                                        {parseInt(secilenPersonel.kumulatif_hak) || 0} Gün
+                                                                    </td>
+                                                                </tr>
+                                                            </tfoot>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* TAB 3: İZİN GEÇMİŞİ */}
+                                            {activeTab === 'gecmis' && (
+                                                <div className="card border-0 shadow-sm">
+                                                    <div className="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                                                        <h6 className="m-0 fw-bold text-dark">Onaylanan İzinler</h6>
+                                                        <div className="d-flex gap-2">
+                                                            <button className="btn btn-sm btn-outline-success d-flex align-items-center gap-1" onClick={generateDetailExcel}><FileSpreadsheet size={14}/> Excel</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="table-responsive">
+                                                        <table className="table table-hover mb-0 small">
+                                                            <thead className="table-light"><tr><th className="ps-3">Tür</th><th>Başlangıç</th><th>Bitiş</th><th>Gün</th><th>Durum</th></tr></thead>
+                                                            <tbody>{personelDetay.izinler.map((iz, idx) => (<tr key={idx}><td className="ps-3">{iz.izin_turu}</td><td>{new Date(iz.baslangic_tarihi).toLocaleDateString('tr-TR')}</td><td>{new Date(iz.bitis_tarihi).toLocaleDateString('tr-TR')}</td><td className="fw-bold">{iz.kac_gun}</td><td><span className="badge bg-success">Onaylı</span></td></tr>))}</tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
+
                                         </div>
                                     </div>
                                 )}

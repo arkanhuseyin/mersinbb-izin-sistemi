@@ -1,11 +1,12 @@
 const pool = require('../config/db');
 
-// --- İŞÇİ HAKEDİŞ KURALLARI (NETLEŞTİRİLMİŞ) ---
+// ============================================================
+// 1. İŞÇİ HAKEDİŞ KURALLARI (NETLEŞTİRİLMİŞ)
+// ============================================================
 const getHakForYear = (hesapYili, kidemYili, yas, kurallar = []) => {
     
-    // ✅ YENİ EKLENEN KURAL: 1 Yıl Şartı
+    // ✅ 1 YIL ŞARTI (AVANS YOK)
     // Eğer personel 1 yılını doldurmamışsa (Kıdem < 1) kesinlikle hak kazanmaz.
-    // Bu satır "Avans İzin" mantığını kapatır ve Excel formülüyle birebir eşleşir.
     if (kidemYili < 1) return 0;
 
     // 1. Veritabanı Kuralı (Varsa öncelikli)
@@ -58,9 +59,11 @@ const getHakForYear = (hesapYili, kidemYili, yas, kurallar = []) => {
     return hak;
 };
 
-// --- ÖMÜR BOYU HAK HESAPLAMA (MATEMATİK DÜZELTİLDİ) ---
-const hesaplaKumulatif = async (girisTarihi, dogumTarihi = null, ayrilmaTarihi = null, aktif = true) => {
-    if (!girisTarihi) return 0;
+// ============================================================
+// 2. DETAYLI HESAPLAMA (TABLO İÇİN LİSTE DÖNDÜRÜR)
+// ============================================================
+const hesaplaKumulatifDetayli = async (girisTarihi, dogumTarihi = null, ayrilmaTarihi = null, aktif = true) => {
+    if (!girisTarihi) return { toplam: 0, liste: [] };
     
     const giris = new Date(girisTarihi);
     const dogum = dogumTarihi ? new Date(dogumTarihi) : null;
@@ -68,6 +71,8 @@ const hesaplaKumulatif = async (girisTarihi, dogumTarihi = null, ayrilmaTarihi =
     if (!aktif && ayrilmaTarihi) bitisTarihi = new Date(ayrilmaTarihi);
 
     let toplamHak = 0;
+    let hakedisListesi = []; // Yıl yıl döküm için dizi
+
     const kuralRes = await pool.query("SELECT * FROM hakedis_kurallari");
     const kurallar = kuralRes.rows;
 
@@ -77,9 +82,7 @@ const hesaplaKumulatif = async (girisTarihi, dogumTarihi = null, ayrilmaTarihi =
     while (hakedisTarihi <= bitisTarihi) {
         const hesapYili = hakedisTarihi.getFullYear();
         
-        // 🛠️ DÜZELTME: Kıdem hesabı YIL FARKI ile yapılır.
-        // Örn: Giriş 2024, Hesap Yılı 2024 -> Kıdem 0 -> Hak 0 (Yeni kural gereği)
-        // Örn: Giriş 2024, Hesap Yılı 2025 -> Kıdem 1 -> Hak Var
+        // Kıdem hesabı
         const oAnkiKidem = hesapYili - giris.getFullYear();
         
         let oAnkiYas = 0;
@@ -87,17 +90,39 @@ const hesaplaKumulatif = async (girisTarihi, dogumTarihi = null, ayrilmaTarihi =
 
         // Kıdem negatif olamaz (Giriş yılından önceki yıllar hesaplanmaz)
         if (oAnkiKidem >= 0) {
-            toplamHak += getHakForYear(hesapYili, oAnkiKidem, oAnkiYas, kurallar);
+            const buYilHak = getHakForYear(hesapYili, oAnkiKidem, oAnkiYas, kurallar);
+            
+            // Eğer hak kazanılmışsa listeye ve toplama ekle
+            if (buYilHak > 0) {
+                toplamHak += buYilHak;
+                hakedisListesi.push({
+                    yil: hesapYili,
+                    kidem: oAnkiKidem,
+                    yas: oAnkiYas,
+                    hak: buYilHak
+                });
+            }
         }
         
         // Bir sonraki yıla geç
         hakedisTarihi.setFullYear(hakedisTarihi.getFullYear() + 1);
     }
     
-    return toplamHak;
+    // Listeyi sondan başa (2025, 2024...) sıralayarak döndür
+    return { toplam: toplamHak, liste: hakedisListesi.reverse() };
 };
 
-// --- BU YILIN HAKKI ---
+// ============================================================
+// 3. SADECE TOPLAM (ESKİ FONKSİYON - WRAPPER)
+// ============================================================
+const hesaplaKumulatif = async (girisTarihi, dogumTarihi = null, ayrilmaTarihi = null, aktif = true) => {
+    const sonuc = await hesaplaKumulatifDetayli(girisTarihi, dogumTarihi, ayrilmaTarihi, aktif);
+    return sonuc.toplam;
+};
+
+// ============================================================
+// 4. BU YILIN HAKKI (DASHBOARD İÇİN)
+// ============================================================
 const hesaplaBuYil = async (personel_id) => {
     try {
         const pRes = await pool.query("SELECT ise_giris_tarihi, dogum_tarihi, ayrilma_tarihi, aktif FROM personeller WHERE personel_id = $1", [personel_id]);
@@ -131,5 +156,6 @@ const hesaplaBuYil = async (personel_id) => {
 
 module.exports = {
     hesaplaBuYil,
-    hesaplaKumulatif
+    hesaplaKumulatif,
+    hesaplaKumulatifDetayli // ✅ Dışa açtık
 };
