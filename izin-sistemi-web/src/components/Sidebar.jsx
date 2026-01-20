@@ -12,7 +12,7 @@ export default function Sidebar() {
     const location = useLocation();
     const { activeModule } = useModule();
     
-    // Varsayılan olarak menüleri açık başlatmak için state
+    // ✅ DÜZELTME: Menüler varsayılan olarak AÇIK geliyor
     const [openMenus, setOpenMenus] = useState({
         'İzin İşlemleri': true,
         'Lojistik İşlemleri': true,
@@ -22,7 +22,7 @@ export default function Sidebar() {
     let user = null;
     try { user = JSON.parse(localStorage.getItem('user')); } catch (e) {}
 
-    // Modül değiştiğinde ilgili menüyü otomatik aç
+    // Modül değişince de açık kalmasını garantilemek için
     useEffect(() => {
         if (activeModule === 'IZIN') setOpenMenus(prev => ({ ...prev, 'İzin İşlemleri': true }));
         if (activeModule === 'KIYAFET') setOpenMenus(prev => ({ ...prev, 'Lojistik İşlemleri': true }));
@@ -38,7 +38,7 @@ export default function Sidebar() {
     const getMenuItems = () => {
         const items = [];
 
-        // 1. GENEL MENÜLER (HER YERDE)
+        // 1. GENEL MENÜLER
         items.push({
             title: 'Ana Sayfa',
             path: '/dashboard/home',
@@ -56,7 +56,8 @@ export default function Sidebar() {
                     { title: 'Yeni İzin Talebi', path: '/dashboard/create-leave', icon: <PlusCircle size={16}/>, show: checkPermission('izin_talep') },
                     { title: 'İzin Onayları', path: '/dashboard/leaves', icon: <FileText size={16}/>, show: checkPermission('izin_onay') },
                     { title: 'İK Hızlı Giriş', path: '/dashboard/hr-entry', icon: <Zap size={16}/>, show: ['admin', 'ik', 'filo'].includes(user?.rol) },
-                    { title: 'İzin Planlama (Gantt)', path: '/dashboard/planning', icon: <Calendar size={16}/>, show: ['admin', 'ik', 'filo', 'amir'].includes(user?.rol) }, // ✅ EKLENDİ
+                    // ✅ DÜZELTME: İzin Planlama Butonu Burada
+                    { title: 'İzin Planlama (Gantt)', path: '/dashboard/planning', icon: <Calendar size={16}/>, show: ['admin', 'ik', 'filo', 'amir'].includes(user?.rol) }, 
                     { title: 'Raporlar', path: '/dashboard/reports', icon: <FileBarChart size={16}/>, show: checkPermission('raporlar') }
                 ]
             });
@@ -80,8 +81,7 @@ export default function Sidebar() {
                 icon: <Shirt size={20}/>,
                 modules: ['KIYAFET'],
                 subItems: [
-                    { title: 'Stok Durumu', path: '/dashboard/home', icon: <FileBarChart size={16}/>, show: true }, 
-                    { title: 'Kıyafet Talepleri', path: '/dashboard/settings', icon: <Shirt size={16}/>, show: true } 
+                    { title: 'Beden Ayarları', path: '/dashboard/settings', icon: <Settings size={16}/>, show: true }
                 ]
             });
         }
@@ -128,17 +128,15 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* MENÜ LİSTESİ (TREE YAPI) */}
+            {/* MENÜ LİSTESİ */}
             <div className="flex-grow-1 overflow-auto p-3 custom-scrollbar">
                 <div className="d-flex flex-column gap-1">
                     {getMenuItems().map((item, index) => {
-                        // Yetki Kontrolü
                         if (item.show === false) return null;
 
-                        // Alt Menüsü Varsa (Tree)
                         if (item.subItems && item.subItems.length > 0) {
                             const isActiveParent = item.subItems.some(sub => sub.path === location.pathname);
-                            const isOpen = openMenus[item.title] || isActiveParent; 
+                            const isOpen = openMenus[item.title]; // Varsayılan açık
 
                             return (
                                 <div key={index} className="mb-1">
@@ -154,7 +152,6 @@ export default function Sidebar() {
                                         {isOpen ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
                                     </button>
                                     
-                                    {/* ALT MENÜLER (Varsayılan Açık) */}
                                     {isOpen && (
                                         <div className="ms-3 ps-3 border-start border-2 mt-1 d-flex flex-column gap-1 animate-slide-down">
                                             {item.subItems.map((sub, subIndex) => sub.show !== false && (
@@ -174,7 +171,6 @@ export default function Sidebar() {
                             );
                         }
 
-                        // Tekil Menü
                         return (
                             <Link 
                                 key={index}
@@ -193,7 +189,7 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* FOOTER */}
+            {/* FOOTER (GÜNCELLENDİ: Yazı Beyaz) */}
             <div className="p-3 mt-auto bg-light bg-opacity-50 border-top">
                 <button onClick={handleLogout} className="btn btn-danger w-100 d-flex align-items-center justify-content-center gap-2 py-2 rounded-3 border-0 fw-bold shadow-sm text-white">
                     <LogOut size={16}/> Çıkış Yap
