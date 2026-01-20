@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useModule } from '../context/ModuleContext';
 import { 
     LayoutDashboard, FileText, UserCog, Settings, LogOut, PlusCircle, 
-    FileBarChart, ShieldCheck, MessageSquare, Zap, Shirt, Home, ChevronDown, ChevronRight, Menu
+    FileBarChart, ShieldCheck, MessageSquare, Zap, Shirt, Home, ChevronDown, ChevronRight, Menu, Calendar
 } from 'lucide-react';
 import logoMbb from '../assets/logombb.png'; 
 
@@ -11,10 +11,28 @@ export default function Sidebar() {
     const navigate = useNavigate();
     const location = useLocation();
     const { activeModule } = useModule();
-    const [openMenus, setOpenMenus] = useState({}); // Açık menüleri tutar
+    
+    // Varsayılan olarak menüleri açık başlatmak için state
+    const [openMenus, setOpenMenus] = useState({
+        'İzin İşlemleri': true,
+        'Lojistik İşlemleri': true,
+        'Yönetim Paneli': true
+    });
 
     let user = null;
     try { user = JSON.parse(localStorage.getItem('user')); } catch (e) {}
+
+    // Modül değiştiğinde ilgili menüyü otomatik aç
+    useEffect(() => {
+        if (activeModule === 'IZIN') setOpenMenus(prev => ({ ...prev, 'İzin İşlemleri': true }));
+        if (activeModule === 'KIYAFET') setOpenMenus(prev => ({ ...prev, 'Lojistik İşlemleri': true }));
+    }, [activeModule]);
+
+    const checkPermission = (modulKey) => {
+        if (user?.rol === 'admin') return true;
+        const permission = user?.yetkiler?.find(p => p.modul_adi === modulKey);
+        return permission && permission.goruntule === true;
+    };
 
     // --- MENÜ YAPILANDIRMASI ---
     const getMenuItems = () => {
@@ -38,7 +56,7 @@ export default function Sidebar() {
                     { title: 'Yeni İzin Talebi', path: '/dashboard/create-leave', icon: <PlusCircle size={16}/>, show: checkPermission('izin_talep') },
                     { title: 'İzin Onayları', path: '/dashboard/leaves', icon: <FileText size={16}/>, show: checkPermission('izin_onay') },
                     { title: 'İK Hızlı Giriş', path: '/dashboard/hr-entry', icon: <Zap size={16}/>, show: ['admin', 'ik', 'filo'].includes(user?.rol) },
-                    { title: 'İzin Planlama (Gantt)', path: '/dashboard/planning', icon: <Calendar size={16}/>, show: ['admin', 'ik', 'filo', 'amir'].includes(user?.rol) },
+                    { title: 'İzin Planlama (Gantt)', path: '/dashboard/planning', icon: <Calendar size={16}/>, show: ['admin', 'ik', 'filo', 'amir'].includes(user?.rol) }, // ✅ EKLENDİ
                     { title: 'Raporlar', path: '/dashboard/reports', icon: <FileBarChart size={16}/>, show: checkPermission('raporlar') }
                 ]
             });
@@ -62,8 +80,8 @@ export default function Sidebar() {
                 icon: <Shirt size={20}/>,
                 modules: ['KIYAFET'],
                 subItems: [
-                    { title: 'Stok Durumu', path: '/dashboard/home', icon: <FileBarChart size={16}/>, show: true }, // Geçici path
-                    { title: 'Kıyafet Talepleri', path: '/dashboard/settings', icon: <Shirt size={16}/>, show: true } // Geçici path
+                    { title: 'Stok Durumu', path: '/dashboard/home', icon: <FileBarChart size={16}/>, show: true }, 
+                    { title: 'Kıyafet Talepleri', path: '/dashboard/settings', icon: <Shirt size={16}/>, show: true } 
                 ]
             });
         }
@@ -84,20 +102,16 @@ export default function Sidebar() {
         return items;
     };
 
-    const checkPermission = (modulKey) => {
-        if (user?.rol === 'admin') return true;
-        const permission = user?.yetkiler?.find(p => p.modul_adi === modulKey);
-        return permission && permission.goruntule === true;
-    };
-
     const toggleMenu = (title) => {
         setOpenMenus(prev => ({ ...prev, [title]: !prev[title] }));
     };
 
     const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        navigate('/');
+        if(confirm("Çıkış yapmak istediğinize emin misiniz?")) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            navigate('/login');
+        }
     };
 
     return (
@@ -118,13 +132,13 @@ export default function Sidebar() {
             <div className="flex-grow-1 overflow-auto p-3 custom-scrollbar">
                 <div className="d-flex flex-column gap-1">
                     {getMenuItems().map((item, index) => {
-                        // Yetki Kontrolü (Ana Öğe İçin)
+                        // Yetki Kontrolü
                         if (item.show === false) return null;
 
                         // Alt Menüsü Varsa (Tree)
                         if (item.subItems && item.subItems.length > 0) {
                             const isActiveParent = item.subItems.some(sub => sub.path === location.pathname);
-                            const isOpen = openMenus[item.title] || isActiveParent; // Otomatik aç veya manuel
+                            const isOpen = openMenus[item.title] || isActiveParent; 
 
                             return (
                                 <div key={index} className="mb-1">
@@ -140,7 +154,7 @@ export default function Sidebar() {
                                         {isOpen ? <ChevronDown size={16}/> : <ChevronRight size={16}/>}
                                     </button>
                                     
-                                    {/* ALT MENÜLER */}
+                                    {/* ALT MENÜLER (Varsayılan Açık) */}
                                     {isOpen && (
                                         <div className="ms-3 ps-3 border-start border-2 mt-1 d-flex flex-column gap-1 animate-slide-down">
                                             {item.subItems.map((sub, subIndex) => sub.show !== false && (
@@ -160,7 +174,7 @@ export default function Sidebar() {
                             );
                         }
 
-                        // Tekil Menü İse
+                        // Tekil Menü
                         return (
                             <Link 
                                 key={index}
