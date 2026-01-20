@@ -14,6 +14,7 @@ import LeaveReports from './pages/LeaveReports';
 import Yetkilendirme from './pages/Yetkilendirme'; 
 import TalepYonetimi from './pages/TalepYonetimi'; 
 import HrLeaveEntry from './pages/HrLeaveEntry';
+import LeavePlanning from './pages/LeavePlanning';
 
 const DashboardLayout = () => (
   // Dikey yerleşim: Üstte Header, Altta (Sidebar + İçerik)
@@ -60,6 +61,7 @@ function App() {
               <Route path="yetkilendirme" element={<Yetkilendirme />} /> 
               <Route path="requests" element={<TalepYonetimi />} /> 
               <Route path="hr-entry" element={<HrLeaveEntry />} /> 
+              <Route path="planning" element={<LeavePlanning />} />
           </Route>
         </Routes>
       </BrowserRouter>

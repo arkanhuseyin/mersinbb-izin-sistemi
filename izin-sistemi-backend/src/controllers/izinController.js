@@ -494,8 +494,35 @@ exports.topluPdfRaporu = async (req, res) => {
         doc.end();
     } catch (err) { console.error(err); res.status(500).send("PDF Hatası"); }
 };
+// 2. GANTT ŞEMASI İÇİN VERİ (PLANLAMA)
+exports.getIzinPlani = async (req, res) => {
+    try {
+        // Sadece Aktif Personelleri ve Onaylı/Bekleyen İzinleri Çekelim
+        // İptal edilen veya Reddedilenler planlamayı etkilemez.
+        const query = `
+            SELECT 
+                p.personel_id, p.ad, p.soyad, p.birim_id, b.birim_adi, p.gorev,
+                t.talep_id, t.baslangic_tarihi, t.bitis_tarihi, t.durum, t.izin_turu
+            FROM personeller p
+            LEFT JOIN birimler b ON p.birim_id = b.birim_id
+            LEFT JOIN izin_talepleri t ON p.personel_id = t.personel_id 
+                AND t.durum NOT IN ('REDDEDILDI', 'IPTAL_EDILDI')
+            WHERE p.aktif = TRUE
+            ORDER BY b.birim_adi, p.ad ASC
+        `;
 
-// 2. KİŞİYE ÖZEL DETAYLI PDF
+        const result = await pool.query(query);
+        
+        // Veriyi Frontend'in Gantt kütüphanesinin istediği formata çevireceğiz
+        // Ancak burada ham veriyi gönderip frontend'de işlemek daha esnek olur.
+        res.json(result.rows);
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ mesaj: 'Planlama verisi çekilemedi.' });
+    }
+};
+// 3. KİŞİYE ÖZEL DETAYLI PDF
 exports.kisiOzelPdfRaporu = async (req, res) => {
     const { id } = req.params;
     try {

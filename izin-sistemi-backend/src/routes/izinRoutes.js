@@ -55,5 +55,6 @@ router.get('/rapor/tum-personel-detay', auth, izinController.tumPersonelDetayliV
 router.get('/rapor/pdf-toplu', auth, izinController.topluPdfRaporu);
 router.get('/rapor/pdf-detay/:id', auth, izinController.kisiOzelPdfRaporu);
 router.delete('/talep-sil/:id', auth, izinController.talepSil);
+router.get('/planlama', auth, izinController.getIzinPlani);
 
 module.exports = router;
