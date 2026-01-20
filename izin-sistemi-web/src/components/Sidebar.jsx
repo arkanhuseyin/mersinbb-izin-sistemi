@@ -54,11 +54,10 @@ export default function Sidebar() {
                 modules: ['IZIN'],
                 subItems: [
                     { title: 'Yeni İzin Talebi', path: '/dashboard/create-leave', icon: <PlusCircle size={16}/>, show: checkPermission('izin_talep') },
-                    { title: 'İzin Onayları', path: '/dashboard/leaves', icon: <FileText size={16}/>, show: checkPermission('izin_onay') },
-                    { title: 'İK Hızlı Giriş', path: '/dashboard/hr-entry', icon: <Zap size={16}/>, show: ['admin', 'ik', 'filo'].includes(user?.rol) },
-                    // ✅ DÜZELTME: İzin Planlama Butonu Burada
+                    { title: 'İzin Talepleri', path: '/dashboard/leaves', icon: <FileText size={16}/>, show: checkPermission('izin_onay') },
+                    { title: 'İnsan Kaynakları İzin Sistemi', path: '/dashboard/hr-entry', icon: <Zap size={16}/>, show: ['admin', 'ik', 'filo'].includes(user?.rol) },
                     { title: 'İzin Planlama (Gantt)', path: '/dashboard/planning', icon: <Calendar size={16}/>, show: ['admin', 'ik', 'filo', 'amir'].includes(user?.rol) }, 
-                    { title: 'Raporlar', path: '/dashboard/reports', icon: <FileBarChart size={16}/>, show: checkPermission('raporlar') }
+                    { title: 'İzin Takip Raporu', path: '/dashboard/reports', icon: <FileBarChart size={16}/>, show: checkPermission('raporlar') }
                 ]
             });
         }

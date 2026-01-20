@@ -494,6 +494,45 @@ exports.topluPdfRaporu = async (req, res) => {
         doc.end();
     } catch (err) { console.error(err); res.status(500).send("PDF Hatası"); }
 };
+// ============================================================
+// 🔄 İZİN GÜNCELLEME (ERKEN DÖNÜŞ / TARİH DEĞİŞİKLİĞİ)
+// ============================================================
+exports.talepGuncelle = async (req, res) => {
+    // Sadece yetkili kişiler yapabilir
+    if (!['admin', 'ik', 'filo'].includes(req.user.rol)) {
+        return res.status(403).json({ mesaj: 'Bu işlem için yetkiniz yok.' });
+    }
+
+    const { talep_id, yeni_bitis_tarihi, yeni_gun_sayisi } = req.body;
+
+    try {
+        // 1. Mevcut izni bul
+        const eskiTalepRes = await pool.query("SELECT * FROM izin_talepleri WHERE talep_id = $1", [talep_id]);
+        if (eskiTalepRes.rows.length === 0) return res.status(404).json({ mesaj: 'Talep bulunamadı.' });
+        
+        const eskiTalep = eskiTalepRes.rows[0];
+        const eskiGun = parseInt(eskiTalep.kac_gun);
+        const yeniGun = parseInt(yeni_gun_sayisi);
+        const iadeEdilecekGun = eskiGun - yeniGun;
+
+        // 2. Güncelleme İşlemi
+        await pool.query(
+            "UPDATE izin_talepleri SET bitis_tarihi = $1, kac_gun = $2 WHERE talep_id = $3",
+            [yeni_bitis_tarihi, yeniGun, talep_id]
+        );
+
+        // 3. Loglama
+        const logMesaji = `İzin güncellendi. Eski: ${eskiGun} gün, Yeni: ${yeniGun} gün. (${iadeEdilecekGun} gün iade edildi)`;
+        await hareketKaydet(talep_id, req.user.id, 'DÜZENLEME', logMesaji);
+        await logKaydet(req.user.id, 'İZİN_GÜNCELLEME', `Talep ID: ${talep_id} güncellendi. Personel ID: ${eskiTalep.personel_id}`, req);
+
+        res.json({ mesaj: 'İzin başarıyla güncellendi.', iade: iadeEdilecekGun });
+
+    } catch (err) {
+        console.error("Güncelleme Hatası:", err);
+        res.status(500).json({ mesaj: 'Güncelleme sırasında hata oluştu.' });
+    }
+};
 // 2. GANTT ŞEMASI İÇİN VERİ (PLANLAMA)
 exports.getIzinPlani = async (req, res) => {
     try {
