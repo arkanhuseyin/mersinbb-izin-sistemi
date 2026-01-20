@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import axios from 'axios';
 import SignatureCanvas from 'react-signature-canvas';
-import { Filter, Search, CheckCircle, XCircle, Clock, FileText, Printer, Download, UserCheck, Eye, Activity, UserX, PenTool, X } from 'lucide-react';
+import { Filter, Search, CheckCircle, XCircle, Clock, FileText, Printer, Download, UserCheck, Eye, Activity, UserX, PenTool, X, AlertTriangle, MessageSquare } from 'lucide-react';
 
 const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
 const DEFAULT_PHOTO = "https://cdn-icons-png.flaticon.com/512/149/149071.png";
@@ -18,6 +18,10 @@ export default function LeaveRequests() {
     const [arama, setArama] = useState('');
     const [printModalOpen, setPrintModalOpen] = useState(false);
     
+    // ✅ YENİ: Reddetme Modalı State'leri
+    const [showRejectModal, setShowRejectModal] = useState(false);
+    const [rejectReason, setRejectReason] = useState('');
+
     // Yazdırma Ayarları
     const [printSettings, setPrintSettings] = useState({
         managerName: 'Bayram DEMİR', isManagerProxy: false,
@@ -96,16 +100,35 @@ export default function LeaveRequests() {
         } catch (error) { alert('Hata oluştu: ' + (error.response?.data?.mesaj || error.message)); }
     };
 
-    const reddet = async () => {
-        if(!window.confirm("Bu talebi REDDETMEK istiyor musunuz?")) return;
+    // ✅ YENİ: Sadece Modalı Açar
+    const openRejectModal = () => {
+        setRejectReason(''); // Önceki yazıyı temizle
+        setShowRejectModal(true);
+    };
+
+    // ✅ YENİ: Gerçek Reddetme İşlemi (API Çağrısı)
+    const confirmReject = async () => {
+        if (!rejectReason.trim()) return alert("Lütfen bir red nedeni giriniz.");
+        
         const token = localStorage.getItem('token');
         try {
             await axios.post(`${API_URL}/api/izin/onayla`, 
-                { talep_id: secilenTalep.talep_id, imza_data: null, yeni_durum: 'REDDEDILDI' }, 
+                { 
+                    talep_id: secilenTalep.talep_id, 
+                    imza_data: null, 
+                    yeni_durum: 'REDDEDILDI',
+                    red_nedeni: rejectReason // Nedeni backend'e gönderiyoruz
+                }, 
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            alert(`❌ Talep Reddedildi.`); setSecilenTalep(null); verileriGetir(token);
-        } catch (error) { alert('Hata oluştu!'); }
+            
+            alert(`❌ Talep Reddedildi.`); 
+            setShowRejectModal(false); // Modalı kapat
+            setSecilenTalep(null); // Detay penceresini kapat
+            verileriGetir(token); // Listeyi yenile
+        } catch (error) { 
+            alert('Hata oluştu: ' + (error.response?.data?.mesaj || error.message)); 
+        }
     };
 
     const islakImzaIslemi = async (durum) => {
@@ -364,19 +387,19 @@ export default function LeaveRequests() {
                                         {/* ONAY BUTONLARI */}
                                         {kullanici?.rol === 'amir' && secilenTalep.durum === 'ONAY_BEKLIYOR' && (
                                             <>
-                                                <button className="btn btn-danger" onClick={reddet}>Reddet</button>
+                                                <button className="btn btn-danger" onClick={openRejectModal}>Reddet</button>
                                                 <button className="btn btn-warning fw-bold text-dark" onClick={() => onayla('AMIR')}>Amir Onayı</button>
                                             </>
                                         )}
                                         {kullanici?.rol === 'yazici' && secilenTalep.durum === 'AMIR_ONAYLADI' && (
                                             <>
-                                                <button className="btn btn-danger" onClick={reddet}>Reddet</button>
+                                                <button className="btn btn-danger" onClick={openRejectModal}>Reddet</button>
                                                 <button className="btn btn-primary fw-bold" onClick={() => onayla('YAZICI')}>Yazıcı Onayı</button>
                                             </>
                                         )}
                                         {(['ik', 'admin', 'filo'].includes(kullanici?.rol)) && secilenTalep.durum === 'YAZICI_ONAYLADI' && (
                                             <>
-                                                <button className="btn btn-danger" onClick={reddet}>Reddet</button>
+                                                <button className="btn btn-danger" onClick={openRejectModal}>Reddet</button>
                                                 <button className="btn btn-success fw-bold" onClick={() => onayla('IK')}>İK Onayı</button>
                                             </>
                                         )}
@@ -400,6 +423,47 @@ export default function LeaveRequests() {
                 </div>
             )}
             
+            {/* ✅ YENİ: REDDETME MODALI */}
+            {showRejectModal && (
+                <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1060}}>
+                    <div className="modal-dialog modal-dialog-centered">
+                        <div className="modal-content shadow-lg border-0 rounded-4">
+                            <div className="modal-header bg-danger text-white p-4">
+                                <h5 className="modal-title fw-bold d-flex align-items-center gap-2">
+                                    <AlertTriangle size={24}/> İzin Reddetme
+                                </h5>
+                                <button className="btn-close btn-close-white" onClick={() => setShowRejectModal(false)}></button>
+                            </div>
+                            <div className="modal-body p-4">
+                                <div className="alert alert-light border-danger text-danger d-flex align-items-center gap-2 mb-3">
+                                    <XCircle size={18}/>
+                                    <span>Bu işlem personelin talebini kalıcı olarak reddeder.</span>
+                                </div>
+                                <div className="form-group">
+                                    <label className="fw-bold text-dark mb-2 d-flex align-items-center gap-2">
+                                        <MessageSquare size={16}/> Red Gerekçesi (Zorunlu)
+                                    </label>
+                                    <textarea 
+                                        className="form-control bg-light border-0 shadow-sm" 
+                                        rows="4" 
+                                        placeholder="Örn: Personel yetersizliği nedeniyle uygun görülmemiştir..."
+                                        value={rejectReason}
+                                        onChange={(e) => setRejectReason(e.target.value)}
+                                        style={{resize: 'none'}}
+                                    ></textarea>
+                                </div>
+                            </div>
+                            <div className="modal-footer border-0 p-4 pt-0">
+                                <button className="btn btn-light fw-bold" onClick={() => setShowRejectModal(false)}>Vazgeç</button>
+                                <button className="btn btn-danger fw-bold px-4 shadow-sm" onClick={confirmReject}>
+                                    Onayla ve Reddet
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* YAZDIRMA AYARLARI MODALI */}
             {printModalOpen && (
                 <div className="modal d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1060}}>
@@ -430,10 +494,6 @@ export default function LeaveRequests() {
                                         className="form-control form-control-sm mt-1" 
                                         value={printSettings.managerName} 
                                         onChange={(e) => setPrintSettings({...printSettings, managerName: e.target.value})} 
-                                        // DÜZELTME: Eğer vekil seçiliyse düzenlenebilir olsun, değilse de düzenlenebilir (isteğe bağlı)
-                                        // Ancak genelde checkbox "Vekil" sıfatını ekler, isim hep düzenlenebilir olmalı.
-                                        // Veya senin mantığına göre: Vekil seçilirse isim inputu aktif/pasif mi olacak? 
-                                        // Kodda `disabled={!printSettings.isManagerProxy}` vardı, bunu kaldırdım ki isim her zaman değiştirilebilsin.
                                     />
                                 </div>
                                 <div className="mb-3">
