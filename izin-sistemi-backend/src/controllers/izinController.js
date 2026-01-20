@@ -200,39 +200,68 @@ exports.izinleriGetir = async (req, res) => {
     } catch (err) { res.status(500).json({ mesaj: 'Veri çekilemedi' }); }
 };
 
-// TALEP ONAYLAMA
+// TALEP ONAYLAMA (GÜNCELLENDİ: RED SEBEBİ EKLENDİ)
 exports.talepOnayla = async (req, res) => {
-    const { talep_id, imza_data, yeni_durum } = req.body;
+    const { talep_id, imza_data, yeni_durum, red_nedeni } = req.body; // ✅ red_nedeni eklendi
     const onaylayan_id = req.user.id;
     const client = await pool.connect();
+    
     try {
         await client.query('BEGIN');
-        if (imza_data) await client.query(`INSERT INTO imzalar (personel_id, imza_data, talep_id) VALUES ($1, $2, $3)`, [onaylayan_id, imza_data, talep_id]);
+        
+        // İmza varsa kaydet
+        if (imza_data) {
+            await client.query(`INSERT INTO imzalar (personel_id, imza_data, talep_id) VALUES ($1, $2, $3)`, [onaylayan_id, imza_data, talep_id]);
+        }
+        
+        // Durumu güncelle
         await client.query(`UPDATE izin_talepleri SET durum = $1 WHERE talep_id = $2`, [yeni_durum, talep_id]);
 
+        // Log Başlığı ve İçeriği Hazırla
         let islemBaslik = 'İŞLEM';
+        let islemDetay = `Durum: ${yeni_durum}`;
+
         if (yeni_durum === 'AMIR_ONAYLADI') islemBaslik = 'AMİR ONAYI';
         else if (yeni_durum === 'YAZICI_ONAYLADI') islemBaslik = 'YAZICI ONAYI';
         else if (yeni_durum === 'IK_ONAYLADI') islemBaslik = 'İK ONAYI';
-        else if (yeni_durum === 'REDDEDILDI') islemBaslik = 'RED';
+        else if (yeni_durum === 'REDDEDILDI') {
+            islemBaslik = 'RED';
+            // ✅ Eğer red nedeni varsa loga ekle
+            if (red_nedeni) {
+                islemDetay += ` - Açıklama: ${red_nedeni}`;
+            }
+        }
 
-        await hareketKaydet(talep_id, onaylayan_id, islemBaslik, `Durum: ${yeni_durum}`);
+        // Hareketi (Logu) Kaydet
+        await hareketKaydet(talep_id, onaylayan_id, islemBaslik, islemDetay);
         await logKaydet(onaylayan_id, 'İZİN_İŞLEMİ', `Talep ${talep_id} durumu: ${yeni_durum}`, req);
 
+        // Bildirim Gönderimi
         const talepBilgi = await client.query("SELECT p.personel_id, p.ad, p.soyad, i.baslangic_tarihi FROM izin_talepleri i JOIN personeller p ON i.personel_id = p.personel_id WHERE i.talep_id = $1", [talep_id]);
         if (talepBilgi.rows.length > 0) {
             const p = talepBilgi.rows[0];
             const baslangicTarihi = tarihGoster(p.baslangic_tarihi);
+            
             if (yeni_durum === 'IK_ONAYLADI') {
                 const mesaj = `Sayın ${p.ad} ${p.soyad}, ${baslangicTarihi} tarihli izniniz onaylanmıştır. İzninizden 1 gün önce İK'ya gelip ıslak imza atınız.`;
                 await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '✅ Onaylandı (Islak İmza Gerekli)', mesaj]);
             } else if (yeni_durum === 'REDDEDILDI') {
-                await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '❌ Reddedildi', 'İzin talebiniz reddedildi.']);
+                // Red mesajına sebebi de ekleyelim
+                const redMesaji = red_nedeni ? `İzin talebiniz reddedildi. Sebep: ${red_nedeni}` : 'İzin talebiniz reddedildi.';
+                await client.query(`INSERT INTO bildirimler (personel_id, baslik, mesaj) VALUES ($1, $2, $3)`, [p.personel_id, '❌ Reddedildi', redMesaji]);
             }
         }
+        
         await client.query('COMMIT');
         res.json({ mesaj: 'İşlem tamamlandı.' });
-    } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ mesaj: 'Hata oluştu.' }); } finally { client.release(); }
+
+    } catch (err) { 
+        await client.query('ROLLBACK'); 
+        console.error(err);
+        res.status(500).json({ mesaj: 'Hata oluştu.' }); 
+    } finally { 
+        client.release(); 
+    }
 };
 
 // RAPOR VERİSİ (FRONTEND İÇİN)
