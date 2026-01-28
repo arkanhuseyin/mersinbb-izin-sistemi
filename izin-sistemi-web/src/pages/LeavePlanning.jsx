@@ -33,7 +33,7 @@ export default function LeavePlanning() {
                 axios.get(`${API_URL}/api/personel/birimler`, { headers: { Authorization: `Bearer ${token}` } })
             ]);
             
-            // Backend'den gelen ham veriyi gruplayarak işliyoruz
+            // Backend verisini grupla
             const islenmisVeri = veriyiGrupla(planRes.data);
             
             setPersoneller(islenmisVeri);
@@ -45,19 +45,15 @@ export default function LeavePlanning() {
         }
     };
 
-    // 🛠️ DÖNÜŞTÜRÜCÜ: Backend verisini Kişi Bazlı Gruplar
+    // 🛠️ VERİ DÖNÜŞTÜRÜCÜ (GÜN SAYISI DÜZELTİLDİ) ✅
     const veriyiGrupla = (hamVeri) => {
         const gruplanmis = {};
 
         hamVeri.forEach(satir => {
-            // GÜVENLİK: Admin ve Sistem kullanıcısını gizle
+            // Admin Gizleme
             const rid = Number(satir.rol_id);
-            const ad = (satir.ad || '').toLowerCase();
-            const soyad = (satir.soyad || '').toLowerCase();
-            
-            if (rid === 5 || rid === 1 || ad === 'sistem' || soyad === 'admin') return;
+            if (rid === 5 || rid === 1 || (satir.ad && satir.ad.toLowerCase() === 'sistem')) return;
 
-            // Personeli listeye ekle (Eğer yoksa)
             if (!gruplanmis[satir.personel_id]) {
                 gruplanmis[satir.personel_id] = {
                     ...satir,
@@ -65,7 +61,6 @@ export default function LeavePlanning() {
                 };
             }
 
-            // İzin varsa listesine ekle
             if (satir.talep_id) {
                 gruplanmis[satir.personel_id].izinler.push({
                     talep_id: satir.talep_id,
@@ -73,13 +68,12 @@ export default function LeavePlanning() {
                     bitis_tarihi: satir.bitis_tarihi,
                     durum: satir.durum,
                     izin_turu: satir.izin_turu,
-                    // 🔥 GÜN SAYISI: Artık backend'den 'kac_gun' olarak geliyor 🔥
+                    // 🔥 DÜZELTME BURADA: Veritabanındaki 'kac_gun' sütununu alıyoruz 🔥
                     gun_sayisi: satir.kac_gun 
                 });
             }
         });
 
-        // Alfabetik sırala ve array olarak döndür
         return Object.values(gruplanmis).sort((a, b) => a.ad.localeCompare(b.ad));
     };
 
@@ -87,7 +81,7 @@ export default function LeavePlanning() {
         setCurrentDate(prev => addMonths(prev, direction));
     };
 
-    // Filtreleme Fonksiyonu
+    // Filtreleme
     const getFilteredPersonel = () => {
         return personeller.filter(p => {
             if (seciliBirim !== 'TÜMÜ' && p.birim_adi !== seciliBirim) return false;
@@ -96,22 +90,19 @@ export default function LeavePlanning() {
         });
     };
 
-    // 🔥 TARİH ve DURUM KONTROLÜ 🔥
+    // 🔥 TARİH KONTROLÜ (Saat farkını yutan versiyon)
     const checkLeaveStatus = (personel, day) => {
         if (!personel.izinler || personel.izinler.length === 0) return null;
 
-        // 1. Tablodaki hücrenin tarihi (YYYY-MM-DD)
         const cellDate = setDate(currentDate, day);
         const cellDateStr = format(cellDate, 'yyyy-MM-dd');
 
         const activeLeave = personel.izinler.find(izin => {
             if (izin.durum === 'REDDEDILDI' || izin.durum === 'IPTAL_EDILDI') return false;
             
-            // 2. İzin tarihlerini güvenli string formatına çevir (Saat farkını yutar)
             const startStr = String(izin.baslangic_tarihi).substring(0, 10);
             const endStr = String(izin.bitis_tarihi).substring(0, 10);
 
-            // 3. Eşleşme Kontrolü
             return cellDateStr >= startStr && cellDateStr <= endStr;
         });
 
@@ -124,13 +115,13 @@ export default function LeavePlanning() {
             const isAmir = activeLeave.durum === 'AMIR_ONAYLADI';
             const isYazici = activeLeave.durum === 'YAZICI_ONAYLADI';
 
-            // Renk Atamaları
+            // Renkler
             if (activeLeave.izin_turu === 'RAPOR') colorClass = 'bg-danger'; 
             else if (isApproved) colorClass = 'bg-success'; 
             else if (isAmir || isYazici) colorClass = 'bg-primary'; 
             else colorClass = 'bg-warning text-dark'; 
 
-            // Tooltip Metinleri
+            // Tooltip Bilgisi
             if (activeLeave.durum === 'ONAY_BEKLIYOR') {
                 statusText = 'Onay Bekliyor';
                 approverText = `Birim Amiri (${personel.birim_adi})`;
@@ -148,19 +139,19 @@ export default function LeavePlanning() {
             return {
                 exists: true,
                 className: colorClass,
-                // 🔥 SÜRE KISMI: Backend'den gelen veriyi basıyor 🔥
-                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nMEVKİ: ${approverText}\nSÜRE: ${activeLeave.gun_sayisi} Gün`
+                // 🔥 BURADA GÜN SAYISI EKLENDİ 🔥
+                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nŞU AN KİMDE: ${approverText}\nSÜRE: ${activeLeave.kac_gun} Gün`
             };
         }
         return null;
     };
 
-    // --- TABLO YAPISI OLUŞTURMA ---
+    // Tablo Ayarları
     const daysInMonth = getDaysInMonth(currentDate);
     const daysArray = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const filteredList = getFilteredPersonel();
 
-    // Haftaları Hesapla (Header için)
+    // Hafta Başlıkları
     const weeksHeader = [];
     let currentWeek = null;
     let count = 0;
@@ -178,14 +169,14 @@ export default function LeavePlanning() {
     return (
         <div className="container-fluid p-0 bg-light" style={{ minHeight: '100vh' }}>
             
-            {/* 1. HEADER (BAŞLIK VE TARİH) */}
+            {/* HEADER */}
             <div className="bg-white border-bottom px-4 py-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 shadow-sm sticky-top" style={{zIndex: 1020}}>
                 <div>
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
                         <Calendar className="text-primary" size={26}/>
                         Personel İzin Çizelgesi
                     </h2>
-                    <p className="text-muted small m-0">Aylık personel izin durumu takip ekranı.</p>
+                    <p className="text-muted small m-0">Aylık planlama tablosu.</p>
                 </div>
                 <div className="d-flex align-items-center bg-light rounded-pill border p-1 shadow-sm">
                     <button className="btn btn-light rounded-circle p-2 border-0" onClick={() => handleMonthChange(-1)}><ChevronLeft size={20}/></button>
@@ -197,7 +188,7 @@ export default function LeavePlanning() {
             </div>
 
             <div className="p-4">
-                {/* 2. FİLTRELER */}
+                {/* FİLTRELER */}
                 <div className="card border-0 shadow-sm rounded-4 mb-4 bg-white">
                     <div className="card-body p-3 row g-3 align-items-center">
                         <div className="col-md-3">
@@ -224,13 +215,12 @@ export default function LeavePlanning() {
                     </div>
                 </div>
 
-                {/* 3. EXCEL TARZI TABLO */}
+                {/* TABLO */}
                 <div className="card border-0 shadow-lg rounded-4 overflow-hidden bg-white">
                     <div className="table-responsive" style={{ maxHeight: '70vh' }}>
                         <table className="table table-bordered mb-0" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-                            
                             <thead className="bg-light sticky-top" style={{ zIndex: 10, top: 0 }}>
-                                {/* 1. KAT: HAFTALAR */}
+                                {/* HAFTALAR */}
                                 <tr>
                                     <th rowSpan="2" className="p-3 bg-white border-bottom shadow-sm align-middle" style={{ position: 'sticky', left: 0, zIndex: 20, width: '250px', minWidth: '250px', borderRight: '2px solid #eee' }}>
                                         <div className="d-flex justify-content-between align-items-center text-secondary">
@@ -243,8 +233,7 @@ export default function LeavePlanning() {
                                         </th>
                                     ))}
                                 </tr>
-                                
-                                {/* 2. KAT: GÜNLER */}
+                                {/* GÜNLER */}
                                 <tr>
                                     {daysArray.map(day => {
                                         const d = setDate(currentDate, day);
@@ -258,7 +247,6 @@ export default function LeavePlanning() {
                                     })}
                                 </tr>
                             </thead>
-
                             <tbody>
                                 {loading ? (
                                     <tr><td colSpan={daysInMonth + 1} className="text-center py-5">Yükleniyor...</td></tr>
