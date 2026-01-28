@@ -40,36 +40,30 @@ export default function LeavePlanning() {
         if(!token) { window.location.href = '/login'; return; }
 
         try {
-            // Rapor endpointinden tüm onaylı izinleri ve personelleri çekiyoruz
             const res = await axios.get(`${API_URL}/api/izin/personel-izin-takvim`, { 
                 headers: { Authorization: `Bearer ${token}` } 
             });
             
-            // Eğer backendde özel bir takvim endpointi yoksa, fallback:
-            if(!res.data || res.data.length === 0) {
-                 const raporRes = await axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } });
-                 setPersoneller(raporRes.data);
-                 gruplaVeFiltrele(raporRes.data);
-            } else {
+            // Veri dolu gelirse
+            if(res.data && res.data.length > 0) {
                 setPersoneller(res.data);
                 gruplaVeFiltrele(res.data);
+            } else {
+                // Fallback: Eski rapor endpointi (Eğer backend henüz güncel değilse)
+                const raporRes = await axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } });
+                setPersoneller(raporRes.data);
+                gruplaVeFiltrele(raporRes.data);
             }
         } catch (error) {
-            try {
-                const resFallback = await axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } });
-                setPersoneller(resFallback.data);
-                gruplaVeFiltrele(resFallback.data);
-            } catch (e) {
-                console.error("Veri çekilemedi", e);
-            }
+            console.error("Veri çekilemedi", error);
         } finally {
             setYukleniyor(false);
         }
     };
 
     const gruplaVeFiltrele = (veri) => {
-        // 1. ADMIN GİZLEME (Rol ID 5)
-        let filtreli = veri.filter(p => p.rol_id !== 5);
+        // 1. ADMIN GİZLEME (Rol ID 5 ve 1 Gizlenir)
+        let filtreli = veri.filter(p => p.rol_id !== 5 && p.rol_id !== 1);
 
         // 2. Arama Filtresi
         if (arama) {
@@ -99,10 +93,14 @@ export default function LeavePlanning() {
         const tempGunler = [];
         for (let i = 1; i <= daysInMonth; i++) {
             const d = new Date(year, month, i);
+            // YYYY-MM-DD formatında string tarih oluştur (Karşılaştırma için)
+            const stringTarih = d.toLocaleDateString('en-CA'); // 2026-01-27 formatı verir
+
             tempGunler.push({
                 gun: i,
                 tamTarih: d,
-                haftaSonu: d.getDay() === 0 || d.getDay() === 6, // 0: Pazar, 6: Cmt
+                stringTarih: stringTarih, // Bunu kullanacağız
+                haftaSonu: d.getDay() === 0 || d.getDay() === 6, 
                 gunAdi: d.toLocaleDateString('tr-TR', { weekday: 'short' })
             });
         }
@@ -115,25 +113,40 @@ export default function LeavePlanning() {
         setSecilenTarih(yeniTarih);
     };
 
-    // İzin Kontrolü: Bu personel, bu tarihte izinli mi?
-    const izinDurumuGetir = (personel, tarih) => {
-        if (!personel.izinler) return null;
-
-        const kontrolTarihi = tarih.setHours(0,0,0,0);
+    // 🔥 DÜZELTİLEN FONKSİYON BURASI 🔥
+    const izinDurumuGetir = (personel, hucreStringTarih) => {
+        if (!personel.izinler || !Array.isArray(personel.izinler)) return null;
 
         for (const izin of personel.izinler) {
-            // Sadece ONAYLANMIŞ izinleri göster
-            if (izin.onay_durumu !== '3' && izin.durum !== 'TAMAMLANDI') continue; 
+            // Sadece REDDEDİLEN veya İPTAL EDİLENLERİ görmeyelim. Geri kalan (Onaylı/Bekleyen) görünsün.
+            if (izin.durum === 'REDDEDILDI' || izin.durum === 'IPTAL_EDILDI') continue;
 
-            const baslangic = new Date(izin.baslangic_tarihi).setHours(0,0,0,0);
-            const bitis = new Date(izin.bitis_tarihi).setHours(0,0,0,0);
+            // Tarihleri String Formatına Çevir (Saat farkı sorununu çözer)
+            // Backend "2026-01-27T00:00:00.000Z" gönderir, biz "2026-01-27" kısmını alırız.
+            const baslangic = String(izin.baslangic_tarihi).split('T')[0];
+            const bitis = String(izin.bitis_tarihi).split('T')[0];
 
-            if (kontrolTarihi >= baslangic && kontrolTarihi <= bitis) {
+            // String karşılaştırması (Alfabetik karşılaştırma YYYY-MM-DD formatında doğru çalışır)
+            if (hucreStringTarih >= baslangic && hucreStringTarih <= bitis) {
+                
+                // Renk Belirleme
+                let renk = 'bg-primary'; // Varsayılan: Mavi
+                
+                if (izin.izin_turu === 'RAPOR') renk = 'bg-danger'; 
+                else if (izin.izin_turu === 'MAZERET İZNİ' || izin.izin_turu === 'BABALIK İZNİ') renk = 'bg-warning';
+                else if (izin.izin_turu === 'YILLIK İZİN') renk = 'bg-primary';
+
+                // Eğer izin henüz tam onaylanmamışsa (Yazıcı/Amir aşamasındaysa) rengi soluk yapalım
+                // String '3' kontrolünü gevşettik, 'IK_ONAYLADI' veya 'TAMAMLANDI' değilse soluk olsun
+                const tamOnayli = izin.durum === 'IK_ONAYLADI' || izin.durum === 'TAMAMLANDI' || String(izin.onay_durumu) === '3';
+                if (!tamOnayli) {
+                    renk = 'bg-secondary bg-opacity-50'; // Gri/Şeffaf
+                }
+
                 return {
                     tur: izin.izin_turu,
-                    aciklama: `${izin.izin_turu} (${izin.gun_sayisi} Gün)`,
-                    renk: izin.izin_turu === 'RAPOR' ? 'bg-danger' : 
-                          izin.izin_turu === 'MAZERET İZNİ' ? 'bg-warning' : 'bg-primary'
+                    aciklama: `${izin.izin_turu} (${izin.gun_sayisi} Gün) - ${izin.durum}`,
+                    renk: renk
                 };
             }
         }
@@ -164,7 +177,7 @@ export default function LeavePlanning() {
                 </div>
             </div>
 
-            {/* ARAMA VE LEGEND (AÇIKLAMA) */}
+            {/* ARAMA VE LEGEND */}
             <div className="card border-0 shadow-sm mb-4 rounded-4 bg-white">
                 <div className="card-body p-3 row g-3 align-items-center">
                     <div className="col-md-4">
@@ -173,11 +186,11 @@ export default function LeavePlanning() {
                             <input type="text" className="form-control border-start-0" placeholder="Personel veya Birim Ara..." value={arama} onChange={e=>setArama(e.target.value)}/>
                         </div>
                     </div>
-                    <div className="col-md-8 d-flex justify-content-md-end gap-3 text-small">
-                        <div className="d-flex align-items-center gap-1"><span className="badge bg-primary rounded-circle p-1"> </span> <span className="small text-muted">Yıllık İzin</span></div>
-                        <div className="d-flex align-items-center gap-1"><span className="badge bg-warning rounded-circle p-1"> </span> <span className="small text-muted">Mazeret/İdari</span></div>
-                        <div className="d-flex align-items-center gap-1"><span className="badge bg-danger rounded-circle p-1"> </span> <span className="small text-muted">Rapor/Hastalık</span></div>
-                        <div className="d-flex align-items-center gap-1"><span className="badge bg-secondary bg-opacity-25 rounded-circle p-1"> </span> <span className="small text-muted">Hafta Sonu</span></div>
+                    <div className="col-md-8 d-flex justify-content-md-end gap-3 text-small flex-wrap">
+                        <div className="d-flex align-items-center gap-1"><span className="badge bg-primary rounded-circle p-1"> </span> <span className="small text-muted">Yıllık İzin (Onaylı)</span></div>
+                        <div className="d-flex align-items-center gap-1"><span className="badge bg-warning rounded-circle p-1"> </span> <span className="small text-muted">Mazeret</span></div>
+                        <div className="d-flex align-items-center gap-1"><span className="badge bg-danger rounded-circle p-1"> </span> <span className="small text-muted">Rapor</span></div>
+                        <div className="d-flex align-items-center gap-1"><span className="badge bg-secondary bg-opacity-50 rounded-circle p-1"> </span> <span className="small text-muted">Onay Bekleyen</span></div>
                     </div>
                 </div>
             </div>
@@ -228,7 +241,8 @@ export default function LeavePlanning() {
                                                     </div>
                                                 </td>
                                                 {gunler.map((g) => {
-                                                    const durum = izinDurumuGetir(personel, g.tamTarih);
+                                                    // DÜZELTME: Artık string tarih (YYYY-MM-DD) gönderiyoruz
+                                                    const durum = izinDurumuGetir(personel, g.stringTarih);
                                                     return (
                                                         <td 
                                                             key={g.gun} 
@@ -239,10 +253,9 @@ export default function LeavePlanning() {
                                                                 <div 
                                                                     className={`w-100 h-75 my-auto shadow-sm rounded-1 ${durum.renk}`} 
                                                                     style={{ margin: '0 auto', width: '90%' }}
-                                                                    title={`${durum.aciklama} - ${g.tamTarih.toLocaleDateString('tr-TR')}`}
+                                                                    title={`${durum.aciklama} - ${g.stringTarih}`}
                                                                     data-bs-toggle="tooltip"
                                                                 >
-                                                                    {/* Kutu içinde yazı yok, sadece hover var */}
                                                                 </div>
                                                             )}
                                                         </td>
@@ -260,7 +273,6 @@ export default function LeavePlanning() {
                 </div>
             </div>
             
-            {/* ALT BİLGİ */}
             <div className="mt-3 text-muted small d-flex align-items-center gap-2">
                 <Info size={16}/>
                 <span>Tabloda izinli personeller renkli kutucuklarla gösterilmiştir. Detay için kutucuğun üzerine gelin.</span>

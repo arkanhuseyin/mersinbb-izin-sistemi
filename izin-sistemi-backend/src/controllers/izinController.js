@@ -584,7 +584,6 @@ exports.getIzinPlani = async (req, res) => {
                             'durum', t.durum,
                             'izin_turu', t.izin_turu,
                             'gun_sayisi', t.kac_gun,
-                            -- Frontend uyumluluğu için sanal sütun oluşturuyoruz:
                             'onay_durumu', CASE 
                                 WHEN t.durum IN ('IK_ONAYLADI', 'TAMAMLANDI') THEN '3' 
                                 WHEN t.durum = 'AMIR_ONAYLADI' THEN '2'
@@ -597,9 +596,9 @@ exports.getIzinPlani = async (req, res) => {
             FROM personeller p
             LEFT JOIN birimler b ON p.birim_id = b.birim_id
             LEFT JOIN izin_talepleri t ON p.personel_id = t.personel_id 
-                AND t.durum NOT IN ('REDDEDILDI', 'IPTAL_EDILDI') -- Reddedilenleri takvimde gösterme
+                AND t.durum NOT IN ('REDDEDILDI', 'IPTAL_EDILDI') -- İptalleri gösterme
             WHERE p.aktif = TRUE 
-              AND p.rol_id != 5  -- ⛔ ADMIN GİZLEME (Backend tarafında engelledik)
+              AND p.rol_id != 5  -- ⛔ ADMIN (Rol ID 5) GİZLE
             GROUP BY p.personel_id, p.ad, p.soyad, p.birim_id, b.birim_adi, p.gorev, p.rol_id, p.unvan
             ORDER BY b.birim_adi, p.ad ASC
         `;
