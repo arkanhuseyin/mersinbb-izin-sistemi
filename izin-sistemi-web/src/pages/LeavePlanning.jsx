@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
     startOfMonth, endOfMonth, getDaysInMonth, format, addMonths, 
-    isWithinInterval, isWeekend, setDate, getISOWeek 
+    isWeekend, getISOWeek 
 } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Calendar, Filter, Search, Briefcase, ChevronLeft, ChevronRight, Users, Info } from 'lucide-react';
@@ -49,7 +49,7 @@ export default function LeavePlanning() {
 
     const getFilteredPersonel = () => {
         return personeller.filter(p => {
-            // ADMIN GİZLEME (Garanti Yöntem)
+            // ADMIN GİZLEME
             const rid = Number(p.rol_id);
             const ad = (p.ad || '').toLowerCase();
             if (rid === 5 || rid === 1 || ad === 'sistem') return false;
@@ -60,17 +60,28 @@ export default function LeavePlanning() {
         });
     };
 
+    // 🔥 KRİTİK DÜZELTME BURADA YAPILDI 🔥
+    // Önceki çalışan şemadan alınan mantık:
     const checkLeaveStatus = (personel, day) => {
         if (!personel.izinler || !Array.isArray(personel.izinler)) return null;
 
-        const dayDate = setDate(currentDate, day);
-        const targetDateStr = format(dayDate, 'yyyy-MM-dd');
+        // 1. Hücrenin Tarihini Oluştur (Saat sorununu çözmek için yerel saat kullanıyoruz)
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        const cellDate = new Date(year, month, day); 
+        
+        // 2. Hücre tarihini YYYY-MM-DD formatına çevir (Örn: "2026-01-27")
+        const cellDateStr = cellDate.toLocaleDateString('en-CA'); 
 
         const activeLeave = personel.izinler.find(izin => {
             if (izin.durum === 'REDDEDILDI' || izin.durum === 'IPTAL_EDILDI') return false;
-            const start = String(izin.baslangic_tarihi).split('T')[0];
-            const end = String(izin.bitis_tarihi).split('T')[0];
-            return targetDateStr >= start && targetDateStr <= end;
+            
+            // 3. Veritabanı tarihlerini de YYYY-MM-DD formatına çevirip kıyasla
+            const startStr = String(izin.baslangic_tarihi).split('T')[0];
+            const endStr = String(izin.bitis_tarihi).split('T')[0];
+
+            // String karşılaştırması (Alfabetik karşılaştırma tarihlerde doğru çalışır)
+            return cellDateStr >= startStr && cellDateStr <= endStr;
         });
 
         if (activeLeave) {
@@ -78,19 +89,26 @@ export default function LeavePlanning() {
             let statusText = 'Bekliyor';
             let approverText = 'Henüz Onaylanmadı';
 
+            // Durum Kontrolü
             const isApproved = ['IK_ONAYLADI', 'TAMAMLANDI'].includes(activeLeave.durum);
-            
-            if (activeLeave.izin_turu === 'RAPOR') colorClass = 'bg-danger';
-            else if (isApproved) colorClass = 'bg-success';
-            else if (!isApproved) colorClass = 'bg-warning text-dark';
+            const isPending = !isApproved;
 
+            // Renk Atama
+            if (activeLeave.izin_turu === 'RAPOR') colorClass = 'bg-danger'; // Kırmızı
+            else if (isApproved) colorClass = 'bg-success'; // Yeşil
+            else if (isPending) colorClass = 'bg-warning text-dark'; // Sarı
+
+            // Tooltip Metinleri
             if (activeLeave.durum === 'ONAY_BEKLIYOR') {
                 statusText = 'Onay Bekliyor';
                 approverText = `Birim Amiri (${personel.birim_adi})`;
             } else if (activeLeave.durum === 'AMIR_ONAYLADI') {
                 statusText = 'Amir Onayladı';
                 approverText = 'İdari İşler / Yazı İşleri';
-            } else if (activeLeave.durum === 'IK_ONAYLADI' || activeLeave.durum === 'TAMAMLANDI') {
+            } else if (activeLeave.durum === 'YAZICI_ONAYLADI') {
+                statusText = 'İdari Onay Tamam';
+                approverText = 'İnsan Kaynakları (Son Onay)';
+            } else if (isApproved) {
                 statusText = 'ONAYLANDI';
                 approverText = 'İnsan Kaynakları / Yönetim';
             }
@@ -115,7 +133,7 @@ export default function LeavePlanning() {
     let count = 0;
 
     for (let i = 1; i <= daysInMonth; i++) {
-        const d = setDate(currentDate, i);
+        const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
         const w = getISOWeek(d);
         if (currentWeek === null) { currentWeek = w; count = 1; }
         else if (w !== currentWeek) {
@@ -202,7 +220,7 @@ export default function LeavePlanning() {
                                 {/* 2. KAT: GÜNLER VE İSİMLERİ */}
                                 <tr>
                                     {daysArray.map(day => {
-                                        const d = setDate(currentDate, day);
+                                        const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                                         const isSatSun = isWeekend(d);
                                         return (
                                             <th key={day} className={`text-center p-1 align-middle border-bottom border-end ${isSatSun ? 'bg-secondary bg-opacity-10' : 'bg-white'}`} style={{ minWidth: '40px', width: '40px', fontSize: '12px' }}>
@@ -237,7 +255,7 @@ export default function LeavePlanning() {
 
                                             {/* GÜNLER (KUTUCUKLAR) */}
                                             {daysArray.map(day => {
-                                                const d = setDate(currentDate, day);
+                                                const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                                                 const isSatSun = isWeekend(d);
                                                 const leaveStatus = checkLeaveStatus(personel, day);
 
