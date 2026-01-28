@@ -108,8 +108,13 @@ export default function LeaveReports() {
         if(!confirm("Toplu Excel indirilsin mi?")) return; 
         try {
             const excelRows = [["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Bu Yıl", "KULLANILAN", "KALAN", "DURUM"]];
-            // ADMIN GİZLEME: Rol ID 5 olanı (Admin) Excel'e dahil etme
-            const adminHaricRapor = rapor.filter(p => p.rol_id !== 5);
+            
+            // 🔥 GÜVENLİK: Admin (Rol 5 ve 1) ve Sistem kullanıcılarını Excel'e dahil etme
+            const adminHaricRapor = rapor.filter(p => {
+                const rid = Number(p.rol_id);
+                const ad = (p.ad || '').toLowerCase();
+                return rid !== 5 && rid !== 1 && ad !== 'sistem';
+            });
             
             adminHaricRapor.forEach((p) => {
                 const kumulatif = parseInt(p.kumulatif_hak) || 0;
@@ -142,21 +147,23 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata."); } finally { setYukleniyor(false); }
     };
 
-    // --- ANA FİLTRELEME ---
-    // Burada rol_id === 5 olanı (Admin) listeden çıkarıyoruz.
+    // --- ANA FİLTRELEME (TABLO İÇİN) ---
     const filtered = rapor.filter(p => {
         const matchesSearch = p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama) || p.birim_adi?.toLowerCase().includes(arama.toLowerCase());
         const kalan = parseInt(p.kalan) || 0;
         const limit = parseInt(limitBakiye);
         
-        const isAdmin = (p.rol_id === 5); // ARTIK 5 NUMARA GİZLENECEK
+        // 🔥 GÜVENLİK: Rol ID 5 ve 1 (Admin/Sistem) GİZLENECEK 🔥
+        const rid = Number(p.rol_id);
+        const ad = (p.ad || '').toLowerCase();
+        const isAdmin = (rid === 5 || rid === 1 || ad === 'sistem'); 
         
         return matchesSearch && (!isNaN(limit) && limit > 0 ? kalan >= limit : true) && !isAdmin;
     });
 
     return (
         <div className="container-fluid p-4">
-             
+              
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
                 <div>
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
@@ -176,7 +183,7 @@ export default function LeaveReports() {
                     </button>
                 </div>
             </div>
-             
+              
             <div className="card border-0 shadow-sm mb-4 rounded-4 bg-white">
                 <div className="card-body p-3 row g-3 align-items-center">
                     <div className="col-12 col-md-5">
