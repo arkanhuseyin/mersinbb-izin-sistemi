@@ -2,28 +2,47 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Gantt, ViewMode } from 'gantt-task-react';
 import "gantt-task-react/dist/index.css";
-import { Calendar, Filter, Users, Search, Briefcase, ChevronRight, Layout } from 'lucide-react';
+// Tarih işlemleri için date-fns kütüphanesini kullanıyoruz (React projelerinde standarttır)
+import { startOfMonth, endOfMonth, format, addMonths, tr } from 'date-fns'; 
+import { Calendar, Filter, Users, Search, Briefcase, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
 
+// 🎨 PROFESYONEL RENK PALETİ
+const COLORS = {
+    APPROVED_ANNUAL: '#10b981', // Yeşil (Onaylı Yıllık)
+    APPROVED_OTHER: '#3b82f6',  // Mavi (Onaylı Diğer - Mazeret vs.)
+    PENDING: '#f59e0b',         // Turuncu (Bekleyen)
+    SICK_LEAVE: '#ef4444',      // Kırmızı (Rapor)
+    TEXT_DARK: '#1f2937',
+    BG_LIGHT: '#f3f4f6',
+    BORDER: '#e5e7eb'
+};
+
 export default function LeavePlanning() {
     const [tasks, setTasks] = useState([]);
-    const [viewMode, setViewMode] = useState(ViewMode.Month);
     const [loading, setLoading] = useState(true);
     const [birimler, setBirimler] = useState([]);
+    
+    // FİLTRELER
     const [seciliBirim, setSeciliBirim] = useState('TÜMÜ');
     const [aramaMetni, setAramaMetni] = useState('');
+    
+    // TARİH YÖNETİMİ (Varsayılan: Bugünün olduğu ay)
+    const [currentMonth, setCurrentMonth] = useState(new Date());
+    
     const [rawData, setRawData] = useState([]);
 
     useEffect(() => {
         verileriGetir();
     }, []);
 
+    // Filtreler veya Ay değiştiğinde tabloyu güncelle
     useEffect(() => {
         if (rawData.length > 0) {
-            processGanttData(rawData, seciliBirim, aramaMetni);
+            processGanttData(rawData, seciliBirim, aramaMetni, currentMonth);
         }
-    }, [seciliBirim, aramaMetni, rawData]);
+    }, [seciliBirim, aramaMetni, currentMonth, rawData]);
 
     const verileriGetir = async () => {
         try {
@@ -35,7 +54,8 @@ export default function LeavePlanning() {
 
             setRawData(planRes.data);
             setBirimler(birimRes.data);
-            processGanttData(planRes.data, 'TÜMÜ', '');
+            // İlk açılışta veriyi işle
+            processGanttData(planRes.data, 'TÜMÜ', '', currentMonth);
         } catch (error) {
             console.error("Veri hatası:", error);
         } finally {
@@ -43,237 +63,249 @@ export default function LeavePlanning() {
         }
     };
 
-    const processGanttData = (data, birimFilter, searchFilter) => {
+    // Ay Değiştirme Fonksiyonu
+    const handleMonthChange = (direction) => {
+        setCurrentMonth(prev => addMonths(prev, direction));
+    };
+
+    // Veriyi İşleme ve Gantt Formatına Çevirme
+    const processGanttData = (data, birimFilter, searchFilter, selectedMonth) => {
         let filteredData = data;
 
-        // 1. ADMIN GİZLEME (Çoklu Kontrol) 🛡️
-        // rol_id 5, 1 ve Adı 'Sistem' olanları uçuruyoruz.
+        // 1. GÜVENLİK FİLTRESİ (Admin ve Sistem hesaplarını gizle)
         filteredData = filteredData.filter(item => {
-            const rid = Number(item.rol_id); 
+            const rid = Number(item.rol_id);
             const ad = (item.ad || '').toLowerCase();
-            return rid !== 5 && rid !== 1 && ad !== 'sistem'; 
+            return rid !== 5 && rid !== 1 && ad !== 'sistem';
         });
 
-        // 2. BİRİM FİLTRESİ
+        // 2. KULLANICI FİLTRELERİ
         if (birimFilter !== 'TÜMÜ') {
             filteredData = filteredData.filter(item => item.birim_adi === birimFilter);
         }
-
-        // 3. ARAMA FİLTRESİ
         if (searchFilter) {
             const lower = searchFilter.toLowerCase();
-            filteredData = filteredData.filter(item => 
-                (item.ad + ' ' + item.soyad).toLowerCase().includes(lower)
-            );
+            filteredData = filteredData.filter(item => (item.ad + ' ' + item.soyad).toLowerCase().includes(lower));
         }
 
+        // 3. GANTT VERİSİNİ OLUŞTUR
         const personelMap = {};
-        
+        const ganttTasks = [];
+
+        // Seçili ayın başı ve sonu (Gantt sınırları için)
+        const monthStart = startOfMonth(selectedMonth);
+        const monthEnd = endOfMonth(selectedMonth);
+
         filteredData.forEach(row => {
+            // Personel Ana Satırını Oluştur (Eğer yoksa)
             if (!personelMap[row.personel_id]) {
-                personelMap[row.personel_id] = {
-                    id: `personel-${row.personel_id}`,
-                    name: `${row.ad} ${row.soyad}`,
-                    type: 'project', 
+                personelMap[row.personel_id] = true;
+                ganttTasks.push({
+                    id: `p-${row.personel_id}`,
+                    name: row.ad + ' ' + row.soyad, // Sol sütunda görünecek isim
+                    type: 'project',
                     progress: 0,
-                    isDisabled: true,
-                    start: new Date(), // Göstermelik tarih
-                    end: new Date(),
                     hideChildren: false,
-                    // Kurumsal Başlık Stili
+                    isDisabled: true,
+                    start: monthStart, // Mecburi alanlar, görüntüde etkisi yok
+                    end: monthEnd,
+                    // Sol sütun stili (İsim ve Unvan)
                     styles: { 
-                        backgroundColor: '#f8f9fa', 
-                        progressColor: '#f8f9fa', 
-                        backgroundSelectedColor: '#e9ecef',
-                        fontSize: '14px',
-                        fontWeight: 'bold',
-                        color: '#333'
-                    }
-                };
+                        backgroundColor: '#ffffff',
+                        backgroundSelectedColor: '#f9fafb',
+                        textColor: COLORS.TEXT_DARK,
+                        fontWeight: '600',
+                        fontSize: '14px'
+                    },
+                    // Özel bir alan ekleyip bunu render ederken kullanacağız
+                    unvan: row.unvan || row.gorev || 'Personel' 
+                });
             }
-        });
 
-        let ganttTasks = Object.values(personelMap);
-
-        filteredData.forEach(row => {
-            if (row.talep_id) { 
-                const isApproved = row.durum === 'IK_ONAYLADI' || row.durum === 'TAMAMLANDI' || row.durum === 'AMIR_ONAYLADI' || row.durum === 'YAZICI_ONAYLADI';
-                
-                // Profesyonel Renk Paleti
-                let color = '#3b82f6'; // Mavi (Yıllık)
-                let label = 'Yıllık İzin';
-
-                if (!isApproved) { color = '#9ca3af'; label = 'Onay Bekliyor'; }
-                else if (row.izin_turu === 'RAPOR') { color = '#ef4444'; label = 'Raporlu'; }
-                else if (row.izin_turu === 'MAZERET İZNİ') { color = '#f59e0b'; label = 'Mazeret'; }
-                else if (row.izin_turu === 'YILLIK İZİN') { color = '#10b981'; label = 'Yıllık İzin'; }
-
+            // İzin Barını Oluştur (Task)
+            if (row.talep_id) {
                 const startDate = new Date(row.baslangic_tarihi);
                 const endDate = new Date(row.bitis_tarihi);
-                endDate.setHours(23, 59, 59); // Bitiş gününü tam kaplasın
+                endDate.setHours(23, 59, 59); // Günün sonuna kadar
+
+                // Sadece seçili ayın içine düşen veya kesişen izinleri göster
+                if (endDate < monthStart || startDate > monthEnd) return;
+
+                const isApproved = ['IK_ONAYLADI', 'TAMAMLANDI', 'AMIR_ONAYLADI'].includes(row.durum);
+                const isSick = row.izin_turu === 'RAPOR';
+
+                // RENK BELİRLEME
+                let barColor = COLORS.PENDING; // Varsayılan: Bekleyen (Turuncu)
+                let label = 'Bekliyor';
+
+                if (isApproved) {
+                    if (isSick) { barColor = COLORS.SICK_LEAVE; label = 'Raporlu'; }
+                    else if (row.izin_turu === 'YILLIK İZİN') { barColor = COLORS.APPROVED_ANNUAL; label = 'Yıllık İzin'; }
+                    else { barColor = COLORS.APPROVED_OTHER; label = row.izin_turu; }
+                } else if (isSick) {
+                     barColor = COLORS.SICK_LEAVE; label = 'Rapor (Bekliyor)';
+                }
 
                 ganttTasks.push({
-                    start: startDate,
-                    end: endDate,
-                    name: label, // Barın üzerinde yazacak yazı
-                    id: `izin-${row.talep_id}`,
+                    id: `t-${row.talep_id}`,
+                    name: label, // Barın üzerindeki yazı
                     type: 'task',
+                    project: `p-${row.personel_id}`, // Hangi personele ait
+                    start: startDate < monthStart ? monthStart : startDate, // Ayın dışına taşıyorsa kırp
+                    end: endDate > monthEnd ? monthEnd : endDate,
                     progress: 100,
-                    project: `personel-${row.personel_id}`,
-                    styles: { progressColor: color, backgroundColor: color, backgroundSelectedColor: color, borderRadius: '4px' }
+                    styles: { 
+                        backgroundColor: barColor, 
+                        progressColor: barColor, 
+                        backgroundSelectedColor: barColor,
+                        borderRadius: '4px',
+                        border: `1px solid ${barColor}`
+                    },
+                    // Tooltip için detay veriler
+                    detay: { tur: row.izin_turu, durum: row.durum, gun: row.kac_gun, baslangic: startDate, bitis: endDate }
                 });
             }
         });
 
-        if (ganttTasks.length === 0) {
-            ganttTasks = [{ start: new Date(), end: new Date(), name: 'Kayıt Bulunamadı', id: 'empty', type: 'task', progress: 0, isDisabled: true }];
-        }
-
         setTasks(ganttTasks);
     };
 
+    // Sol Sütun Özel Render (İsim + Unvan)
+    const CustomTaskListHeader = ({ headerHeight, fontFamily, fontSize, rowWidth }) => {
+        return (
+            <div style={{ height: headerHeight, fontFamily, fontSize, width: rowWidth, display: 'flex', alignItems: 'center', paddingLeft: '16px', fontWeight: 'bold', borderBottom: `1px solid ${COLORS.BORDER}`, backgroundColor: '#f9fafb' }}>
+                PERSONEL LİSTESİ
+            </div>
+        );
+    };
+
+    const CustomTaskListTable = ({ tasks, rowHeight, rowWidth, fontFamily, fontSize, onExpanderClick }) => {
+        return (
+            <div style={{ borderRight: `1px solid ${COLORS.BORDER}` }}>
+                {tasks.map((task) => {
+                    // Sadece personel satırlarını (type: project) sol tarafa render et
+                    if (task.type !== 'project') return null;
+                    return (
+                        <div 
+                            key={task.id}
+                            style={{ height: rowHeight, width: rowWidth, fontFamily, fontSize, display: 'flex', flexDirection: 'column', justifyContent: 'center', paddingLeft: '16px', borderBottom: `1px solid ${COLORS.BORDER}`, backgroundColor: 'white', cursor: 'pointer' }}
+                            onClick={() => onExpanderClick(task)}
+                        >
+                            <div className="text-dark fw-bold">{task.name}</div>
+                            <div className="text-muted small" style={{fontSize: '11px'}}>{task.unvan}</div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
+
+
     return (
-        <div className="container-fluid p-4 bg-light" style={{minHeight: '100vh'}}>
+        <div className="container-fluid p-0 bg-light" style={{ minHeight: '100vh' }}>
             
-            {/* --- 1. ÜST PANEL (HEADER) --- */}
-            <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center mb-4 gap-3 bg-white p-4 rounded-4 shadow-sm border">
+            {/* --- ÜST PANEL (Header & Tarih Seçici) --- */}
+            <div className="bg-white border-bottom px-4 py-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3">
                 <div>
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
-                        <div className="bg-primary bg-opacity-10 p-2 rounded-3 text-primary">
-                            <Layout size={28}/>
-                        </div>
-                        Personel Planlama Merkezi
+                        <Calendar className="text-primary" size={26}/>
+                        İzin Planlama Takvimi
                     </h2>
-                    <p className="text-muted small m-0 mt-1 ps-1">Tüm birimlerin izin ve vardiya durumunu tek ekrandan yönetin.</p>
+                    <p className="text-muted small m-0">Personel izinlerini aylık bazda görüntüleyin ve yönetin.</p>
                 </div>
-                
-                {/* GÖRÜNÜM MODU SEÇİCİSİ */}
-                <div className="d-flex bg-light p-1 rounded-3 border">
-                    <button className={`btn btn-sm fw-bold px-4 rounded-3 transition-all ${viewMode === ViewMode.Month ? 'btn-white shadow-sm text-primary' : 'text-muted'}`} onClick={() => setViewMode(ViewMode.Month)}>Ay</button>
-                    <button className={`btn btn-sm fw-bold px-4 rounded-3 transition-all ${viewMode === ViewMode.Week ? 'btn-white shadow-sm text-primary' : 'text-muted'}`} onClick={() => setViewMode(ViewMode.Week)}>Hafta</button>
-                    <button className={`btn btn-sm fw-bold px-4 rounded-3 transition-all ${viewMode === ViewMode.Day ? 'btn-white shadow-sm text-primary' : 'text-muted'}`} onClick={() => setViewMode(ViewMode.Day)}>Gün</button>
-                </div>
-            </div>
 
-            {/* --- 2. FİLTRE VE ARAMA KARTI --- */}
-            <div className="card border-0 shadow-sm rounded-4 mb-4 bg-white">
-                <div className="card-body p-3 row g-3 align-items-center">
-                    
-                    {/* Arama */}
-                    <div className="col-md-3">
-                        <div className="input-group input-group-lg border rounded-3 overflow-hidden bg-light">
-                            <span className="input-group-text bg-transparent border-0"><Search size={20} className="text-muted"/></span>
-                            <input 
-                                type="text" 
-                                className="form-control border-0 bg-transparent shadow-none" 
-                                placeholder="Personel Ara..." 
-                                style={{fontSize: '0.95rem'}}
-                                value={aramaMetni} 
-                                onChange={(e) => setAramaMetni(e.target.value)}
-                            />
-                        </div>
+                {/* TARİH NAVİGASYONU (OCAK 2026) */}
+                <div className="d-flex align-items-center bg-light rounded-pill border p-1 shadow-sm">
+                    <button className="btn btn-light rounded-circle p-2 border-0 hover-shadow" onClick={() => handleMonthChange(-1)}>
+                        <ChevronLeft size={20} color={COLORS.TEXT_DARK}/>
+                    </button>
+                    <div className="mx-4 fw-bolder text-dark fs-5" style={{minWidth: '160px', textAlign: 'center', letterSpacing: '1px'}}>
+                        {format(currentMonth, 'MMMM yyyy', { locale: tr }).toUpperCase()}
                     </div>
-
-                    {/* Birim Filtresi */}
-                    <div className="col-md-3">
-                        <div className="input-group input-group-lg border rounded-3 overflow-hidden bg-light">
-                            <span className="input-group-text bg-transparent border-0"><Briefcase size={20} className="text-muted"/></span>
-                            <select 
-                                className="form-select border-0 bg-transparent shadow-none fw-medium cursor-pointer" 
-                                value={seciliBirim} 
-                                onChange={(e) => setSeciliBirim(e.target.value)}
-                                style={{fontSize: '0.95rem'}}
-                            >
-                                <option value="TÜMÜ">TÜM BİRİMLER</option>
-                                {birimler.map(b => (
-                                    <option key={b.birim_id} value={b.birim_adi}>{b.birim_adi}</option>
-                                ))}
-                            </select>
-                            <span className="input-group-text bg-transparent border-0"><ChevronDownIcon size={16} className="text-muted"/></span>
-                        </div>
-                    </div>
-
-                    {/* Lejant (Bilgi) */}
-                    <div className="col-md-6 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
-                        <span className="badge bg-success bg-opacity-10 text-success border border-success d-flex align-items-center gap-1 px-3 py-2 rounded-pill"><span className="badge bg-success rounded-circle p-1"> </span> Yıllık İzin</span>
-                        <span className="badge bg-warning bg-opacity-10 text-dark border border-warning d-flex align-items-center gap-1 px-3 py-2 rounded-pill"><span className="badge bg-warning rounded-circle p-1"> </span> Mazeret</span>
-                        <span className="badge bg-danger bg-opacity-10 text-danger border border-danger d-flex align-items-center gap-1 px-3 py-2 rounded-pill"><span className="badge bg-danger rounded-circle p-1"> </span> Rapor</span>
-                        <span className="badge bg-secondary bg-opacity-10 text-secondary border border-secondary d-flex align-items-center gap-1 px-3 py-2 rounded-pill"><span className="badge bg-secondary rounded-circle p-1"> </span> Bekleyen</span>
-                    </div>
+                    <button className="btn btn-light rounded-circle p-2 border-0 hover-shadow" onClick={() => handleMonthChange(1)}>
+                        <ChevronRight size={20} color={COLORS.TEXT_DARK}/>
+                    </button>
                 </div>
             </div>
 
-            {/* --- 3. GANTT TABLOSU (Responsive Wrapper) --- */}
-            <div className="card border-0 shadow-lg rounded-4 overflow-hidden bg-white">
-                <div className="card-body p-0">
+            <div className="p-4">
+                {/* --- FİLTRE KARTI --- */}
+                <div className="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+                    <div className="card-body p-3 row g-3 align-items-center">
+                        {/* Arama */}
+                        <div className="col-md-3">
+                            <div className="input-group border rounded-3 bg-light">
+                                <span className="input-group-text bg-transparent border-0"><Search size={18} className="text-muted"/></span>
+                                <input type="text" className="form-control border-0 bg-transparent shadow-none" placeholder="Personel Ara..." value={aramaMetni} onChange={(e) => setAramaMetni(e.target.value)}/>
+                            </div>
+                        </div>
+                        {/* Birim Filtresi */}
+                        <div className="col-md-3">
+                            <div className="input-group border rounded-3 bg-light">
+                                <span className="input-group-text bg-transparent border-0"><Briefcase size={18} className="text-muted"/></span>
+                                <select className="form-select border-0 bg-transparent shadow-none fw-medium" value={seciliBirim} onChange={(e) => setSeciliBirim(e.target.value)}>
+                                    <option value="TÜMÜ">TÜM BİRİMLER</option>
+                                    {birimler.map(b => (<option key={b.birim_id} value={b.birim_adi}>{b.birim_adi}</option>))}
+                                </select>
+                            </div>
+                        </div>
+                        {/* Lejant */}
+                        <div className="col-md-6 d-flex justify-content-md-end gap-3 text-small">
+                            <div className="d-flex align-items-center gap-2"><span className="rounded-circle" style={{width:10, height:10, backgroundColor: COLORS.APPROVED_ANNUAL}}></span> Yıllık (Onaylı)</div>
+                            <div className="d-flex align-items-center gap-2"><span className="rounded-circle" style={{width:10, height:10, backgroundColor: COLORS.SICK_LEAVE}}></span> Rapor</div>
+                            <div className="d-flex align-items-center gap-2"><span className="rounded-circle" style={{width:10, height:10, backgroundColor: COLORS.PENDING}}></span> Bekleyen</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* --- GANTT TAKVİMİ --- */}
+                <div className="card border-0 shadow-lg rounded-4 overflow-hidden bg-white" style={{ minHeight: '600px' }}>
                     {loading ? (
-                        <div className="d-flex flex-column align-items-center justify-content-center py-5">
-                            <div className="spinner-border text-primary mb-3" role="status"></div>
-                            <h6 className="text-muted fw-bold">Veriler Yükleniyor...</h6>
-                        </div>
-                    ) : tasks.length > 1 ? (
-                        /* 🔥 BURASI RESPONSIVE SORUNUNU ÇÖZEN YER 🔥 */
-                        <div style={{
-                            overflowX: 'auto', 
-                            backgroundColor: 'white',
-                            borderBottomLeftRadius: '16px',
-                            borderBottomRightRadius: '16px'
-                        }}>
-                            {/* minWidth vererek içeriğin sıkışmasını engelliyoruz, scroll çıkıyor */}
-                            <div style={{ minWidth: '1200px' }}> 
-                                <Gantt
-                                    tasks={tasks}
-                                    viewMode={viewMode}
-                                    locale="tr"
-                                    
-                                    /* GÖRÜNÜM AYARLARI */
-                                    columnWidth={viewMode === ViewMode.Month ? 120 : 65} // Ay modunda sütunları genişlettim
-                                    listCellWidth="250px" // İsim alanı genişliği
-                                    rowHeight={55}
-                                    barFill={70}
-                                    ganttHeight={650}
-                                    headerHeight={60}
-                                    
-                                    fontFamily="'Segoe UI', 'Roboto', sans-serif"
-                                    fontSize="13px"
-                                    
-                                    /* TOOLTIP (Üzerine gelince çıkan kutu) */
-                                    tooltipContent={(task) => {
-                                        if(task.type === 'project') return null;
-                                        return (
-                                            <div className="p-3 bg-white border border-secondary border-opacity-10 shadow-lg rounded-3 text-dark" style={{minWidth:'220px', zIndex: 9999}}>
-                                                <div className="d-flex align-items-center gap-2 mb-2 pb-2 border-bottom">
-                                                    <Calendar size={18} className="text-primary"/>
-                                                    <strong className="fw-bold">{task.name}</strong>
-                                                </div>
-                                                <div className="small text-muted d-flex flex-column gap-1">
-                                                    <div className="d-flex justify-content-between"><span>Başlangıç:</span> <span className="fw-bold text-dark">{task.start.toLocaleDateString('tr-TR')}</span></div>
-                                                    <div className="d-flex justify-content-between"><span>Bitiş:</span> <span className="fw-bold text-dark">{task.end.toLocaleDateString('tr-TR')}</span></div>
-                                                </div>
-                                            </div>
-                                        );
-                                    }}
-                                />
-                            </div>
-                        </div>
+                        <div className="text-center py-5 my-auto"><div className="spinner-border text-primary mb-2"></div><div>Yükleniyor...</div></div>
+                    ) : tasks.length > 0 && tasks.some(t => t.type === 'project') ? (
+                        <Gantt
+                            tasks={tasks}
+                            viewMode={ViewMode.Day} // Her zaman gün bazlı göster (Aylık görünüm içinde)
+                            locale="tr"
+                            
+                            // Görünüm Ayarları
+                            columnWidth={50} // Gün sütunlarının genişliği
+                            listCellWidth="220px" // Sol sütun genişliği
+                            rowHeight={60} // Satır yüksekliği (İsim+Unvan için)
+                            ganttHeight={650}
+                            headerHeight={50}
+                            barCornerRadius={4}
+                            barFill={85} // Bar yüksekliği yüzdesi
+                            todayColor="rgba(59, 130, 246, 0.1)" // Bugünün rengi
+
+                            // Özel Sol Sütun Renderları
+                            TaskListHeader={CustomTaskListHeader}
+                            TaskListTable={CustomTaskListTable}
+
+                            // Tooltip (Üzerine gelince çıkan kutu)
+                            tooltipContent={(task) => {
+                                if(!task.detay) return null;
+                                return (
+                                    <div className="p-3 bg-white rounded-3 shadow-lg border" style={{minWidth: '200px', borderColor: task.styles.backgroundColor}}>
+                                        <h6 className="fw-bold mb-2" style={{color: task.styles.backgroundColor}}>{task.name}</h6>
+                                        <div className="small text-muted border-top pt-2 vstack gap-1">
+                                            <div className="d-flex justify-content-between"><span>Süre:</span> <span className="fw-bold text-dark">{task.detay.gun} Gün</span></div>
+                                            <div className="d-flex justify-content-between"><span>Başlangıç:</span> <span className="fw-bold text-dark">{format(task.detay.baslangic, 'dd.MM.yyyy')}</span></div>
+                                            <div className="d-flex justify-content-between"><span>Bitiş:</span> <span className="fw-bold text-dark">{format(task.detay.bitis, 'dd.MM.yyyy')}</span></div>
+                                            <div className="d-flex justify-content-between mt-1"><span>Durum:</span> <span className="badge bg-light text-dark border">{task.detay.durum}</span></div>
+                                        </div>
+                                    </div>
+                                );
+                            }}
+                        />
                     ) : (
-                        <div className="text-center py-5">
-                            <div className="bg-light rounded-circle p-4 d-inline-block mb-3">
-                                <Users size={48} className="text-secondary opacity-50"/>
-                            </div>
-                            <h5 className="fw-bold text-dark">Kayıt Bulunamadı</h5>
-                            <p className="text-muted small">Seçtiğiniz filtrelere uygun personel veya izin kaydı yok.</p>
+                        <div className="text-center py-5 my-auto text-muted">
+                            <Users size={48} className="opacity-25 mb-3"/>
+                            <h5>Bu ay için görüntülenecek kayıt yok.</h5>
                         </div>
                     )}
                 </div>
             </div>
         </div>
-    );
-}
-
-// Küçük ikon bileşeni
-function ChevronDownIcon({size, className}) {
-    return (
-        <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="m6 9 6 6 6-6"/></svg>
     );
 }
