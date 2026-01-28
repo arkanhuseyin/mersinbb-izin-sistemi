@@ -569,8 +569,9 @@ exports.getIzinPlani = async (req, res) => {
         // İptal edilen veya Reddedilenler planlamayı etkilemez.
         const query = `
             SELECT 
-                p.personel_id, p.ad, p.soyad, p.birim_id, b.birim_adi, p.gorev,
-                t.talep_id, t.baslangic_tarihi, t.bitis_tarihi, t.durum, t.izin_turu
+                p.personel_id, p.ad, p.soyad, p.birim_id, b.birim_adi, p.gorev, p.rol_id, -- rol_id eklendi (Admin gizleme için)
+                t.talep_id, t.baslangic_tarihi, t.bitis_tarihi, t.durum, t.izin_turu, 
+                t.kac_gun -- 🔥 EKLENEN KISIM: Gün sayısını veritabanından çekiyoruz 🔥
             FROM personeller p
             LEFT JOIN birimler b ON p.birim_id = b.birim_id
             LEFT JOIN izin_talepleri t ON p.personel_id = t.personel_id 
