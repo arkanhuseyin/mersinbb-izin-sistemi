@@ -87,7 +87,7 @@ export default function Sidebar() {
 
         // 5. YÖNETİM (ORTAK)
         const yonetimSubItems = [];
-        if (checkPermission('personel_yonetim')) yonetimSubItems.push({ title: 'Personel Listesi', path: '/dashboard/profile-requests', icon: <UserCog size={16}/> });
+        if (checkPermission('personel_yonetim')) yonetimSubItems.push({ title: 'Personel Onayları', path: '/dashboard/profile-requests', icon: <UserCog size={16}/> });
         if (user?.rol === 'admin') yonetimSubItems.push({ title: 'Yetkilendirme', path: '/dashboard/yetkilendirme', icon: <ShieldCheck size={16}/> });
         yonetimSubItems.push({ title: 'Sistem Ayarları', path: '/dashboard/settings', icon: <Settings size={16}/> });
 
