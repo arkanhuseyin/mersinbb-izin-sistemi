@@ -148,7 +148,7 @@ export default function LeaveReports() {
 
     return (
         <div className="container-fluid p-4">
-            
+             
             {/* ÜST BAŞLIK ALANI */}
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
                 <div>
@@ -169,20 +169,23 @@ export default function LeaveReports() {
                     </button>
                 </div>
             </div>
-            
+             
             {/* FİLTRE KONTROL PANELİ */}
             <div className="card border-0 shadow-sm mb-4 rounded-4 bg-white">
                 <div className="card-body p-3 row g-3 align-items-center">
-                    <div className="col-md-5">
+                    {/* Responsive: Mobilde tam genişlik (col-12), tablette yarım (col-md-5) */}
+                    <div className="col-12 col-md-5">
                         <div className="input-group shadow-sm">
                             <span className="input-group-text bg-white border-end-0"><Search size={18} className="text-muted"/></span>
                             <input type="text" className="form-control border-start-0" placeholder="Personel Adı, TC No veya Birim Ara..." value={arama} onChange={e=>setArama(e.target.value)}/>
                         </div>
                     </div>
-                    <div className="col-md-7 d-flex align-items-center gap-3 justify-content-md-end">
+                    {/* Responsive: Mobilde tam genişlik (col-12), tablette kalan kısım (col-md-7) */}
+                    <div className="col-12 col-md-7 d-flex align-items-center gap-3 justify-content-md-end flex-wrap">
                         <div className="d-flex align-items-center gap-2 bg-light p-2 rounded-3 border shadow-sm">
                             <Filter size={16} className="text-primary"/>
-                            <span className="small fw-bold text-muted">Bakiye &ge;</span>
+                            {/* GÜNCELLENDİ: Etiket Değişti */}
+                            <span className="small fw-bold text-muted">İzin Üst Limit &ge;</span>
                             <input type="number" className="form-control form-control-sm text-center fw-bold text-primary border-0 bg-white" style={{width: '60px'}} placeholder="0" value={limitBakiye} onChange={(e) => setLimitBakiye(e.target.value)}/>
                         </div>
                         {limitBakiye && parseInt(limitBakiye) > 0 && <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-3 py-2 rounded-pill">{filtered.length} Sonuç</span>}
@@ -195,15 +198,16 @@ export default function LeaveReports() {
                 <div className="card-body p-0">
                     <div className="table-responsive">
                         <table className="table table-hover align-middle mb-0">
+                            {/* GÜNCELLENDİ: Tablo Başlıkları */}
                             <thead className="bg-light text-muted small text-uppercase fw-bold" style={{fontSize: '11px'}}>
                                 <tr>
-                                    <th className="ps-4 py-3">Personel</th>
-                                    <th>Kıdem</th>
-                                    <th className="text-center">Ömür Boyu Hak</th>
-                                    <th className="text-center">Bu Yıl</th>
-                                    <th className="text-center">Kullanılan</th>
-                                    <th className="text-center">Kalan Bakiye</th>
-                                    <th className="text-end pe-4">Durum</th>
+                                    <th className="ps-4 py-3">ADI SOYADI</th>
+                                    <th>KIDEM</th>
+                                    <th className="text-center">TOPLAM HAK EDİLEN</th>
+                                    <th className="text-center">BU YIL HAK EDİLEN</th>
+                                    <th className="text-center">KULLANILAN İZİN</th>
+                                    <th className="text-center">KALAN İZİN</th>
+                                    <th className="text-end pe-4">İZİN UYGUNLUĞU</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -247,12 +251,15 @@ export default function LeaveReports() {
                                                 </span>
                                             </td>
                                             <td className="text-end pe-4">
-                                                {isHigh ? (
-                                                    <span className="badge bg-warning bg-opacity-10 text-warning border border-warning" style={{fontSize:'10px'}}>Kullandırılmalı!</span>
-                                                ) : isLow ? (
-                                                    <span className="badge bg-danger bg-opacity-10 text-danger border border-danger" style={{fontSize:'10px'}}>Limit Aşımı</span>
+                                                {/* GÜNCELLENDİ: Durum Mantığı */}
+                                                {kalan > 0 ? (
+                                                    <span className="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1" style={{fontSize:'10px'}}>
+                                                        <CheckCircle size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> UYGUN
+                                                    </span>
                                                 ) : (
-                                                    <CheckCircle size={18} className="text-success opacity-50"/>
+                                                    <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1" style={{fontSize:'10px'}}>
+                                                        <X size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> YETERSİZ
+                                                    </span>
                                                 )}
                                             </td>
                                         </tr>
