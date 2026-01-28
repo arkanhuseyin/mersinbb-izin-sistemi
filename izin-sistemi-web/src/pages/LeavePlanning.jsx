@@ -33,7 +33,7 @@ export default function LeavePlanning() {
                 axios.get(`${API_URL}/api/personel/birimler`, { headers: { Authorization: `Bearer ${token}` } })
             ]);
             
-            // 🔥 BURASI ÇOK ÖNEMLİ: ESKİ BACKEND VERİSİNİ GRUPLUYORUZ 🔥
+            // Backend verisini grupla
             const islenmisVeri = veriyiGrupla(planRes.data);
             
             setPersoneller(islenmisVeri);
@@ -45,24 +45,22 @@ export default function LeavePlanning() {
         }
     };
 
-    // 🛠️ DÖNÜŞTÜRÜCÜ FONKSİYON (Backend'den gelen düz listeyi kişilere göre paketler)
+    // 🛠️ VERİ DÖNÜŞTÜRÜCÜ (GÜN SAYISI DÜZELTİLDİ) ✅
     const veriyiGrupla = (hamVeri) => {
         const gruplanmis = {};
 
         hamVeri.forEach(satir => {
-            // Admin (Rol 5 ve 1) ve Sistem kullanıcısını gizle
+            // Admin Gizleme
             const rid = Number(satir.rol_id);
             if (rid === 5 || rid === 1 || (satir.ad && satir.ad.toLowerCase() === 'sistem')) return;
 
-            // Eğer personel listede yoksa ekle
             if (!gruplanmis[satir.personel_id]) {
                 gruplanmis[satir.personel_id] = {
-                    ...satir, // Ad, Soyad, Birim vs.
-                    izinler: [] // İzinleri buraya dolduracağız
+                    ...satir,
+                    izinler: [] 
                 };
             }
 
-            // Eğer bu satırda bir izin varsa (LEFT JOIN'den dolayı boş gelebilir), listeye ekle
             if (satir.talep_id) {
                 gruplanmis[satir.personel_id].izinler.push({
                     talep_id: satir.talep_id,
@@ -70,12 +68,12 @@ export default function LeavePlanning() {
                     bitis_tarihi: satir.bitis_tarihi,
                     durum: satir.durum,
                     izin_turu: satir.izin_turu,
-                    gun_sayisi: satir.kac_gun // Backend'de 'kac_gun' olarak geliyor olabilir
+                    // 🔥 DÜZELTME BURADA: Veritabanındaki 'kac_gun' sütununu alıyoruz 🔥
+                    gun_sayisi: satir.kac_gun 
                 });
             }
         });
 
-        // Objeyi array'e çevirip isme göre sırala
         return Object.values(gruplanmis).sort((a, b) => a.ad.localeCompare(b.ad));
     };
 
@@ -83,7 +81,7 @@ export default function LeavePlanning() {
         setCurrentDate(prev => addMonths(prev, direction));
     };
 
-    // Filtreleme (Birim ve Arama)
+    // Filtreleme
     const getFilteredPersonel = () => {
         return personeller.filter(p => {
             if (seciliBirim !== 'TÜMÜ' && p.birim_adi !== seciliBirim) return false;
@@ -92,18 +90,16 @@ export default function LeavePlanning() {
         });
     };
 
-    // 🔥 TARİH KONTROLÜ (Saat farkını yutan versiyon) 🔥
+    // 🔥 TARİH KONTROLÜ (Saat farkını yutan versiyon)
     const checkLeaveStatus = (personel, day) => {
         if (!personel.izinler || personel.izinler.length === 0) return null;
 
-        // Tablodaki o günün tarihi (YYYY-MM-DD)
         const cellDate = setDate(currentDate, day);
         const cellDateStr = format(cellDate, 'yyyy-MM-dd');
 
         const activeLeave = personel.izinler.find(izin => {
             if (izin.durum === 'REDDEDILDI' || izin.durum === 'IPTAL_EDILDI') return false;
             
-            // Backend'den gelen tarih stringini güvenli şekilde kırp
             const startStr = String(izin.baslangic_tarihi).substring(0, 10);
             const endStr = String(izin.bitis_tarihi).substring(0, 10);
 
@@ -143,7 +139,8 @@ export default function LeavePlanning() {
             return {
                 exists: true,
                 className: colorClass,
-                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nŞU AN KİMDE: ${approverText}\nSÜRE: ${activeLeave.gun_sayisi || '?'} Gün`
+                // 🔥 BURADA GÜN SAYISI EKLENDİ 🔥
+                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nŞU AN KİMDE: ${approverText}\nSÜRE: ${activeLeave.gun_sayisi} Gün`
             };
         }
         return null;
