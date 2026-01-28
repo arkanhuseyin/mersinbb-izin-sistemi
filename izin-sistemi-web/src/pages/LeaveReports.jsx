@@ -143,12 +143,12 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata."); } finally { setYukleniyor(false); }
     };
 
-    // FİLTRELEME: Admin gizle (rol_id !== 1)
+    // FİLTRELEME: Admin gizle (rol_id !== 5)
     const filtered = rapor.filter(p => {
         const matchesSearch = p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama) || p.birim_adi?.toLowerCase().includes(arama.toLowerCase());
         const kalan = parseInt(p.kalan) || 0;
         const limit = parseInt(limitBakiye);
-        const isAdmin = (p.rol_id === 1); 
+        const isAdmin = (p.rol_id === 5); 
         
         return matchesSearch && (!isNaN(limit) && limit > 0 ? kalan >= limit : true) && !isAdmin;
     });
