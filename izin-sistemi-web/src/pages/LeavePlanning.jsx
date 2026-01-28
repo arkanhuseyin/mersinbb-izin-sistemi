@@ -3,7 +3,8 @@ import axios from 'axios';
 import { Gantt, ViewMode } from 'gantt-task-react';
 import "gantt-task-react/dist/index.css";
 // Tarih işlemleri için date-fns kütüphanesini kullanıyoruz (React projelerinde standarttır)
-import { startOfMonth, endOfMonth, format, addMonths, tr } from 'date-fns'; 
+import { startOfMonth, endOfMonth, format, addMonths } from 'date-fns';
+import { tr } from 'date-fns/locale';
 import { Calendar, Filter, Users, Search, Briefcase, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
