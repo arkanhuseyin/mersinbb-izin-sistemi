@@ -108,8 +108,8 @@ export default function LeaveReports() {
         if(!confirm("Toplu Excel indirilsin mi?")) return; 
         try {
             const excelRows = [["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Bu Yıl", "KULLANILAN", "KALAN", "DURUM"]];
-            // Admin hariç (rol_id !== 1) olanları Excel'e aktar
-            const adminHaricRapor = rapor.filter(p => p.rol_id !== 1);
+            // ADMIN GİZLEME: Rol ID 5 olanı (Admin) Excel'e dahil etme
+            const adminHaricRapor = rapor.filter(p => p.rol_id !== 5);
             
             adminHaricRapor.forEach((p) => {
                 const kumulatif = parseInt(p.kumulatif_hak) || 0;
@@ -120,7 +120,6 @@ export default function LeaveReports() {
                 const kullanilan = toplamHavuz - kalan;
                 const kidem = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
                 
-                // Excel Durum Mantığı
                 let durumMetni = "UYGUN";
                 if (kalan > 50) durumMetni = "İZNE GÖNDERİLMELİ";
                 else if (kalan < 0) durumMetni = "LİMİT AŞIMI";
@@ -143,12 +142,14 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata."); } finally { setYukleniyor(false); }
     };
 
-    // FİLTRELEME: Admin gizle (rol_id !== 5)
+    // --- ANA FİLTRELEME ---
+    // Burada rol_id === 5 olanı (Admin) listeden çıkarıyoruz.
     const filtered = rapor.filter(p => {
         const matchesSearch = p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama) || p.birim_adi?.toLowerCase().includes(arama.toLowerCase());
         const kalan = parseInt(p.kalan) || 0;
         const limit = parseInt(limitBakiye);
-        const isAdmin = (p.rol_id === 5); 
+        
+        const isAdmin = (p.rol_id === 5); // ARTIK 5 NUMARA GİZLENECEK
         
         return matchesSearch && (!isNaN(limit) && limit > 0 ? kalan >= limit : true) && !isAdmin;
     });
@@ -223,7 +224,6 @@ export default function LeaveReports() {
                                     const toplamKullanilan = toplamHavuz - kalan;
                                     const kidemYil = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
                                     
-                                    // GÜNCELLENEN MANTIK: 50 GÜN KURALI
                                     const izneGonderilmeli = kalan > 50;
                                     const limitAsimi = kalan < 0;
 
@@ -286,7 +286,7 @@ export default function LeaveReports() {
                 </div>
             </div>
 
-            {/* MODAL KISIMLARI (Aynı Kaldı) */}
+            {/* MODAL KISIMLARI (Aynı) */}
             {secilenPersonel && (
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -363,7 +363,7 @@ export default function LeaveReports() {
                                                     </div>
                                                 </div>
                                             )}
-                                            {/* Diğer Tablar (hakedis, gecmis) aynı kaldığı için kısaltıldı ama kod içinde mevcut */}
+
                                             {activeTab === 'hakedis' && (
                                                 <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
                                                     <table className="table table-hover mb-0 align-middle">
@@ -382,6 +382,7 @@ export default function LeaveReports() {
                                                     </table>
                                                 </div>
                                             )}
+
                                             {activeTab === 'gecmis' && (
                                                 <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
                                                     <div className="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center">
@@ -425,7 +426,6 @@ export default function LeaveReports() {
                 </div>
             )}
 
-            {/* DÜZENLEME MODALI */}
             {editModalOpen && editData && (
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1060}}>
                     <div className="modal-dialog modal-dialog-centered">

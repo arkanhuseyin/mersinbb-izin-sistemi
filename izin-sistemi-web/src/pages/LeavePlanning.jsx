@@ -41,21 +41,13 @@ export default function LeavePlanning() {
 
         try {
             // Rapor endpointinden tüm onaylı izinleri ve personelleri çekiyoruz
-            // Not: Backend'inde 'izin/rapor/durum' tüm personeli ve durumlarını getiriyordu.
-            // Buradan personeli ve izin aralıklarını alacağız.
             const res = await axios.get(`${API_URL}/api/izin/personel-izin-takvim`, { 
                 headers: { Authorization: `Bearer ${token}` } 
             });
-            // Eğer backendde özel bir takvim endpointi yoksa, mevcut rapor endpointini parse edebiliriz.
-            // Ben şimdilik varmış gibi veya rapor endpointini simüle ediyorum.
-            // Eğer bu endpoint yoksa, `rapor/durum` sonucunu buraya setleyip, frontend'de işleyebiliriz.
             
-            // YEDEK PLAN (Mevcut endpointi kullanma):
+            // Eğer backendde özel bir takvim endpointi yoksa, fallback:
             if(!res.data || res.data.length === 0) {
                  const raporRes = await axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } });
-                 // Buradaki veriyi takvime uygun hale getirmemiz gerekebilir. 
-                 // Şimdilik backend'den detaylı geldiğini varsayıyorum.
-                 // Eğer backend hazır değilse `raporRes.data` kullanacağız.
                  setPersoneller(raporRes.data);
                  gruplaVeFiltrele(raporRes.data);
             } else {
@@ -63,7 +55,6 @@ export default function LeavePlanning() {
                 gruplaVeFiltrele(res.data);
             }
         } catch (error) {
-            // Endpoint yoksa fallback olarak raporu çek
             try {
                 const resFallback = await axios.get(`${API_URL}/api/izin/rapor/durum`, { headers: { Authorization: `Bearer ${token}` } });
                 setPersoneller(resFallback.data);
@@ -77,8 +68,8 @@ export default function LeavePlanning() {
     };
 
     const gruplaVeFiltrele = (veri) => {
-        // 1. Admini Gizle
-        let filtreli = veri.filter(p => p.rol_id !== 1);
+        // 1. ADMIN GİZLEME (Rol ID 5)
+        let filtreli = veri.filter(p => p.rol_id !== 5);
 
         // 2. Arama Filtresi
         if (arama) {
@@ -126,14 +117,12 @@ export default function LeavePlanning() {
 
     // İzin Kontrolü: Bu personel, bu tarihte izinli mi?
     const izinDurumuGetir = (personel, tarih) => {
-        // Backend'den gelen veri yapısına göre burayı düzenlemek gerekebilir.
-        // Eğer personel objesinin içinde `izinler` array'i varsa:
         if (!personel.izinler) return null;
 
         const kontrolTarihi = tarih.setHours(0,0,0,0);
 
         for (const izin of personel.izinler) {
-            // Sadece ONAYLANMIŞ izinleri göster (Bekleyenleri sarı yapabiliriz)
+            // Sadece ONAYLANMIŞ izinleri göster
             if (izin.onay_durumu !== '3' && izin.durum !== 'TAMAMLANDI') continue; 
 
             const baslangic = new Date(izin.baslangic_tarihi).setHours(0,0,0,0);
