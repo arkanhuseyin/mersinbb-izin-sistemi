@@ -1,24 +1,24 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { 
-    startOfMonth, endOfMonth, getDaysInMonth, format, addMonths, 
-    isWeekend, getISOWeek, setDate 
+    getDaysInMonth, addMonths, isWeekend, getISOWeek, setDate 
 } from 'date-fns';
-import { tr } from 'date-fns/locale';
+// Tarih formatı için date-fns yerine manuel string formatı kullanacağız (En garantisi)
 import { Calendar, Filter, Search, Briefcase, ChevronLeft, ChevronRight, Users, Info } from 'lucide-react';
 
 const API_URL = 'https://mersinbb-izin-sistemi.onrender.com';
+
+// Türkçe Gün/Ay İsimleri (Paket bağımsız)
+const AY_ISIMLERI = ["OCAK", "ŞUBAT", "MART", "NİSAN", "MAYIS", "HAZİRAN", "TEMMUZ", "AĞUSTOS", "EYLÜL", "EKİM", "KASIM", "ARALIK"];
+const GUN_ISIMLERI = ["PAZ", "PZT", "SAL", "ÇAR", "PER", "CUM", "CTS"];
 
 export default function LeavePlanning() {
     const [personeller, setPersoneller] = useState([]);
     const [loading, setLoading] = useState(true);
     const [birimler, setBirimler] = useState([]);
     
-    // FİLTRELER
     const [seciliBirim, setSeciliBirim] = useState('TÜMÜ');
     const [aramaMetni, setAramaMetni] = useState('');
-    
-    // TARİH YÖNETİMİ
     const [currentDate, setCurrentDate] = useState(new Date());
     
     useEffect(() => {
@@ -33,9 +33,8 @@ export default function LeavePlanning() {
                 axios.get(`${API_URL}/api/personel/birimler`, { headers: { Authorization: `Bearer ${token}` } })
             ]);
             
-            // Backend verisini grupla
+            // Backend verisini işle
             const islenmisVeri = veriyiGrupla(planRes.data);
-            
             setPersoneller(islenmisVeri);
             setBirimler(birimRes.data);
         } catch (error) {
@@ -45,36 +44,51 @@ export default function LeavePlanning() {
         }
     };
 
-    // 🛠️ VERİ DÖNÜŞTÜRÜCÜ (GÜN SAYISI DÜZELTİLDİ) ✅
+    // 🛠️ YARDIMCI: TARİHİ "YYYY-MM-DD" FORMATINA ÇEVİR (Saat farkını yutar)
+    const formatDateLocal = (dateInput) => {
+        if (!dateInput) return null;
+        const d = new Date(dateInput);
+        if (isNaN(d.getTime())) return null;
+        
+        // Yerel saati baz al (UTC değil)
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // 🛠️ VERİ GRUPLAMA (Backend uyumlu)
     const veriyiGrupla = (hamVeri) => {
         const gruplanmis = {};
 
+        if (!Array.isArray(hamVeri)) return [];
+
         hamVeri.forEach(satir => {
-            // Admin Gizleme
+            // Admin Gizle
             const rid = Number(satir.rol_id);
-            if (rid === 5 || rid === 1 || (satir.ad && satir.ad.toLowerCase() === 'sistem')) return;
+            const ad = (satir.ad || '').toLowerCase();
+            if (rid === 5 || rid === 1 || ad === 'sistem') return;
 
             if (!gruplanmis[satir.personel_id]) {
-                gruplanmis[satir.personel_id] = {
-                    ...satir,
-                    izinler: [] 
-                };
+                gruplanmis[satir.personel_id] = { ...satir, izinler: [] };
             }
 
             if (satir.talep_id) {
+                // Gün sayısını hesapla (Eğer backend'den null gelirse)
+                let duration = satir.kac_gun;
+                if (!duration && satir.baslangic_tarihi && satir.bitis_tarihi) {
+                    const diff = new Date(satir.bitis_tarihi) - new Date(satir.baslangic_tarihi);
+                    duration = Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+                }
+
                 gruplanmis[satir.personel_id].izinler.push({
-                    talep_id: satir.talep_id,
-                    baslangic_tarihi: satir.baslangic_tarihi,
-                    bitis_tarihi: satir.bitis_tarihi,
-                    durum: satir.durum,
-                    izin_turu: satir.izin_turu,
-                    // 🔥 DÜZELTME BURADA: Veritabanındaki 'kac_gun' sütununu alıyoruz 🔥
-                    gun_sayisi: satir.kac_gun 
+                    ...satir,
+                    gun_sayisi: duration
                 });
             }
         });
 
-        return Object.values(gruplanmis).sort((a, b) => a.ad.localeCompare(b.ad));
+        return Object.values(gruplanmis).sort((a, b) => (a.ad || '').localeCompare(b.ad || ''));
     };
 
     const handleMonthChange = (direction) => {
@@ -85,24 +99,32 @@ export default function LeavePlanning() {
     const getFilteredPersonel = () => {
         return personeller.filter(p => {
             if (seciliBirim !== 'TÜMÜ' && p.birim_adi !== seciliBirim) return false;
-            if (aramaMetni && !(p.ad + ' ' + p.soyad).toLowerCase().includes(aramaMetni.toLowerCase())) return false;
+            if (aramaMetni) {
+                const tamAd = `${p.ad} ${p.soyad}`.toLowerCase();
+                if (!tamAd.includes(aramaMetni.toLowerCase())) return false;
+            }
             return true;
         });
     };
 
-    // 🔥 TARİH KONTROLÜ (Saat farkını yutan versiyon)
+    // 🔥 KESİN ÇÖZÜM: TARİH KONTROLÜ 🔥
     const checkLeaveStatus = (personel, day) => {
         if (!personel.izinler || personel.izinler.length === 0) return null;
 
-        const cellDate = setDate(currentDate, day);
-        const cellDateStr = format(cellDate, 'yyyy-MM-dd');
+        // 1. Tablodaki hücrenin tarihi (YYYY-MM-DD)
+        const cellDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+        const cellDateStr = formatDateLocal(cellDate); // Örn: "2026-01-28"
 
         const activeLeave = personel.izinler.find(izin => {
             if (izin.durum === 'REDDEDILDI' || izin.durum === 'IPTAL_EDILDI') return false;
             
-            const startStr = String(izin.baslangic_tarihi).substring(0, 10);
-            const endStr = String(izin.bitis_tarihi).substring(0, 10);
+            // 2. İzin tarihlerini de YYYY-MM-DD'ye çevir
+            const startStr = formatDateLocal(izin.baslangic_tarihi);
+            const endStr = formatDateLocal(izin.bitis_tarihi);
 
+            if (!startStr || !endStr) return false;
+
+            // 3. String Kıyaslaması (Saat farkı oluşamaz)
             return cellDateStr >= startStr && cellDateStr <= endStr;
         });
 
@@ -121,26 +143,25 @@ export default function LeavePlanning() {
             else if (isAmir || isYazici) colorClass = 'bg-primary'; 
             else colorClass = 'bg-warning text-dark'; 
 
-            // Tooltip Bilgisi
+            // Tooltip
             if (activeLeave.durum === 'ONAY_BEKLIYOR') {
                 statusText = 'Onay Bekliyor';
                 approverText = `Birim Amiri (${personel.birim_adi})`;
             } else if (isAmir) {
                 statusText = 'Amir Onayladı';
-                approverText = 'Yazı İşleri / İdari İşler';
+                approverText = 'İdari İşler';
             } else if (isYazici) {
                 statusText = 'İdari Onay Tamam';
-                approverText = 'İnsan Kaynakları (Son Onay)';
+                approverText = 'İnsan Kaynakları';
             } else if (isApproved) {
                 statusText = 'ONAYLANDI';
-                approverText = 'İnsan Kaynakları / Yönetim';
+                approverText = 'Yönetim / İK';
             }
 
             return {
                 exists: true,
                 className: colorClass,
-                // 🔥 BURADA GÜN SAYISI EKLENDİ 🔥
-                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nŞU AN KİMDE: ${approverText}\nSÜRE: ${activeLeave.kac_gun} Gün`
+                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nMEVKİ: ${approverText}\nSÜRE: ${activeLeave.gun_sayisi || '?'} Gün`
             };
         }
         return null;
@@ -156,7 +177,7 @@ export default function LeavePlanning() {
     let currentWeek = null;
     let count = 0;
     for (let i = 1; i <= daysInMonth; i++) {
-        const d = setDate(currentDate, i);
+        const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), i);
         const w = getISOWeek(d);
         if (currentWeek === null) { currentWeek = w; count = 1; }
         else if (w !== currentWeek) {
@@ -167,9 +188,9 @@ export default function LeavePlanning() {
     weeksHeader.push({ week: currentWeek, count: count });
 
     return (
-        <div className="container-fluid p-0 bg-light" style={{ minHeight: '100vh' }}>
+        <div className="container-fluid p-0 bg-light" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
             
-            {/* HEADER */}
+            {/* 1. HEADER */}
             <div className="bg-white border-bottom px-4 py-3 d-flex flex-column flex-md-row justify-content-between align-items-center gap-3 shadow-sm sticky-top" style={{zIndex: 1020}}>
                 <div>
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
@@ -180,15 +201,15 @@ export default function LeavePlanning() {
                 </div>
                 <div className="d-flex align-items-center bg-light rounded-pill border p-1 shadow-sm">
                     <button className="btn btn-light rounded-circle p-2 border-0" onClick={() => handleMonthChange(-1)}><ChevronLeft size={20}/></button>
-                    <div className="mx-4 fw-bolder text-dark fs-5 text-uppercase" style={{minWidth: '180px', textAlign: 'center'}}>
-                        {format(currentDate, 'MMMM yyyy', { locale: tr })}
+                    <div className="mx-4 fw-bolder text-dark fs-5" style={{minWidth: '180px', textAlign: 'center'}}>
+                        {AY_ISIMLERI[currentDate.getMonth()]} {currentDate.getFullYear()}
                     </div>
                     <button className="btn btn-light rounded-circle p-2 border-0" onClick={() => handleMonthChange(1)}><ChevronRight size={20}/></button>
                 </div>
             </div>
 
-            <div className="p-4">
-                {/* FİLTRELER */}
+            <div className="p-4 flex-grow-1 d-flex flex-column">
+                {/* 2. FİLTRELER */}
                 <div className="card border-0 shadow-sm rounded-4 mb-4 bg-white">
                     <div className="card-body p-3 row g-3 align-items-center">
                         <div className="col-md-3">
@@ -215,9 +236,9 @@ export default function LeavePlanning() {
                     </div>
                 </div>
 
-                {/* TABLO */}
-                <div className="card border-0 shadow-lg rounded-4 overflow-hidden bg-white">
-                    <div className="table-responsive" style={{ maxHeight: '70vh' }}>
+                {/* 3. TABLO */}
+                <div className="card border-0 shadow-lg rounded-4 overflow-hidden bg-white flex-grow-1">
+                    <div className="table-responsive h-100">
                         <table className="table table-bordered mb-0" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                             <thead className="bg-light sticky-top" style={{ zIndex: 10, top: 0 }}>
                                 {/* HAFTALAR */}
@@ -228,7 +249,7 @@ export default function LeavePlanning() {
                                         </div>
                                     </th>
                                     {weeksHeader.map((w, idx) => (
-                                        <th key={idx} colSpan={w.count} className="text-center bg-white border-bottom border-end small text-muted text-uppercase py-1" style={{fontSize:'10px', backgroundColor: '#f8f9fa'}}>
+                                        <th key={idx} colSpan={w.count} className="text-center bg-white border-bottom border-end small text-muted fw-bold py-1" style={{fontSize:'10px', backgroundColor: '#f8f9fa'}}>
                                             {w.week}. HAFTA
                                         </th>
                                     ))}
@@ -236,12 +257,12 @@ export default function LeavePlanning() {
                                 {/* GÜNLER */}
                                 <tr>
                                     {daysArray.map(day => {
-                                        const d = setDate(currentDate, day);
+                                        const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                                         const isSatSun = isWeekend(d);
                                         return (
                                             <th key={day} className={`text-center p-1 align-middle border-bottom border-end ${isSatSun ? 'bg-secondary bg-opacity-10' : 'bg-white'}`} style={{ minWidth: '40px', width: '40px', fontSize: '12px' }}>
                                                 <div className={`fw-bold ${isSatSun ? 'text-danger' : 'text-dark'}`}>{day}</div>
-                                                <div style={{fontSize: '9px', color: '#666', textTransform: 'uppercase'}}>{format(d, 'EEE', { locale: tr })}</div>
+                                                <div style={{fontSize: '9px', color: '#666'}}>{GUN_ISIMLERI[d.getDay()]}</div>
                                             </th>
                                         );
                                     })}
@@ -256,7 +277,7 @@ export default function LeavePlanning() {
                                             <td className="p-2 bg-white border-end border-bottom" style={{ position: 'sticky', left: 0, zIndex: 5, borderRight: '2px solid #eee' }}>
                                                 <div className="d-flex align-items-center gap-2">
                                                     <div className="bg-light rounded-circle d-flex align-items-center justify-content-center text-primary fw-bold border" style={{width:'36px', height:'36px', fontSize:'14px'}}>
-                                                        {personel.ad.charAt(0)}{personel.soyad.charAt(0)}
+                                                        {personel.ad ? personel.ad.charAt(0) : '-'}
                                                     </div>
                                                     <div className="text-truncate" style={{maxWidth: '180px'}}>
                                                         <div className="fw-bold text-dark" style={{fontSize: '13px'}}>{personel.ad} {personel.soyad}</div>
@@ -265,7 +286,7 @@ export default function LeavePlanning() {
                                                 </div>
                                             </td>
                                             {daysArray.map(day => {
-                                                const d = setDate(currentDate, day);
+                                                const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                                                 const isSatSun = isWeekend(d);
                                                 const leaveStatus = checkLeaveStatus(personel, day);
                                                 return (
