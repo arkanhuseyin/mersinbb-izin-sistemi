@@ -140,7 +140,7 @@ export default function LeavePlanning() {
                 exists: true,
                 className: colorClass,
                 // 🔥 BURADA GÜN SAYISI EKLENDİ 🔥
-                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nŞU AN KİMDE: ${approverText}\nSÜRE: ${activeLeave.gun_sayisi} Gün`
+                tooltip: `TÜR: ${activeLeave.izin_turu}\nDURUM: ${statusText}\nŞU AN KİMDE: ${approverText}\nSÜRE: ${activeLeave.kac_gun} Gün`
             };
         }
         return null;
