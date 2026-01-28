@@ -562,48 +562,31 @@ exports.talepGuncelle = async (req, res) => {
         res.status(500).json({ mesaj: 'Güncelleme sırasında hata oluştu.' });
     }
 };
-// 2. GANTT ŞEMASI İÇİN VERİ (PLANLAMA) - TARİH FORMATI FİXLENDİ 🚀
+// 2. GANTT ŞEMASI İÇİN VERİ (PLANLAMA)
 exports.getIzinPlani = async (req, res) => {
     try {
+        // Sadece Aktif Personelleri ve Onaylı/Bekleyen İzinleri Çekelim
+        // İptal edilen veya Reddedilenler planlamayı etkilemez.
         const query = `
             SELECT 
-                p.personel_id, 
-                p.ad, 
-                p.soyad, 
-                p.birim_id, 
-                b.birim_adi, 
-                p.gorev,
-                p.rol_id,
-                p.unvan,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'talep_id', t.talep_id,
-                            -- 🔥 TARİHLERİ METİN OLARAK ALIYORUZ (Saat farkını önler) 🔥
-                            'baslangic_tarihi', TO_CHAR(t.baslangic_tarihi, 'YYYY-MM-DD'),
-                            'bitis_tarihi', TO_CHAR(t.bitis_tarihi, 'YYYY-MM-DD'),
-                            'durum', t.durum,
-                            'izin_turu', t.izin_turu,
-                            'gun_sayisi', t.kac_gun
-                        )
-                    ) FILTER (WHERE t.talep_id IS NOT NULL),
-                    '[]'
-                ) as izinler
+                p.personel_id, p.ad, p.soyad, p.birim_id, b.birim_adi, p.gorev,
+                t.talep_id, t.baslangic_tarihi, t.bitis_tarihi, t.durum, t.izin_turu
             FROM personeller p
             LEFT JOIN birimler b ON p.birim_id = b.birim_id
             LEFT JOIN izin_talepleri t ON p.personel_id = t.personel_id 
-                AND t.durum NOT IN ('REDDEDILDI', 'IPTAL_EDILDI') 
-            WHERE p.aktif = TRUE 
-              AND p.rol_id != 5  -- Admin Gizleme
-            GROUP BY p.personel_id, p.ad, p.soyad, p.birim_id, b.birim_adi, p.gorev, p.rol_id, p.unvan
+                AND t.durum NOT IN ('REDDEDILDI', 'IPTAL_EDILDI')
+            WHERE p.aktif = TRUE
             ORDER BY b.birim_adi, p.ad ASC
         `;
 
         const result = await pool.query(query);
+        
+        // Veriyi Frontend'in Gantt kütüphanesinin istediği formata çevireceğiz
+        // Ancak burada ham veriyi gönderip frontend'de işlemek daha esnek olur.
         res.json(result.rows);
 
     } catch (err) {
-        console.error("Planlama Hatası:", err);
+        console.error(err);
         res.status(500).json({ mesaj: 'Planlama verisi çekilemedi.' });
     }
 };
