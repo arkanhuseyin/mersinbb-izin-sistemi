@@ -14,7 +14,7 @@ export default function LeaveReports() {
     const [rapor, setRapor] = useState([]);
     const [arama, setArama] = useState('');
     const [yukleniyor, setYukleniyor] = useState(true);
-    const [limitBakiye, setLimitBakiye] = useState(''); // Filtre
+    const [limitBakiye, setLimitBakiye] = useState(''); 
 
     // Detay Modal
     const [secilenPersonel, setSecilenPersonel] = useState(null);
@@ -47,7 +47,6 @@ export default function LeaveReports() {
         return `${API_URL}/uploads/${cleanPath.split('/').pop()}`;
     };
 
-    // --- PERSONEL DETAY ---
     const handlePersonelClick = async (personel) => {
         setSecilenPersonel(personel); 
         setActiveTab('ozet'); 
@@ -60,19 +59,17 @@ export default function LeaveReports() {
         setDetayYukleniyor(false);
     };
 
-    // --- SİLME ---
     const handleLeaveDelete = async (talepId) => {
         if(!confirm("DİKKAT! Bu işlem geri alınamaz ve bakiye personele iade edilir. Silmek istediğinize emin misiniz?")) return;
         try {
             const token = localStorage.getItem('token');
             await axios.delete(`${API_URL}/api/izin/talep-sil/${talepId}`, { headers: { Authorization: `Bearer ${token}` } });
             alert("İzin silindi.");
-            if (secilenPersonel) handlePersonelClick(secilenPersonel); // Modalı yenile
-            verileriGetir(); // Listeyi yenile
+            if (secilenPersonel) handlePersonelClick(secilenPersonel); 
+            verileriGetir(); 
         } catch (error) { alert("Hata: " + error.message); }
     };
 
-    // --- DÜZENLEME ---
     const openEditModal = (izin) => {
         setEditData(izin);
         const dateStr = new Date(izin.bitis_tarihi).toISOString().split('T')[0];
@@ -100,7 +97,6 @@ export default function LeaveReports() {
                 yeni_bitis_tarihi: yeniBitisTarihi,
                 yeni_gun_sayisi: yeniGunSayisi
             }, { headers: { Authorization: `Bearer ${token}` } });
-
             alert("İzin güncellendi!");
             setEditModalOpen(false);
             if (secilenPersonel) handlePersonelClick(secilenPersonel);
@@ -108,12 +104,14 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata: " + (e.response?.data?.mesaj || e.message)); }
     };
 
-    // --- EXCEL & PDF ---
     const downloadBulkExcel = async () => {
         if(!confirm("Toplu Excel indirilsin mi?")) return; 
         try {
             const excelRows = [["TC", "Ad Soyad", "Birim", "Giriş", "Kıdem", "Ömür Boyu Hak", "Bu Yıl", "KULLANILAN", "KALAN", "DURUM"]];
-            rapor.forEach((p) => {
+            // Admin hariç (rol_id !== 1) olanları Excel'e aktar
+            const adminHaricRapor = rapor.filter(p => p.rol_id !== 1);
+            
+            adminHaricRapor.forEach((p) => {
                 const kumulatif = parseInt(p.kumulatif_hak) || 0;
                 const devreden = parseInt(p.devreden_izin) || 0;
                 const buYil = parseInt(p.bu_yil_hakedis) || 0;
@@ -121,7 +119,13 @@ export default function LeaveReports() {
                 const toplamHavuz = kumulatif + devreden;
                 const kullanilan = toplamHavuz - kalan;
                 const kidem = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
-                excelRows.push([p.tc_no, `${p.ad} ${p.soyad}`, p.birim_adi, new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), kidem, kumulatif, buYil, kullanilan, kalan, kalan < 0 ? "LİMİT AŞIMI" : "NORMAL"]);
+                
+                // Excel Durum Mantığı
+                let durumMetni = "UYGUN";
+                if (kalan > 50) durumMetni = "İZNE GÖNDERİLMELİ";
+                else if (kalan < 0) durumMetni = "LİMİT AŞIMI";
+
+                excelRows.push([p.tc_no, `${p.ad} ${p.soyad}`, p.birim_adi, new Date(p.ise_giris_tarihi).toLocaleDateString('tr-TR'), kidem, kumulatif, buYil, kullanilan, kalan, durumMetni]);
             });
             const wb = XLSX.utils.book_new(); const ws = XLSX.utils.aoa_to_sheet(excelRows);
             XLSX.utils.book_append_sheet(wb, ws, "Rapor"); XLSX.writeFile(wb, `Genel_Rapor.xlsx`);
@@ -139,17 +143,19 @@ export default function LeaveReports() {
         } catch (e) { alert("Hata."); } finally { setYukleniyor(false); }
     };
 
+    // FİLTRELEME: Admin gizle (rol_id !== 1)
     const filtered = rapor.filter(p => {
         const matchesSearch = p.ad.toLowerCase().includes(arama.toLowerCase()) || p.tc_no.includes(arama) || p.birim_adi?.toLowerCase().includes(arama.toLowerCase());
         const kalan = parseInt(p.kalan) || 0;
         const limit = parseInt(limitBakiye);
-        return matchesSearch && (!isNaN(limit) && limit > 0 ? kalan >= limit : true);
+        const isAdmin = (p.rol_id === 1); 
+        
+        return matchesSearch && (!isNaN(limit) && limit > 0 ? kalan >= limit : true) && !isAdmin;
     });
 
     return (
         <div className="container-fluid p-4">
              
-            {/* ÜST BAŞLIK ALANI */}
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
                 <div>
                     <h2 className="fw-bold text-dark m-0 d-flex align-items-center gap-2">
@@ -170,21 +176,17 @@ export default function LeaveReports() {
                 </div>
             </div>
              
-            {/* FİLTRE KONTROL PANELİ */}
             <div className="card border-0 shadow-sm mb-4 rounded-4 bg-white">
                 <div className="card-body p-3 row g-3 align-items-center">
-                    {/* Responsive: Mobilde tam genişlik (col-12), tablette yarım (col-md-5) */}
                     <div className="col-12 col-md-5">
                         <div className="input-group shadow-sm">
                             <span className="input-group-text bg-white border-end-0"><Search size={18} className="text-muted"/></span>
                             <input type="text" className="form-control border-start-0" placeholder="Personel Adı, TC No veya Birim Ara..." value={arama} onChange={e=>setArama(e.target.value)}/>
                         </div>
                     </div>
-                    {/* Responsive: Mobilde tam genişlik (col-12), tablette kalan kısım (col-md-7) */}
                     <div className="col-12 col-md-7 d-flex align-items-center gap-3 justify-content-md-end flex-wrap">
                         <div className="d-flex align-items-center gap-2 bg-light p-2 rounded-3 border shadow-sm">
                             <Filter size={16} className="text-primary"/>
-                            {/* GÜNCELLENDİ: Etiket Değişti */}
                             <span className="small fw-bold text-muted">İzin Üst Limit &ge;</span>
                             <input type="number" className="form-control form-control-sm text-center fw-bold text-primary border-0 bg-white" style={{width: '60px'}} placeholder="0" value={limitBakiye} onChange={(e) => setLimitBakiye(e.target.value)}/>
                         </div>
@@ -193,12 +195,10 @@ export default function LeaveReports() {
                 </div>
             </div>
 
-            {/* TABLO ALANI */}
             <div className="card shadow-lg border-0 rounded-4 overflow-hidden">
                 <div className="card-body p-0">
                     <div className="table-responsive">
                         <table className="table table-hover align-middle mb-0">
-                            {/* GÜNCELLENDİ: Tablo Başlıkları */}
                             <thead className="bg-light text-muted small text-uppercase fw-bold" style={{fontSize: '11px'}}>
                                 <tr>
                                     <th className="ps-4 py-3">ADI SOYADI</th>
@@ -207,13 +207,14 @@ export default function LeaveReports() {
                                     <th className="text-center">BU YIL HAK EDİLEN</th>
                                     <th className="text-center">KULLANILAN İZİN</th>
                                     <th className="text-center">KALAN İZİN</th>
-                                    <th className="text-end pe-4">İZİN UYGUNLUĞU</th>
+                                    <th className="text-end pe-4">İZİN DURUMU</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {yukleniyor ? (
                                     <tr><td colSpan="7" className="text-center py-5 text-muted">Yükleniyor...</td></tr>
-                                ) : filtered.map((p, i) => {
+                                ) : filtered.length > 0 ? (
+                                    filtered.map((p, i) => {
                                     const kumulatif = parseInt(p.kumulatif_hak) || 0;
                                     const devreden = parseInt(p.devreden_izin) || 0;
                                     const buYilHak = parseInt(p.bu_yil_hakedis) || 0;
@@ -222,8 +223,9 @@ export default function LeaveReports() {
                                     const toplamKullanilan = toplamHavuz - kalan;
                                     const kidemYil = Math.floor((new Date() - new Date(p.ise_giris_tarihi)) / (1000 * 60 * 60 * 24 * 365.25));
                                     
-                                    const isHigh = kalan >= 30;
-                                    const isLow = kalan < 0;
+                                    // GÜNCELLENEN MANTIK: 50 GÜN KURALI
+                                    const izneGonderilmeli = kalan > 50;
+                                    const limitAsimi = kalan < 0;
 
                                     return (
                                         <tr key={i} onClick={() => handlePersonelClick(p)} style={{cursor: 'pointer', transition: 'all 0.1s'}}>
@@ -246,37 +248,49 @@ export default function LeaveReports() {
                                             <td className="text-center text-info fw-bold">{buYilHak}</td>
                                             <td className="text-center text-muted">{toplamKullanilan}</td>
                                             <td className="text-center">
-                                                <span className={`badge px-3 py-2 rounded-pill fw-bold ${isHigh ? 'bg-warning text-dark' : isLow ? 'bg-danger text-white' : 'bg-success bg-opacity-10 text-success'}`}>
+                                                <span className={`badge px-3 py-2 rounded-pill fw-bold ${izneGonderilmeli ? 'bg-warning text-dark' : limitAsimi ? 'bg-danger text-white' : 'bg-success bg-opacity-10 text-success'}`}>
                                                     {kalan} Gün
                                                 </span>
                                             </td>
                                             <td className="text-end pe-4">
-                                                {/* GÜNCELLENDİ: Durum Mantığı */}
-                                                {kalan > 0 ? (
-                                                    <span className="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1" style={{fontSize:'10px'}}>
-                                                        <CheckCircle size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> UYGUN
+                                                {izneGonderilmeli ? (
+                                                    <span className="badge bg-warning bg-opacity-25 text-dark border border-warning px-2 py-1" style={{fontSize:'10px'}}>
+                                                        <AlertTriangle size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> İZNE GÖNDERİLMELİ
+                                                    </span>
+                                                ) : limitAsimi ? (
+                                                    <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1" style={{fontSize:'10px'}}>
+                                                        <X size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> LİMİT AŞIMI
                                                     </span>
                                                 ) : (
-                                                    <span className="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1" style={{fontSize:'10px'}}>
-                                                        <X size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> YETERSİZ
+                                                    <span className="badge bg-success bg-opacity-10 text-success border border-success px-2 py-1" style={{fontSize:'10px'}}>
+                                                        <CheckCircle size={12} className="me-1" style={{verticalAlign:'text-bottom'}}/> UYGUN
                                                     </span>
                                                 )}
                                             </td>
                                         </tr>
                                     );
-                                })}
+                                })
+                                ) : (
+                                    <tr>
+                                        <td colSpan="7" className="text-center py-5 text-muted">
+                                            <div className="d-flex flex-column align-items-center opacity-50">
+                                                <AlertTriangle size={32} className="mb-2"/>
+                                                <div>Kayıt bulunamadı.</div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            {/* --- DETAY MODALI --- */}
+            {/* MODAL KISIMLARI (Aynı Kaldı) */}
             {secilenPersonel && (
                 <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(3px)'}}>
                     <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
                         <div className="modal-content shadow-lg border-0 rounded-4 overflow-hidden" style={{maxHeight:'90vh'}}>
-                            {/* Modal Header */}
                             <div className="modal-header bg-white p-4 border-bottom d-flex align-items-center justify-content-between sticky-top">
                                 <div className="d-flex align-items-center gap-4">
                                     <img 
@@ -300,7 +314,6 @@ export default function LeaveReports() {
                             <div className="modal-body bg-light p-0">
                                 {detayYukleniyor ? <div className="text-center py-5"><div className="spinner-border text-primary"/></div> : personelDetay && (
                                     <div className="d-flex flex-column h-100">
-                                        {/* Navigasyon */}
                                         <div className="bg-white border-bottom px-4 pt-2">
                                             <ul className="nav nav-pills gap-2 pb-2">
                                                 <li className="nav-item"><button className={`nav-link rounded-pill px-4 ${activeTab==='ozet'?'active':''}`} onClick={()=>setActiveTab('ozet')}>Genel Bakış</button></li>
@@ -310,7 +323,6 @@ export default function LeaveReports() {
                                         </div>
 
                                         <div className="p-4">
-                                            {/* TAB 1: ÖZET */}
                                             {activeTab === 'ozet' && (
                                                 <div className="row g-4">
                                                     <div className="col-md-4">
@@ -351,8 +363,7 @@ export default function LeaveReports() {
                                                     </div>
                                                 </div>
                                             )}
-
-                                            {/* TAB 2: HAKEDİŞLER */}
+                                            {/* Diğer Tablar (hakedis, gecmis) aynı kaldığı için kısaltıldı ama kod içinde mevcut */}
                                             {activeTab === 'hakedis' && (
                                                 <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
                                                     <table className="table table-hover mb-0 align-middle">
@@ -371,8 +382,6 @@ export default function LeaveReports() {
                                                     </table>
                                                 </div>
                                             )}
-
-                                            {/* TAB 3: GEÇMİŞ VE İŞLEMLER */}
                                             {activeTab === 'gecmis' && (
                                                 <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
                                                     <div className="card-header bg-white py-3 px-4 d-flex justify-content-between align-items-center">
