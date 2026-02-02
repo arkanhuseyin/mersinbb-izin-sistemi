@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'; // FontAwesome yerine modern Lucide ikonları
 
 // LOGO İMPORTU (Senin klasöründen)
-import logo from '../assets/logo.png'; 
+import logo from '../assets/logombb.png'; 
 // ARKA PLAN RESMİ (Eğer varsa import et, yoksa internetten çekecek)
 // import bgImage from '../assets/bg-main.jpg'; 
 
