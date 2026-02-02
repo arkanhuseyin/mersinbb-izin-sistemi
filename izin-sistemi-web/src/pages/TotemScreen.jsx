@@ -1,101 +1,265 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
     Bus, Users, ClipboardList, Gavel, 
-    Car, Box, LogIn, X 
-} from 'lucide-react'; // FontAwesome yerine Lucide (React standardı)
+    Car, Package, AlertTriangle 
+} from 'lucide-react';
+
+// LOGO İMPORTU (Senin klasöründen)
+// Eğer logo dosyanın adı farklıysa veya yeri farklıysa burayı düzelt
+import logo from '../assets/logo.png'; 
 
 export default function TotemScreen() {
     const navigate = useNavigate();
-    const [modalOpen, setModalOpen] = useState(false);
-    const [selectedModule, setSelectedModule] = useState(null);
 
-    // Modül Listesi (Onların tasarımıyla aynı mantık)
-    const moduller = [
-        { id: 'AKM', title: "Ana Koordinasyon", icon: <Bus size={40} />, color: "text-blue-500", path: "/login?modul=admin" },
-        { id: 'IK', title: "İnsan Kaynakları", icon: <Users size={40} />, color: "text-purple-600", path: "/login?modul=ik" },
-        { id: 'GOREV', title: "Günlük Görev", icon: <ClipboardList size={40} />, color: "text-green-600", path: "/login?modul=gorev" },
-        { id: 'DISIPLIN', title: "Disiplin İşleri", icon: <Gavel size={40} />, color: "text-red-500", path: "/login?modul=disiplin" },
-        { id: 'KAZA', title: "Kaza İşleri", icon: <Car size={40} />, color: "text-orange-500", path: "/login?modul=kaza" },
-        { id: 'LOJISTIK', title: "Lojistik", icon: <Box size={40} />, color: "text-indigo-500", path: "/login?modul=lojistik" }
+    // Modül Listesi (CSS Renkleri ve İkonlar)
+    const cards = [
+        { id: 'AKM', title: "Ana Koordinasyon", icon: <Bus size={50} />, path: "/login?modul=admin" },
+        { id: 'IK', title: "İnsan Kaynakları", icon: <Users size={50} />, path: "/login?modul=ik" },
+        { id: 'GOREV', title: "Günlük Görev", icon: <ClipboardList size={50} />, path: "/login?modul=gorev" },
+        { id: 'DISIPLIN', title: "Disiplin İşleri", icon: <Gavel size={50} />, path: "/login?modul=disiplin" },
+        { id: 'KAZA', title: "Kaza İşleri", icon: <Car size={50} />, path: "/login?modul=kaza" },
+        { id: 'LOJISTIK', title: "Lojistik", icon: <Package size={50} />, path: "/login?modul=lojistik" }
     ];
 
-    const handleCardClick = (modul) => {
-        // Direkt Login'e gönderiyoruz, parametreyle hangi modülden geldiğini iletiyoruz
-        navigate(modul.path);
-    };
-
     return (
-        <div className="min-h-screen flex flex-col relative overflow-hidden font-sans">
-            
-            {/* ARKA PLAN RESMİ (Senin projendeki bir resimle değiştir) */}
-            <div 
-                className="absolute inset-0 bg-cover bg-center z-0"
-                style={{ 
-                    backgroundImage: "url('https://mersin.bel.tr/images/bg-main.jpg')", // Temsili resim
-                    filter: "blur(4px) brightness(0.9)"
-                }}
-            ></div>
-            <div className="absolute inset-0 bg-white/10 backdrop-blur-sm z-0"></div>
+        <div className="totem-container">
+            {/* CSS STYLES - Tasarımın Birebir Aynısı Olması İçin */}
+            <style>{`
+                @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@400;600;700;900&display=swap');
 
-            {/* HEADER (Onların CSS'ine sadık kaldık) */}
-            <header className="relative z-10 flex items-center justify-center gap-6 py-6 px-8 bg-gradient-to-r from-[#0099cc] via-[#663399] to-[#ff3300] shadow-xl border-b-4 border-white/20">
-                {/* Logo Alanı */}
-                <div className="bg-white/20 p-2 rounded-lg backdrop-blur-md shadow-sm">
-                    {/* Buraya belediye logosunu koy */}
-                    <img src="https://cdn-icons-png.flaticon.com/512/9311/9311896.png" alt="Logo" className="h-16 w-auto drop-shadow-md" />
-                </div>
+                .totem-container {
+                    min-height: 100vh;
+                    display: flex;
+                    flex-direction: column;
+                    font-family: 'Segoe UI', sans-serif;
+                    background-color: #f4f6f9;
+                    overflow: hidden;
+                }
+
+                /* HEADER: O özel gradient renkler */
+                .totem-header {
+                    background: linear-gradient(90deg, #0099cc 0%, #663399 50%, #ff3300 100%);
+                    color: white;
+                    padding: 15px 30px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 20px;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                    border-bottom: 5px solid rgba(255,255,255,0.2);
+                    z-index: 20;
+                }
+
+                .header-logo {
+                    height: 70px;
+                    width: auto;
+                    background: rgba(255,255,255,0.15);
+                    padding: 5px;
+                    border-radius: 8px;
+                    backdrop-filter: blur(5px);
+                }
+
+                .header-titles h1 {
+                    margin: 0;
+                    font-size: 42px;
+                    font-weight: 900;
+                    letter-spacing: 4px;
+                    text-shadow: 3px 3px 6px rgba(0,0,0,0.4);
+                    line-height: 1;
+                }
+
+                .header-titles p {
+                    margin: 5px 0 0;
+                    font-size: 14px;
+                    letter-spacing: 1px;
+                    opacity: 0.9;
+                    text-transform: uppercase;
+                }
+
+                .header-titles .sub-title {
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: #ffeb3b;
+                    display: block;
+                    margin-bottom: 2px;
+                }
+
+                /* MAIN AREA */
+                .main-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;
+                    position: relative;
+                    padding: 20px;
+                }
+
+                /* Arka Plan Resmi */
+                .main-content::before {
+                    content: "";
+                    position: absolute;
+                    top: 0; left: 0; right: 0; bottom: 0;
+                    background: linear-gradient(rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.2)), url('https://mersin.bel.tr/images/bg-main.jpg');
+                    background-size: cover;
+                    background-position: center;
+                    filter: blur(5px);
+                    z-index: -1;
+                }
+
+                /* SLOGAN */
+                .slogan-box {
+                    text-align: center;
+                    margin-bottom: 40px;
+                    animation: fadeInDown 0.8s ease-out;
+                }
+
+                .slogan-title {
+                    color: #2c3e50;
+                    font-size: 3em;
+                    font-weight: 900;
+                    text-transform: uppercase;
+                    text-shadow: 2px 2px 0px rgba(255,255,255,0.6);
+                    margin: 0;
+                }
+
+                .slogan-badge {
+                    font-size: 1.2em;
+                    font-weight: 700;
+                    margin-top: 10px;
+                    background: linear-gradient(to right, #ff3300, #ff9900);
+                    color: white;
+                    padding: 5px 25px;
+                    border-radius: 20px;
+                    display: inline-block;
+                    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+                }
+
+                /* GRID CARDS */
+                .cards-grid {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 30px;
+                    max-width: 1200px;
+                    width: 100%;
+                }
+
+                .totem-card {
+                    background: rgba(255, 255, 255, 0.95);
+                    border-radius: 12px;
+                    padding: 30px 20px;
+                    text-align: center;
+                    transition: all 0.3s ease;
+                    cursor: pointer;
+                    box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+                    height: 180px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    position: relative;
+                    overflow: hidden;
+                    border: 1px solid rgba(255,255,255,0.5);
+                }
+
+                .totem-card:hover {
+                    transform: translateY(-8px);
+                    background: #fff;
+                    box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+                }
+
+                /* Alt Çizgi Animasyonu */
+                .totem-card::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 0; left: 0;
+                    width: 100%;
+                    height: 5px;
+                    background: linear-gradient(90deg, #0099cc, #663399, #ff3300);
+                    transform: scaleX(0);
+                    transition: transform 0.3s ease;
+                }
+
+                .totem-card:hover::after {
+                    transform: scaleX(1);
+                }
+
+                .icon-wrapper {
+                    margin-bottom: 15px;
+                    /* Gradient Text Effect for Icons */
+                    color: #663399; 
+                }
                 
-                <div className="text-white text-left">
-                    <span className="block text-xs font-bold text-yellow-300 uppercase tracking-wider mb-1">Mersin Büyükşehir Belediyesi</span>
-                    <h1 className="text-5xl font-black tracking-widest drop-shadow-lg leading-none m-0" style={{fontFamily: 'Arial Black, sans-serif'}}>TOTEM</h1>
-                    <p className="text-sm tracking-widest opacity-90 uppercase mt-1">Toplu Taşıma Entegrasyon Merkezi</p>
+                .totem-card:hover .icon-wrapper {
+                    background: -webkit-linear-gradient(45deg, #0099cc, #663399);
+                    -webkit-background-clip: text;
+                    -webkit-text-fill-color: transparent;
+                    transform: scale(1.1);
+                    transition: 0.3s;
+                }
+
+                .card-title {
+                    color: #333;
+                    margin: 0;
+                    font-size: 1.3em;
+                    font-weight: 700;
+                }
+
+                @media (max-width: 900px) {
+                    .cards-grid { grid-template-columns: repeat(2, 1fr); }
+                    .slogan-title { font-size: 2em; }
+                    .header-titles h1 { font-size: 32px; }
+                }
+                @media (max-width: 600px) {
+                    .cards-grid { grid-template-columns: 1fr; }
+                    .totem-header { flex-direction: column; text-align: center; }
+                }
+                
+                @keyframes fadeInDown {
+                    from { opacity: 0; transform: translateY(-20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            `}</style>
+
+            {/* HEADER KISMI */}
+            <header className="totem-header">
+                {/* Logo Yerel Dosyadan Gelecek */}
+                <img src={logo} alt="Mersin BB Logo" className="header-logo" />
+                
+                <div className="header-titles">
+                    <span className="sub-title">Mersin Büyükşehir Belediyesi</span>
+                    <h1>TOTEM</h1>
+                    <p>Toplu Taşıma Entegrasyon Merkezi</p>
                 </div>
             </header>
 
-            {/* ORTA ALAN (Slogan ve Kartlar) */}
-            <div className="flex-1 flex flex-col items-center justify-center relative z-10 w-full max-w-6xl mx-auto px-4 py-8">
+            {/* ORTA ALAN */}
+            <main className="main-content">
                 
                 {/* Slogan */}
-                <div className="text-center mb-12 animate-fade-in-down">
-                    <h1 className="text-4xl md:text-5xl font-black text-slate-800 uppercase drop-shadow-sm mb-4">
-                        Geleceğin Ulaşımı Mersin'de
-                    </h1>
-                    <div className="inline-block bg-gradient-to-r from-orange-500 to-red-600 text-white px-8 py-2 rounded-full font-bold text-lg shadow-lg">
-                        Güvenli, Konforlu ve Sürdürülebilir
-                    </div>
+                <div className="slogan-box">
+                    <h1 className="slogan-title">Geleceğin Ulaşımı Mersin'de</h1>
+                    <div className="slogan-badge">Güvenli, Konforlu ve Sürdürülebilir</div>
                 </div>
 
-                {/* Grid Kartlar */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
-                    {moduller.map((modul) => (
+                {/* Kartlar */}
+                <div className="cards-grid">
+                    {cards.map((card) => (
                         <div 
-                            key={modul.id}
-                            onClick={() => handleCardClick(modul)}
-                            className="group bg-white/95 backdrop-blur-sm rounded-xl p-6 flex flex-col items-center justify-center text-center cursor-pointer shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 h-40 relative overflow-hidden border border-white/50"
+                            key={card.id} 
+                            className="totem-card"
+                            onClick={() => navigate(card.path)}
                         >
-                            {/* İkon */}
-                            <div className={`mb-3 transition-transform duration-300 group-hover:scale-110 ${modul.color}`}>
-                                {modul.icon}
+                            <div className="icon-wrapper">
+                                {card.icon}
                             </div>
-                            
-                            {/* Başlık */}
-                            <h3 className="text-xl font-bold text-slate-700 m-0 group-hover:text-black transition-colors">
-                                {modul.title}
-                            </h3>
-
-                            {/* Alt Çizgi Efekti (Onların CSS'indeki gradient çizgi) */}
-                            <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-[#0099cc] via-[#663399] to-[#ff3300] transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+                            <h3 className="card-title">{card.title}</h3>
                         </div>
                     ))}
                 </div>
 
-            </div>
-
-            {/* Footer */}
-            <div className="relative z-10 text-center py-4 text-slate-600 text-sm font-medium bg-white/80 backdrop-blur-md">
-                © 2026 Mersin Büyükşehir Belediyesi Bilgi İşlem Dairesi Başkanlığı
-            </div>
+            </main>
         </div>
     );
 }
